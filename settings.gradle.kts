@@ -32,6 +32,6 @@ include(":kxcel")
 include(":sample:sharedUI")
 include(":sample:androidApp")
 include(":sample:desktopApp")
-include(":sample:webApp")
-include(":sample:terminalApp")
+//include(":sample:webApp")
+//include(":sample:terminalApp")
 

@@ -15,19 +15,23 @@ kotlin {
     jvm {
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
     }
-    js { browser() }
-    wasmJs { browser() }
+//    js { browser() }
+//    wasmJs { browser() }
     iosArm64()
     iosSimulatorArm64()
-    macosArm64()
-    linuxX64()
-    mingwX64()
+//    macosArm64()
+//    linuxX64()
+//    mingwX64()
 
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)
+
+            implementation("no.synth:kmp-zip:0.9.2")
+            implementation("no.synth:kmp-zip-kotlinx:0.9.2")
+            implementation("com.fleeksoft.ksoup:ksoup:0.2.6")
         }
 
         commonTest.dependencies {

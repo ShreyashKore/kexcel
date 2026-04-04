@@ -1,0 +1,48 @@
+package dev.shreyash.kxcel.sheet
+
+import dev.shreyash.kxcel.utils.cellCoordsFromCellId
+import dev.shreyash.kxcel.utils.getCellId
+
+class CellIndex private constructor(
+    val columnIndex: Int,
+    val rowIndex: Int,
+) {
+    companion object {
+        /**
+         * ```
+         * CellIndex.indexByColumnRow(columnIndex = 0, rowIndex = 0) // A1
+         * CellIndex.indexByColumnRow(columnIndex = 0, rowIndex = 1) // A2
+         * ```
+         */
+        fun indexByColumnRow(columnIndex: Int, rowIndex: Int): CellIndex =
+            CellIndex(columnIndex = columnIndex, rowIndex = rowIndex)
+
+        /**
+         * ```
+         * CellIndex.indexByString("A1") // columnIndex: 0, rowIndex: 0
+         * CellIndex.indexByString("A2") // columnIndex: 0, rowIndex: 1
+         * ```
+         */
+        fun indexByString(cellIndex: String): CellIndex {
+            val (row, column) = cellCoordsFromCellId(cellIndex)
+            return CellIndex(columnIndex = column, rowIndex = row)
+        }
+    }
+
+    /**
+     * Returns the cell ID string (e.g. "A1").
+     * Avoid using this in hot paths — it is a relatively expensive operation.
+     */
+    val cellId: String
+        get() = getCellId(columnIndex, rowIndex)
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CellIndex) return false
+        return rowIndex == other.rowIndex && columnIndex == other.columnIndex
+    }
+
+    override fun hashCode(): Int = 31 * rowIndex + columnIndex
+
+    override fun toString(): String = cellId
+}
