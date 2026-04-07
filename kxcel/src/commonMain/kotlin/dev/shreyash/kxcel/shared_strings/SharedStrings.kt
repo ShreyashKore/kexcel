@@ -8,12 +8,13 @@ import dev.shreyash.kxcel.parser.Parser
 import dev.shreyash.kxcel.sheet.Attributes
 import dev.shreyash.kxcel.sheet.CellStyle
 import dev.shreyash.kxcel.utils.Underline
+import dev.shreyash.kxcel.utils.toExcelColor
 
 // region --- SharedStringsMaintainer ---
 
 class SharedStringsMaintainer {
 
-    private val map: MutableMap<SharedString, IndexingHolder> = mutableMapOf()
+    val map: MutableMap<SharedString, IndexingHolder> = mutableMapOf()
     private val mapString: MutableMap<String, SharedString> = mutableMapOf()
     private val list: MutableList<SharedString> = mutableListOf()
     private var index: Int = 0
@@ -65,7 +66,7 @@ class SharedStringsMaintainer {
 
 // region --- IndexingHolder ---
 
-internal class IndexingHolder(val index: Int, count: Int = 1) {
+class IndexingHolder(val index: Int, count: Int = 1) {
     var count: Int = count
         private set
 
@@ -84,7 +85,7 @@ class SharedString(val node: Element) {
 
     val textSpan: TextSpan
         get() {
-            fun getBool(element: XmlDeclaration): Boolean =
+            fun getBool(element: Element): Boolean =
                 element.attr("val")?.toBooleanStrictOrNull() ?: true
 
             fun getInt(element: Element): Int =
@@ -108,11 +109,11 @@ class SharedString(val node: Element) {
                     "r" -> {
                         var style = CellStyle()
                         for (runChild in child.childElementsList()) {
-                            when (runChild.localName) {
+                            when (runChild.tagName()) {
                                 // 18.4.5 rPr (RunProperties)
                                 "rPr" -> {
-                                    for (runProperty in runChild.childElements) {
-                                        when (runProperty.localName) {
+                                    for (runProperty in runChild.childElementsList()) {
+                                        when (runProperty.tagName()) {
                                             "b"      -> style = style.copyWith(boldVal = getBool(runProperty))
                                             "i"      -> style = style.copyWith(italicVal = getBool(runProperty))
                                             "u"      -> style = style.copyWith(
@@ -124,7 +125,7 @@ class SharedString(val node: Element) {
                                                 fontFamilyVal = runProperty.attr("val")
                                             )
                                             "color"  -> style = style.copyWith(
-                                                fontColorHexVal = runProperty.attr("rgb")?.toExcelColor()
+                                                fontColorHexVal = runProperty.attr("rgb").toExcelColor()
                                             )
                                         }
                                     }
@@ -132,7 +133,7 @@ class SharedString(val node: Element) {
                                 // 18.4.12 t (Text)
                                 "t" -> {
                                     if (children == null) children = mutableListOf()
-                                    children!!.add(TextSpan(text = runChild.innerText, style = style))
+                                    children!!.add(TextSpan(text = runChild.text(), style = style))
                                 }
                             }
                         }
@@ -150,7 +151,7 @@ class SharedString(val node: Element) {
         get() {
             val buffer = StringBuilder()
             node.getElementsByTag("t").forEach { child ->
-                val parentLocal = child.parentElement()?.name?.local
+                val parentLocal = child.parentElement()?.tagName()
                 if (parentLocal == null || parentLocal != "rPh") {
                     buffer.append(Parser.parseValue(child))
                 }

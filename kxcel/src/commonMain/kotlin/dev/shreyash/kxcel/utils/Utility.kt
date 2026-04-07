@@ -1,8 +1,22 @@
 package dev.shreyash.kxcel.utils
 
 import com.fleeksoft.ksoup.nodes.Element
+import dev.shreyash.kxcel.save.LocationChanged
+import dev.shreyash.kxcel.save.SpanBounds
 import dev.shreyash.kxcel.sheet.CellStyle
 import dev.shreyash.kxcel.sheet.FontStyle
+import kotlin.math.abs
+import kotlin.math.round
+
+/// Format a [Double] with exactly two decimal places, e.g. 8.0 -> "8.00".
+/// Multiplatform replacement for the JVM-only "%.2f".format(value).
+fun Double.toFixed2(): String {
+    val scaled = round(abs(this) * 100.0).toLong()
+    val intPart = scaled / 100
+    val frac = (scaled % 100).toString().padStart(2, '0')
+    val sign = if (this < 0) "-" else ""
+    return "$sign$intPart.$frac"
+}
 
 val NO_COMPRESSION = listOf(
     "mimetype",
@@ -136,7 +150,7 @@ fun isLocationChangeRequired(
     endColumnInput: Int,
     endRowInput: Int,
     spanObj: Span
-): Pair<Boolean, Quadruple> {
+): LocationChanged {
 
     var startColumn = startColumnInput
     var startRow = startRowInput
@@ -186,7 +200,7 @@ fun isLocationChangeRequired(
         }
     }
 
-    return Pair(changeValue, Quadruple(startColumn, startRow, endColumn, endRow))
+    return LocationChanged(changeValue, SpanBounds(startColumn, startRow, endColumn, endRow))
 }
 
 fun getColumnAlphabet(columnIndex: Int): String {

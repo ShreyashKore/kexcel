@@ -212,7 +212,7 @@ class Parser(private val excel: Excel) {
                 val ref = element.attr("ref")
                 if (ref != null && ref.contains(':') && ref.split(':').size == 2) {
                     if (!sheet.spannedItems.contains(ref)) {
-                        sheet.spannedItems.add(ref)
+                        sheet.addSpannedItem(ref)
                     }
 
                     val startCell = ref.split(':')[0]
@@ -519,13 +519,13 @@ class Parser(private val excel: Excel) {
         val worksheet = content.getElementsByTag("worksheet").first()
 
         // Check for right-to-left view
-        val sheetViews = worksheet?.getElementsByTag("sheetView").toList()
-        if (sheetViews.isNotEmpty()) {
+        val sheetViews = worksheet?.getElementsByTag("sheetView")?.toList()
+        if (sheetViews?.isNotEmpty()) {
             val rtl = sheetViews.first().attr("rightToLeft")
             sheetObject.isRTL = rtl != null && rtl == "1"
         }
 
-        val sheet = worksheet?.getElementsByTag("sheetData").first()
+        val sheet = worksheet?.getElementsByTag("sheetData")?.first()
 
         findRows(sheet).forEach { child ->
             parseRow(child, sheetObject, name)
@@ -534,7 +534,7 @@ class Parser(private val excel: Excel) {
         parseHeaderFooter(worksheet, sheetObject)
         parseColWidthsRowHeights(worksheet, sheetObject)
 
-        excel.sheets[name] = sheet
+        excel.sheets[name] = sheet!!
         excel.xmlFiles["xl/$target"] = content
         excel.xmlSheetId[name] = "xl/$target"
 
@@ -613,15 +613,7 @@ class Parser(private val excel: Excel) {
         )
     }
 
-    private fun parseValue(node: Element?): String {
-        val buffer = StringBuilder()
-        node?.children()?.forEach { child ->
-            if (child.hasText()) {
-                buffer.append(normalizeNewLine(child.value()))
-            }
-        }
-        return buffer.toString()
-    }
+
 
     private fun getAvailableRid(): Int {
         rId.sortWith(Comparator { a, b ->
@@ -766,8 +758,8 @@ class Parser(private val excel: Excel) {
         // Parse default column width and default row height
         // e.g. <sheetFormatPr defaultColWidth="26.33" defaultRowHeight="13" />
         worksheet?.getElementsByTag("sheetFormatPr")?.forEach { element ->
-            val defaultColWidth = element.attr("defaultColWidth")?.toDoubleOrNull()
-            val defaultRowHeight = element.attr("defaultRowHeight")?.toDoubleOrNull()
+            val defaultColWidth = element.attr("defaultColWidth").toDoubleOrNull()
+            val defaultRowHeight = element.attr("defaultRowHeight").toDoubleOrNull()
             if (defaultColWidth != null && defaultRowHeight != null) {
                 sheetObject.setDefaultColumnWidth(defaultColWidth)
                 sheetObject.setDefaultRowHeight(defaultRowHeight)
@@ -776,7 +768,7 @@ class Parser(private val excel: Excel) {
 
         // Parse custom column widths
         // e.g. <col min="2" max="2" width="71.83" customWidth="1"/>
-        worksheet.getElementsByTag("col").forEach { element ->
+        worksheet?.getElementsByTag("col")?.forEach { element ->
             val colAttr = element.attr("min")
             val widthAttr = element.attr("width")
             if (colAttr != null && widthAttr != null) {
@@ -793,7 +785,7 @@ class Parser(private val excel: Excel) {
 
         // Parse custom row heights
         // e.g. <row r="1" ht="44" customHeight="1" ...>
-        worksheet.getElementsByTag("row").forEach { element ->
+        worksheet?.getElementsByTag("row")?.forEach { element ->
             val rowAttr = element.attr("r")
             val heightAttr = element.attr("ht")
             if (rowAttr != null && heightAttr != null) {
@@ -806,6 +798,18 @@ class Parser(private val excel: Excel) {
                     }
                 }
             }
+        }
+    }
+
+    companion object {
+        fun parseValue(node: Element?): String {
+            val buffer = StringBuilder()
+            node?.children()?.forEach { child ->
+                if (child.hasText()) {
+                    buffer.append(normalizeNewLine(child.value()))
+                }
+            }
+            return buffer.toString()
         }
     }
 }

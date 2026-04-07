@@ -301,7 +301,7 @@ class Sheet constructor(
                 }
             }
         }
-        _cleanUpSpanMap()
+        cleanUpSpanMap()
 
         if (updateSpanCell) {
             excel.addMergeChangeLookup(sheetName)
@@ -457,7 +457,7 @@ class Sheet constructor(
                 }
             }
         }
-        _cleanUpSpanMap()
+        cleanUpSpanMap()
 
         if (updateSpanCell) {
             excel.addMergeChangeLookup(sheetName)
@@ -681,7 +681,7 @@ class Sheet constructor(
                     }
                 }
                 if (remove) {
-                    _cleanUpSpanMap()
+                    cleanUpSpanMap()
                 }
             }
             _spannedItems.remove(unmergeCells)
@@ -783,7 +783,7 @@ class Sheet constructor(
             }
         }
         if (remove) {
-            _cleanUpSpanMap()
+            cleanUpSpanMap()
         }
 
         return listOf(startColumn, startRow, endColumn, endRow)
@@ -938,6 +938,10 @@ class Sheet constructor(
         _rowHeights[rowIndex] = rowHeight
     }
 
+    fun addSpannedItem(ref: String) {
+        _spannedItems.add(ref)
+    }
+
     fun findAndReplace(source: Regex, target: String, first: Int = -1, startingRow: Int = -1, endingRow: Int = -1, startingColumn: Int = -1, endingColumn: Int = -1): Int {
         var replaceCount = 0
         var _startingRow = 0
@@ -1070,7 +1074,7 @@ class Sheet constructor(
             return _spannedItems
         }
 
-    fun _cleanUpSpanMap() {
+    fun cleanUpSpanMap() {
         if (spanList.isNotEmpty()) {
             spanList.removeAll { it == null }
         }

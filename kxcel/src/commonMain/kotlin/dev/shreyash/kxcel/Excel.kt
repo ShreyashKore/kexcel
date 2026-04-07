@@ -1,6 +1,7 @@
 package dev.shreyash.kxcel
 
 import com.fleeksoft.ksoup.nodes.Document
+import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.XmlDeclaration
 import dev.shreyash.kxcel.number_format.NumFormatMaintainer
 import dev.shreyash.kxcel.parser.Parser
@@ -50,7 +51,7 @@ class Excel internal constructor(internal var archive: Archive) {
     internal var mergeChanges: Boolean = false
     internal var rtlChanges: Boolean = false
 
-    internal val sheets: MutableMap<String, XmlDeclaration> = mutableMapOf()
+    internal val sheets: MutableMap<String, Element> = mutableMapOf()
     internal val xmlFiles: MutableMap<String, Document> = mutableMapOf()
     internal val xmlSheetId: MutableMap<String, String> = mutableMapOf()
     internal val cellStyleReferenced: MutableMap<String, MutableMap<String, Int>> = mutableMapOf()
@@ -284,7 +285,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * Internal function which returns the default sheet name by reading from `workbook.xml`.
      */
-    private fun getDefaultSheetInternal(): String? {
+    fun getDefaultSheetInternal(): String? {
         val elements = xmlFiles["xl/workbook.xml"]?.getElementsByTag("sheet")
         val sheet = elements?.firstOrNull()
 

@@ -35,7 +35,8 @@ class NumFormatMaintainer {
 
     private val firstCustomFmtId = 164
     private var nextFmtId = firstCustomFmtId
-    private var map: MutableMap<Int, NumFormat> = standardNumFormats.toMutableMap()
+    var map: MutableMap<Int, NumFormat> = standardNumFormats.toMutableMap()
+        private set
     private var inverseMap: MutableMap<NumFormat, Int> = createInverseMap(standardNumFormats).toMutableMap()
 
     fun add(numFmtId: Int, format: CustomNumFormat) {

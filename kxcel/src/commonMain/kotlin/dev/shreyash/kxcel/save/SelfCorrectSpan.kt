@@ -66,6 +66,11 @@ fun selfCorrectSpanMap(excel: Excel) {
     }
 }
 
+data class LocationChanged(
+    val changed: Boolean,
+    val bounds: SpanBounds,
+)
+
 /**
  * Result of [isLocationChangeRequired].
  *
