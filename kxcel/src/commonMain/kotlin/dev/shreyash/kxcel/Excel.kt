@@ -15,11 +15,14 @@ import dev.shreyash.kxcel.sheet.FontStyle
 import dev.shreyash.kxcel.sheet.Sheet
 import dev.shreyash.kxcel.archive.Archive
 import dev.shreyash.kxcel.archive.ArchiveFile
+import dev.shreyash.kxcel.utils.NEW_SHEET
 import dev.shreyash.kxcel.utils.cloneArchive
 import dev.shreyash.kxcel.utils.damagedExcel
 import dev.shreyash.kxcel.utils.readZipArchive
+import dev.shreyash.kxcel.web_helper.SavingHelper
 import no.synth.kmpzip.io.ByteArrayInputStream
 import no.synth.kmpzip.io.InputStream
+import kotlin.io.encoding.Base64
 
 private const val SPREADSHEET_XLSX = "xlsx"
 
@@ -89,7 +92,7 @@ class Excel internal constructor(internal var archive: Archive) {
 
     companion object {
         fun createExcel(): Excel {
-            val decoded = decodeBase64(newSheet)
+            val decoded = Base64.Default.decode(NEW_SHEET)
             return decodeBytes(decoded)
         }
 

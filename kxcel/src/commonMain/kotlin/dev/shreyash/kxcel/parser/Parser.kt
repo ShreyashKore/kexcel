@@ -503,7 +503,8 @@ class Parser(private val excel: Excel) {
     }
 
     internal fun parseTable(node: Element?) {
-        val name = node?.attr("name")!!
+        node ?: damagedExcel(text = "Missing <sheet> node in workbook.xml")
+        val name = node.attr("name")
         val target = worksheetTargets[node.attr("r:id")]
 
         if (excel.sheetMap[name] == null) {
@@ -520,7 +521,7 @@ class Parser(private val excel: Excel) {
 
         // Check for right-to-left view
         val sheetViews = worksheet?.getElementsByTag("sheetView")?.toList()
-        if (sheetViews?.isNotEmpty()) {
+        if (sheetViews?.isNotEmpty() == true) {
             val rtl = sheetViews.first().attr("rightToLeft")
             sheetObject.isRTL = rtl != null && rtl == "1"
         }
@@ -749,7 +750,7 @@ class Parser(private val excel: Excel) {
     }
 
     private fun parseHeaderFooter(worksheet: Element?, sheetObject: Sheet) {
-        val results = worksheet?.getElementsByTag("headerFooter").toList()
+        val results = worksheet?.getElementsByTag("headerFooter")?.toList() ?: return
         if (results.isEmpty()) return
         sheetObject.headerFooter = HeaderFooter.fromXmlElement(results.first())
     }

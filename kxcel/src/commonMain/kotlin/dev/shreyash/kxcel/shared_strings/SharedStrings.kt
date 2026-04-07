@@ -5,8 +5,8 @@ import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.TextNode
 import com.fleeksoft.ksoup.nodes.XmlDeclaration
 import dev.shreyash.kxcel.parser.Parser
-import dev.shreyash.kxcel.sheet.Attributes
 import dev.shreyash.kxcel.sheet.CellStyle
+import dev.shreyash.kxcel.sheet.Element
 import dev.shreyash.kxcel.utils.Underline
 import dev.shreyash.kxcel.utils.toExcelColor
 
@@ -25,15 +25,12 @@ class SharedStringsMaintainer {
         val newSharedString = SharedString(
             node = Element(
                 "si",
-
                 Element(
                     "t",
-                    Attributes(listOf(Attribute(XmlName("space", "xml"), "preserve")))),
-                ).apply {
-                    addChildren(
-                        TextNode(value)
-                    )
-            }
+                    listOf(Attribute("xml:space", "preserve")),
+                    listOf(TextNode(value)),
+                ),
+            )
         )
 
         add(newSharedString, value)
