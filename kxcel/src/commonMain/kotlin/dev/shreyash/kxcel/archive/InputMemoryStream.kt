@@ -8,45 +8,38 @@ package dev.shreyash.kxcel.archive
  * [ByteArray] plus a [start] offset so that [subset] can share the buffer
  * without copying.
  */
-class InputMemoryStream private constructor(
-    private var buffer: ByteArray?,
-    private val start: Int,
-    private var _length: Int,
-    byteOrder: ByteOrder,
+class InputMemoryStream(
+    bytes: ByteArray,
+    byteOrder: ByteOrder = ByteOrder.littleEndian,
+    offset: Int = 0,
+    length: Int? = null,
 ) : InputStream(byteOrder) {
+
+    private var buffer: ByteArray? = bytes
+    private val start: Int = offset
+
+    // The length of the window this stream reads from, starting at [start].
+    private var _length: Int = 0
 
     // The read offset relative to [start].
     private var _position: Int = 0
 
-    /** Create an [InputStream] for reading from a [ByteArray]. */
-    constructor(
-        bytes: ByteArray,
-        byteOrder: ByteOrder = ByteOrder.littleEndian,
-        offset: Int = 0,
-        length: Int? = null,
-    ) : this(
-        buffer = bytes,
-        start = offset,
-        _length = run {
-            var len = length ?: (bytes.size - offset)
-            if ((offset + len) > bytes.size) len = bytes.size - offset
-            len
-        },
-        byteOrder = byteOrder,
-    )
+    init {
+        var len = length ?: (bytes.size - offset)
+        if ((offset + len) > bytes.size) len = bytes.size - offset
+        _length = len
+    }
 
     companion object {
-        fun empty(): InputMemoryStream =
-            InputMemoryStream(ByteArray(0), start = 0, _length = 0, byteOrder = ByteOrder.littleEndian)
+        fun empty(): InputMemoryStream = InputMemoryStream(ByteArray(0))
 
         fun fromList(bytes: ByteArray, byteOrder: ByteOrder = ByteOrder.littleEndian): InputMemoryStream =
-            InputMemoryStream(bytes.copyOf(), start = 0, _length = bytes.size, byteOrder = byteOrder)
+            InputMemoryStream(bytes.copyOf(), byteOrder)
 
         /** Create a copy of [other] that shares the same buffer. */
         fun from(other: InputMemoryStream): InputMemoryStream =
-            InputMemoryStream(other.buffer, other.start, other._length, other.byteOrder).also {
-                it._position = other._position
-            }
+            InputMemoryStream(other.buffer ?: ByteArray(0), other.byteOrder, other.start, other._length)
+                .also { it._position = other._position }
     }
 
     override var position: Int
