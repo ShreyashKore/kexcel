@@ -3,7 +3,7 @@ package dev.shreyash.kxcel.save
 import com.fleeksoft.ksoup.nodes.Attribute
 import com.fleeksoft.ksoup.nodes.Document
 import com.fleeksoft.ksoup.nodes.Element
-import dev.shreyash.kxcel.ArchiveFile
+import dev.shreyash.kxcel.archive.ArchiveFile
 import dev.shreyash.kxcel.Excel
 import dev.shreyash.kxcel.number_format.CustomNumFormat
 import dev.shreyash.kxcel.number_format.DateTimeNumFormat
@@ -35,9 +35,6 @@ import dev.shreyash.kxcel.utils.cloneArchive
 import dev.shreyash.kxcel.utils.damagedExcel
 import dev.shreyash.kxcel.utils.fontStyleIndex
 import dev.shreyash.kxcel.utils.getCellId
-
-package excel
-
 import no.synth.kmpzip.io.ByteArrayOutputStream
 import no.synth.kmpzip.zip.ZipEntry
 import no.synth.kmpzip.zip.ZipOutputStream
@@ -488,7 +485,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
         for (xmlFile in excel.xmlFiles.keys) {
             val xml = excel.xmlFiles[xmlFile].toString()
             val content = xml.encodeToByteArray()
-            archiveFiles[xmlFile] = ArchiveFile(xmlFile, content.size.toLong(), content)
+            archiveFiles[xmlFile] = ArchiveFile(xmlFile, content.size, content)
         }
 
         val buf = ByteArrayOutputStream()

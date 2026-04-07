@@ -12,11 +12,13 @@ import dev.shreyash.kxcel.sheet.CellStyle
 import dev.shreyash.kxcel.sheet.CellValue
 import dev.shreyash.kxcel.sheet.FontStyle
 import dev.shreyash.kxcel.sheet.Sheet
+import dev.shreyash.kxcel.archive.Archive
+import dev.shreyash.kxcel.archive.ArchiveFile
 import dev.shreyash.kxcel.utils.cloneArchive
 import dev.shreyash.kxcel.utils.damagedExcel
+import dev.shreyash.kxcel.utils.readZipArchive
 import no.synth.kmpzip.io.ByteArrayInputStream
 import no.synth.kmpzip.io.InputStream
-import no.synth.kmpzip.zip.ZipInputStream
 
 private const val SPREADSHEET_XLSX = "xlsx"
 
@@ -93,7 +95,7 @@ class Excel internal constructor(internal var archive: Archive) {
         fun decodeBytes(data: ByteArray): Excel {
             val archive: Archive = try {
                 val inputStream = ByteArrayInputStream(data)
-                Archive(ZipInputStream(inputStream))
+                readZipArchive(inputStream)
             } catch (e: Exception) {
                 throw UnsupportedOperationException(
                     "Excel format unsupported. Only .xlsx files are supported"
@@ -103,7 +105,7 @@ class Excel internal constructor(internal var archive: Archive) {
         }
 
         fun decodeStream(input: InputStream): Excel {
-            return newExcel(Archive(ZipInputStream(input)))
+            return newExcel(readZipArchive(input))
         }
     }
 
@@ -233,7 +235,7 @@ class Excel internal constructor(internal var archive: Archive) {
                 archive,
                 xmlFiles.map { (k, v) ->
                     val encoded = v.toString().encodeToByteArray()
-                    k to ArchiveFile(k, encoded.size.toLong(), encoded)
+                    k to ArchiveFile(k, encoded.size, encoded)
                 }.toMap(),
                 excludedFile = xmlSheetId[sheet]
             )

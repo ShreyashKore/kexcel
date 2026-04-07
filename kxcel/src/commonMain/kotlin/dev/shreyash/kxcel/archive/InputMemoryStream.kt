@@ -1,0 +1,111 @@
+package dev.shreyash.kxcel.archive
+
+/**
+ * Stream in data from an in-memory buffer.
+ *
+ * Ported from the Dart `archive` package's `InputMemoryStream`. Instead of
+ * relying on typed-data buffer views, this keeps a reference to the underlying
+ * [ByteArray] plus a [start] offset so that [subset] can share the buffer
+ * without copying.
+ */
+class InputMemoryStream private constructor(
+    private var buffer: ByteArray?,
+    private val start: Int,
+    private var _length: Int,
+    byteOrder: ByteOrder,
+) : InputStream(byteOrder) {
+
+    // The read offset relative to [start].
+    private var _position: Int = 0
+
+    /** Create an [InputStream] for reading from a [ByteArray]. */
+    constructor(
+        bytes: ByteArray,
+        byteOrder: ByteOrder = ByteOrder.littleEndian,
+        offset: Int = 0,
+        length: Int? = null,
+    ) : this(
+        buffer = bytes,
+        start = offset,
+        _length = run {
+            var len = length ?: (bytes.size - offset)
+            if ((offset + len) > bytes.size) len = bytes.size - offset
+            len
+        },
+        byteOrder = byteOrder,
+    )
+
+    companion object {
+        fun empty(): InputMemoryStream =
+            InputMemoryStream(ByteArray(0), start = 0, _length = 0, byteOrder = ByteOrder.littleEndian)
+
+        fun fromList(bytes: ByteArray, byteOrder: ByteOrder = ByteOrder.littleEndian): InputMemoryStream =
+            InputMemoryStream(bytes.copyOf(), start = 0, _length = bytes.size, byteOrder = byteOrder)
+
+        /** Create a copy of [other] that shares the same buffer. */
+        fun from(other: InputMemoryStream): InputMemoryStream =
+            InputMemoryStream(other.buffer, other.start, other._length, other.byteOrder).also {
+                it._position = other._position
+            }
+    }
+
+    override var position: Int
+        get() = _position
+        set(value) = setPosition(value)
+
+    override val length: Int
+        get() = if (buffer == null) 0 else _length - _position
+
+    override val isEOS: Boolean
+        get() = _position >= _length
+
+    override fun setPosition(v: Int) {
+        _position = v
+    }
+
+    override fun reset() {
+        _position = 0
+    }
+
+    override fun open(): Boolean = true
+
+    override fun close() {
+        _position = 0
+    }
+
+    override fun closeSync() {
+        _position = 0
+    }
+
+    override fun rewind(length: Int) {
+        _position = (_position - length).coerceIn(0, _length)
+    }
+
+    override fun skip(length: Int) {
+        _position = (_position + length).coerceIn(0, _length)
+    }
+
+    /** Access the buffer relative to the current position. */
+    operator fun get(index: Int): Int = buffer!![start + _position + index].toInt() and 0xff
+
+    override fun subset(position: Int?, length: Int?, bufferSize: Int?): InputStream {
+        val buf = buffer ?: return InputMemoryStream(ByteArray(0))
+        val p = position ?: _position
+        val len = length ?: (_length - p)
+        return InputMemoryStream(buf, byteOrder = byteOrder, offset = start + p, length = len)
+    }
+
+    override fun readByte(): Int {
+        val b = buffer!![start + _position].toInt() and 0xff
+        _position++
+        return b
+    }
+
+    override fun toUint8List(): ByteArray {
+        val buf = buffer ?: return ByteArray(0)
+        var len = length
+        if ((_position + len) > _length) len = _length - _position
+        val from = start + _position
+        return buf.copyOfRange(from, from + len)
+    }
+}

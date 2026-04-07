@@ -1,7 +1,8 @@
 package dev.shreyash.kxcel.utils
 
-import dev.shreyash.kxcel.Archive
-import dev.shreyash.kxcel.ArchiveFile
+import dev.shreyash.kxcel.archive.Archive
+import dev.shreyash.kxcel.archive.ArchiveFile
+import dev.shreyash.kxcel.archive.CompressionType
 
 
 fun cloneArchive(

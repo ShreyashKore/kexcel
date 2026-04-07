@@ -3,7 +3,7 @@ package dev.shreyash.kxcel.parser
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Attribute
 import com.fleeksoft.ksoup.nodes.Element
-import dev.shreyash.kxcel.ArchiveFile
+import dev.shreyash.kxcel.archive.ArchiveFile
 import dev.shreyash.kxcel.Excel
 import dev.shreyash.kxcel.number_format.CustomNumFormat
 import dev.shreyash.kxcel.number_format.NumFormat
@@ -155,7 +155,7 @@ class Parser(private val excel: Excel) {
                 "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"0\" uniqueCount=\"0\"/>"
                     .encodeToByteArray()
             excel.archive.addFile(
-                ArchiveFile("xl/sharedStrings.xml", emptySharedStrings.size.toLong(), emptySharedStrings)
+                ArchiveFile("xl/sharedStrings.xml", emptySharedStrings.size, emptySharedStrings)
             )
             sharedStrings = excel.archive.findFile("xl/sharedStrings.xml")
         }
@@ -723,7 +723,7 @@ class Parser(private val excel: Excel) {
         excel.archive.addFile(
             ArchiveFile(
                 "xl/worksheets/sheet$sheetNumber.xml",
-                worksheetXml.size.toLong(),
+                worksheetXml.size,
                 worksheetXml
             )
         )
