@@ -31,8 +31,6 @@ abstract class InputStream(
     /** Reset to the beginning of the stream. */
     abstract fun reset()
 
-    abstract fun setPosition(v: Int)
-
     /** Rewind the read head of the stream by the given number of bytes. */
     abstract fun rewind(length: Int = 1)
 
@@ -115,7 +113,7 @@ abstract class InputStream(
     /** Read [count] bytes from the stream. */
     fun readBytes(count: Int): InputStream {
         val bytes = subset(position = position, length = count)
-        setPosition(position + bytes.length)
+        position = (position + bytes.length)
         return bytes
     }
 

@@ -168,8 +168,8 @@ class ExcelInMemoryTest {
                             topBorder = border
                             leftBorder = border
                             rightBorder = border
-                            backgroundColor = backgroundColor[row]
-                            fontColor = fontColor[column]
+                            this.backgroundColor = backgroundColor[row]
+                            this.fontColor = fontColor[column]
                         },
                     )
                 }

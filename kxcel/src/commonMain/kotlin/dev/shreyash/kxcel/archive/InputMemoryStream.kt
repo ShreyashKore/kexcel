@@ -44,17 +44,15 @@ class InputMemoryStream(
 
     override var position: Int
         get() = _position
-        set(value) = setPosition(value)
+        set(value) {
+            _position = value
+        }
 
     override val length: Int
         get() = if (buffer == null) 0 else _length - _position
 
     override val isEOS: Boolean
         get() = _position >= _length
-
-    override fun setPosition(v: Int) {
-        _position = v
-    }
 
     override fun reset() {
         _position = 0
