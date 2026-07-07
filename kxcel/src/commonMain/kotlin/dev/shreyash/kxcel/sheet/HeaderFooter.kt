@@ -21,29 +21,29 @@ public class HeaderFooter(
 ) {
 
     internal fun toXmlElement(): Element {
-        val attributes = mutableListOf<Attribute>();
+        val attributes = mutableListOf<Attribute>()
         if (alignWithMargins != null) {
             attributes.add(
                 Attribute(
                     "alignWithMargins", alignWithMargins.toString()
                 )
-            );
+            )
         }
         if (differentFirst != null) {
             attributes.add(
                 Attribute("differentFirst", differentFirst.toString())
-            );
+            )
         }
         if (differentOddEven != null) {
             attributes.add(
                 Attribute(
                     "differentOddEven", differentOddEven.toString()
                 )
-            );
+            )
         }
         if (scaleWithDoc != null) {
             attributes
-                .add(Attribute("scaleWithDoc", scaleWithDoc.toString()));
+                .add(Attribute("scaleWithDoc", scaleWithDoc.toString()))
         }
 
         val children = mutableListOf<Element>()
@@ -52,42 +52,42 @@ public class HeaderFooter(
                 Element(
                     "evenHeader", TextNode(evenHeader!!.simplifyText())
                 )
-            );
+            )
         }
         if (evenFooter != null) {
             children.add(
                 Element(
                     "evenFooter", TextNode(evenFooter!!.simplifyText())
                 )
-            );
+            )
         }
         if (firstHeader != null) {
             children.add(
                 Element(
                     "firstHeader", TextNode(firstHeader!!.simplifyText())
                 )
-            );
+            )
         }
         if (firstFooter != null) {
             children.add(
                 Element(
                     "firstFooter", TextNode(firstFooter!!.simplifyText())
                 )
-            );
+            )
         }
         if (oddHeader != null) {
             children.add(
                 Element(
                     "oddHeader", TextNode(oddHeader!!.simplifyText())
                 )
-            );
+            )
         }
         if (oddFooter != null) {
             children.add(
                 Element(
                     "oddFooter", TextNode(oddFooter!!.simplifyText())
                 )
-            );
+            )
         }
 
         return Element(Tag("headerFooter"), null, Attributes(attributes)).apply {
@@ -120,20 +120,20 @@ public class HeaderFooter(
 internal fun String.parseBool(): Boolean {
     var value = lowercase()
     if (value == "true" || value == "1") {
-        return true;
+        return true
     } else if (value == "false" || value == "0") {
-        return false;
+        return false
     }
 
     throw IllegalStateException("\"$this\" can not be parsed to boolean.")
 }
 
 internal fun String.simplifyText(): String {
-    var value = this.replace("&amp", "&");
-    value = value.replace("amp", "&");
-    value = value.replace("&", "&amp;");
-    value = value.replace("\"", "&quot;");
-    return value;
+    var value = this.replace("&amp", "&")
+    value = value.replace("amp", "&")
+    value = value.replace("&", "&amp;")
+    value = value.replace("\"", "&quot;")
+    return value
 }
 
 internal fun Element(tag: String, vararg children: Node): Element = Element(tag).apply {

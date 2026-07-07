@@ -10,8 +10,8 @@ public class Sheet internal constructor(
     internal val excel: Excel,
     private val _sheet: String,
     sh: Map<Int, Map<Int, Data>>? = null,
-    spanL_: List<Span?>? = null,
-    spanI_: MutableList<String>? = null,
+    spanList: List<Span?>? = null,
+    spannedItems: MutableList<String>? = null,
     maxRowsVal: Int? = null,
     maxColumnsVal: Int? = null,
     isRTLVal: Boolean? = null,
@@ -42,8 +42,8 @@ public class Sheet internal constructor(
                 excel,
                 sheetName,
                 sh = oldSheetObject.sheetData,
-                spanL_ = oldSheetObject.spanList,
-                spanI_ = oldSheetObject._spannedItems,
+                spanList = oldSheetObject.spanList,
+                spannedItems = oldSheetObject._spannedItems,
                 maxRowsVal = oldSheetObject._maxRows,
                 maxColumnsVal = oldSheetObject._maxColumns,
                 columnWidthsVal = oldSheetObject._columnWidths,
@@ -58,12 +58,12 @@ public class Sheet internal constructor(
     init {
         _headerFooter = headerFooter
 
-        if (spanL_ != null) {
-            spanList = spanL_.toMutableList()
+        if (spanList != null) {
+            this@Sheet.spanList = spanList.toMutableList()
             excel.addMergeChangeLookup(sheetName)
         }
-        if (spanI_ != null) {
-            _spannedItems = spanI_
+        if (spannedItems != null) {
+            this@Sheet._spannedItems = spannedItems
         }
         if (maxColumnsVal != null) {
             _maxColumns = maxColumnsVal
@@ -143,21 +143,21 @@ public class Sheet internal constructor(
 
     public val rows: List<List<Data?>>
         get() {
-            val _data = mutableListOf<List<Data?>>()
+            val data = mutableListOf<List<Data?>>()
 
             if (sheetData.isEmpty()) {
-                return _data
+                return data
             }
 
             if (_maxRows > 0 && maxColumns > 0) {
-                _data.addAll(List(_maxRows) { rowIndex ->
+                data.addAll(List(_maxRows) { rowIndex ->
                     List(maxColumns) { columnIndex ->
                         sheetData[rowIndex]?.get(columnIndex)
                     }
                 })
             }
 
-            return _data
+            return data
         }
 
     public fun selectRangeWithString(range: String): List<List<Data?>?> {
@@ -181,19 +181,19 @@ public class Sheet internal constructor(
             checkMaxRow(it.rowIndex)
         }
 
-        var _startColumn = start.columnIndex
-        var _startRow = start.rowIndex
-        var _endColumn = end?.columnIndex
-        var _endRow = end?.rowIndex
+        var startColumn = start.columnIndex
+        var startRow = start.rowIndex
+        var endColumn = end?.columnIndex
+        var endRow = end?.rowIndex
 
-        if (_endColumn != null && _endRow != null) {
-            if (_startRow > _endRow) {
-                _startRow = end.rowIndex
-                _endRow = start.rowIndex
+        if (endColumn != null && endRow != null) {
+            if (startRow > endRow) {
+                startRow = end.rowIndex
+                endRow = start.rowIndex
             }
-            if (_endColumn < _startColumn) {
-                _endColumn = start.columnIndex
-                _startColumn = end.columnIndex
+            if (endColumn < startColumn) {
+                endColumn = start.columnIndex
+                startColumn = end.columnIndex
             }
         }
 
@@ -202,11 +202,11 @@ public class Sheet internal constructor(
             return _selectedRange
         }
 
-        for (i in _startRow..(_endRow ?: maxRows)) {
+        for (i in startRow..(endRow ?: maxRows)) {
             val mapData = sheetData[i]
             if (mapData != null) {
                 val row = mutableListOf<Data?>()
-                for (j in _startColumn..(_endColumn ?: maxColumns)) {
+                for (j in startColumn..(endColumn ?: maxColumns)) {
                     row.add(mapData[j])
                 }
                 _selectedRange.add(row)
@@ -232,8 +232,8 @@ public class Sheet internal constructor(
     }
 
     public fun selectRangeValues(start: CellIndex, end: CellIndex? = null): List<List<Any?>> {
-        val _list = if (end == null) selectRange(start) else selectRange(start, end = end)
-        return _list.map { e ->
+        val list = if (end == null) selectRange(start) else selectRange(start, end = end)
+        return list.map { e ->
             e?.map { it?.value } ?: emptyList()
         }
     }
@@ -267,8 +267,8 @@ public class Sheet internal constructor(
 
         var updateSpanCell = false
 
-        for (i in 0 until spanList.size) {
-            val spanObj = spanList[i] ?: continue
+        for (i in 0 until this@Sheet.spanList.size) {
+            val spanObj = this@Sheet.spanList[i] ?: continue
             var startColumn = spanObj.columnSpanStart
             var startRow = spanObj.rowSpanStart
             var endColumn = spanObj.columnSpanEnd
@@ -280,7 +280,7 @@ public class Sheet internal constructor(
                 }
                 endColumn -= 1
                 if (columnIndex == (endColumn + 1) && columnIndex == (if (columnIndex < startColumn) startColumn + 1 else startColumn)) {
-                    spanList[i] = null
+                    this@Sheet.spanList[i] = null
                 } else {
                     val newSpanObj = Span(
                         rowSpanStart = startRow,
@@ -288,13 +288,13 @@ public class Sheet internal constructor(
                         rowSpanEnd = endRow,
                         columnSpanEnd = endColumn
                     )
-                    spanList[i] = newSpanObj
+                    this@Sheet.spanList[i] = newSpanObj
                 }
                 updateSpanCell = true
                 excel.mergeChanges = true
             }
 
-            if (spanList[i] != null) {
+            if (this@Sheet.spanList[i] != null) {
                 val rc = getSpanCellId(startColumn, startRow, endColumn, endRow)
                 if (!_spannedItems.contains(rc)) {
                     _spannedItems.add(rc)
@@ -307,7 +307,7 @@ public class Sheet internal constructor(
             excel.addMergeChangeLookup(sheetName)
         }
 
-        val _data = mutableMapOf<Int, MutableMap<Int, Data>>()
+        val data = mutableMapOf<Int, MutableMap<Int, Data>>()
         if (columnIndex <= maxColumns - 1) {
             val sortedKeys = sheetData.keys.sorted()
             sortedKeys.forEach { rowKey ->
@@ -327,9 +327,9 @@ public class Sheet internal constructor(
                         }
                     }
                 }
-                _data[rowKey] = columnMap
+                data[rowKey] = columnMap
             }
-            sheetData = _data
+            sheetData = data
         }
 
         if (_maxColumns - 1 <= columnIndex) {
@@ -346,8 +346,8 @@ public class Sheet internal constructor(
         var updateSpanCell = false
 
         _spannedItems = mutableListOf()
-        for (i in 0 until spanList.size) {
-            val spanObj = spanList[i] ?: continue
+        for (i in 0 until this@Sheet.spanList.size) {
+            val spanObj = this@Sheet.spanList[i] ?: continue
             var startColumn = spanObj.columnSpanStart
             var startRow = spanObj.rowSpanStart
             var endColumn = spanObj.columnSpanEnd
@@ -364,7 +364,7 @@ public class Sheet internal constructor(
                     rowSpanEnd = endRow,
                     columnSpanEnd = endColumn
                 )
-                spanList[i] = newSpanObj
+                this@Sheet.spanList[i] = newSpanObj
                 updateSpanCell = true
                 excel.mergeChanges = true
             }
@@ -379,7 +379,7 @@ public class Sheet internal constructor(
         }
 
         if (sheetData.isNotEmpty()) {
-            val _data = mutableMapOf<Int, MutableMap<Int, Data>>()
+            val data = mutableMapOf<Int, MutableMap<Int, Data>>()
             val sortedKeys = sheetData.keys.sorted()
             if (columnIndex <= maxColumns - 1) {
                 sortedKeys.forEach { rowKey ->
@@ -397,9 +397,9 @@ public class Sheet internal constructor(
                         }
                     }
                     columnMap[columnIndex] = Data.newData(this, rowKey, columnIndex)
-                    _data[rowKey] = columnMap
+                    data[rowKey] = columnMap
                 }
-                sheetData = _data
+                sheetData = data
             } else {
                 sortedKeys.firstOrNull()?.let { firstRow ->
                     sheetData[firstRow]!![columnIndex] = Data.newData(this, firstRow, columnIndex)
@@ -424,8 +424,8 @@ public class Sheet internal constructor(
 
         var updateSpanCell = false
 
-        for (i in 0 until spanList.size) {
-            val spanObj = spanList[i] ?: continue
+        for (i in 0 until this@Sheet.spanList.size) {
+            val spanObj = this@Sheet.spanList[i] ?: continue
             var startColumn = spanObj.columnSpanStart
             var startRow = spanObj.rowSpanStart
             var endColumn = spanObj.columnSpanEnd
@@ -437,7 +437,7 @@ public class Sheet internal constructor(
                 }
                 endRow -= 1
                 if (rowIndex == (endRow + 1) && rowIndex == (if (rowIndex < startRow) startRow + 1 else startRow)) {
-                    spanList[i] = null
+                    this@Sheet.spanList[i] = null
                 } else {
                     val newSpanObj = Span(
                         rowSpanStart = startRow,
@@ -445,12 +445,12 @@ public class Sheet internal constructor(
                         rowSpanEnd = endRow,
                         columnSpanEnd = endColumn
                     )
-                    spanList[i] = newSpanObj
+                    this@Sheet.spanList[i] = newSpanObj
                 }
                 updateSpanCell = true
                 excel.mergeChanges = true
             }
-            if (spanList[i] != null) {
+            if (this@Sheet.spanList[i] != null) {
                 val rc = getSpanCellId(startColumn, startRow, endColumn, endRow)
                 if (!_spannedItems.contains(rc)) {
                     _spannedItems.add(rc)
@@ -464,18 +464,18 @@ public class Sheet internal constructor(
         }
 
         if (sheetData.isNotEmpty()) {
-            val _data = mutableMapOf<Int, MutableMap<Int, Data>>()
+            val data = mutableMapOf<Int, MutableMap<Int, Data>>()
             if (rowIndex <= maxRows - 1) {
                 val sortedKeys = sheetData.keys.sorted()
                 sortedKeys.forEach { rowKey ->
                     if (rowKey < rowIndex && sheetData[rowKey] != null) {
-                        _data[rowKey] = sheetData[rowKey]!!.toMutableMap()
+                        data[rowKey] = sheetData[rowKey]!!.toMutableMap()
                     }
                     if (rowIndex < rowKey && sheetData[rowKey] != null) {
-                        _data[rowKey - 1] = sheetData[rowKey]!!.toMutableMap()
+                        data[rowKey - 1] = sheetData[rowKey]!!.toMutableMap()
                     }
                 }
-                sheetData = _data
+                sheetData = data
             }
         } else {
             _maxRows = 0
@@ -497,8 +497,8 @@ public class Sheet internal constructor(
         var updateSpanCell = false
 
         _spannedItems = mutableListOf()
-        for (i in 0 until spanList.size) {
-            val spanObj = spanList[i] ?: continue
+        for (i in 0 until this@Sheet.spanList.size) {
+            val spanObj = this@Sheet.spanList[i] ?: continue
             var startColumn = spanObj.columnSpanStart
             var startRow = spanObj.rowSpanStart
             var endColumn = spanObj.columnSpanEnd
@@ -515,7 +515,7 @@ public class Sheet internal constructor(
                     rowSpanEnd = endRow,
                     columnSpanEnd = endColumn
                 )
-                spanList[i] = newSpanObj
+                this@Sheet.spanList[i] = newSpanObj
                 updateSpanCell = true
                 excel.mergeChanges = true
             }
@@ -529,25 +529,25 @@ public class Sheet internal constructor(
             excel.addMergeChangeLookup( sheetName)
         }
 
-        val _data = mutableMapOf<Int, MutableMap<Int, Data>>()
+        val data = mutableMapOf<Int, MutableMap<Int, Data>>()
         if (sheetData.isNotEmpty()) {
             val sortedKeys = sheetData.keys.sortedDescending()
             if (rowIndex <= maxRows - 1) {
                 sortedKeys.forEach { rowKey ->
                     if (rowKey < rowIndex) {
-                        _data[rowKey] = sheetData[rowKey]!!
+                        data[rowKey] = sheetData[rowKey]!!
                     }
                     if (rowIndex <= rowKey) {
-                        _data[rowKey + 1] = sheetData[rowKey]!!
-                        _data[rowKey + 1]!!.forEach { (_, value) ->
+                        data[rowKey + 1] = sheetData[rowKey]!!
+                        data[rowKey + 1]!!.forEach { (_, value) ->
                             value._rowIndex++
                         }
                     }
                 }
             }
         }
-        _data[rowIndex] = mutableMapOf(0 to Data.newData(this, rowIndex, 0))
-        sheetData = _data
+        data[rowIndex] = mutableMapOf(0 to Data.newData(this, rowIndex, 0))
+        sheetData = data
 
         if (_maxRows - 1 <= rowIndex) {
             _maxRows = rowIndex + 1
@@ -568,7 +568,7 @@ public class Sheet internal constructor(
         var newRowIndex = rowIndex
         var newColumnIndex = columnIndex
 
-        if (spanList.isNotEmpty()) {
+        if (this@Sheet.spanList.isNotEmpty()) {
             val (nr, nc) = isInsideSpanning(rowIndex, columnIndex)
             newRowIndex = nr
             newColumnIndex = nc
@@ -661,22 +661,22 @@ public class Sheet internal constructor(
             columnSpanEnd = endColumn
         )
 
-        spanList.add(s)
+        this@Sheet.spanList.add(s)
         excel.addMergeChangeLookup(sheetName)
     }
 
     public fun unMerge(unmergeCells: String) {
-        if (_spannedItems.isNotEmpty() && spanList.isNotEmpty() && _spannedItems.contains(unmergeCells)) {
+        if (_spannedItems.isNotEmpty() && this@Sheet.spanList.isNotEmpty() && _spannedItems.contains(unmergeCells)) {
             val lis = unmergeCells.split(Regex(":"))
             if (lis.size == 2) {
                 var remove = false
                 val start = CellIndex.indexByString(lis[0])
                 val end = CellIndex.indexByString(lis[1])
-                for (i in 0 until spanList.size) {
-                    val spanObject = spanList[i] ?: continue
+                for (i in 0 until this@Sheet.spanList.size) {
+                    val spanObject = this@Sheet.spanList[i] ?: continue
 
                     if (spanObject.columnSpanStart == start.columnIndex && spanObject.rowSpanStart == start.rowIndex && spanObject.columnSpanEnd == end.columnIndex && spanObject.rowSpanEnd == end.rowIndex) {
-                        spanList[i] = null
+                        this@Sheet.spanList[i] = null
                         remove = true
                     }
                 }
@@ -690,7 +690,7 @@ public class Sheet internal constructor(
     }
 
     public fun setMergedCellStyle(start: CellIndex, mergedCellStyle: CellStyle) {
-        val _mergedCells = spannedItems.map { e ->
+        val _mergedCells = this@Sheet.spannedItems.map { e ->
             e.split(":").map { CellIndex.indexByString(it) }
         }
 
@@ -764,8 +764,8 @@ public class Sheet internal constructor(
             startColumn = end.columnIndex
         }
 
-        for (i in 0 until spanList.size) {
-            val spanObj = spanList[i] ?: continue
+        for (i in 0 until this@Sheet.spanList.size) {
+            val spanObj = this@Sheet.spanList[i] ?: continue
 
             val locationChange = isLocationChangeRequired(startColumn, startRow, endColumn, endRow, spanObj)
 
@@ -779,7 +779,7 @@ public class Sheet internal constructor(
                     _spannedItems.remove(sp)
                 }
                 remove = true
-                spanList[i] = null
+                this@Sheet.spanList[i] = null
             }
         }
         if (remove) {
@@ -797,8 +797,8 @@ public class Sheet internal constructor(
     internal fun getSpannedObjects(rowIndex: Int, startingColumnIndex: Int): List<Span> {
         val obtained = mutableListOf<Span>()
 
-        if (spanList.isNotEmpty()) {
-            obtained.addAll(spanList.filterNotNull().filter { spanObject ->
+        if (this@Sheet.spanList.isNotEmpty()) {
+            obtained.addAll(this@Sheet.spanList.filterNotNull().filter { spanObject ->
                 spanObject.rowSpanStart <= rowIndex && rowIndex <= spanObject.rowSpanEnd && startingColumnIndex <= spanObject.columnSpanEnd
             })
         }
@@ -1007,8 +1007,8 @@ public class Sheet internal constructor(
         var isNotInside = true
 
         if (sheetData[rowIndex] != null && sheetData[rowIndex]!!.isNotEmpty()) {
-            for (i in 0 until spanList.size) {
-                val spanObj = spanList[i] ?: continue
+            for (i in 0 until this@Sheet.spanList.size) {
+                val spanObj = this@Sheet.spanList[i] ?: continue
                 if (rowIndex >= spanObj.rowSpanStart && rowIndex <= spanObj.rowSpanEnd) {
                     isNotInside = false
                     break
@@ -1028,8 +1028,8 @@ public class Sheet internal constructor(
         var newRowIndex = rowIndex
         var newColumnIndex = columnIndex
 
-        for (i in 0 until spanList.size) {
-            val spanObj = spanList[i] ?: continue
+        for (i in 0 until this@Sheet.spanList.size) {
+            val spanObj = this@Sheet.spanList[i] ?: continue
 
             if (rowIndex >= spanObj.rowSpanStart && rowIndex <= spanObj.rowSpanEnd && columnIndex >= spanObj.columnSpanStart && columnIndex <= spanObj.columnSpanEnd) {
                 newRowIndex = spanObj.rowSpanStart
@@ -1063,8 +1063,8 @@ public class Sheet internal constructor(
         get() {
             _spannedItems = mutableListOf()
 
-            for (i in 0 until spanList.size) {
-                val spanObj = spanList[i] ?: continue
+            for (i in 0 until this@Sheet.spanList.size) {
+                val spanObj = this@Sheet.spanList[i] ?: continue
                 val rC = getSpanCellId(spanObj.columnSpanStart, spanObj.rowSpanStart, spanObj.columnSpanEnd, spanObj.rowSpanEnd)
                 if (!_spannedItems.contains(rC)) {
                     _spannedItems.add(rC)
@@ -1075,8 +1075,8 @@ public class Sheet internal constructor(
         }
 
     internal fun cleanUpSpanMap() {
-        if (spanList.isNotEmpty()) {
-            spanList.removeAll { it == null }
+        if (this@Sheet.spanList.isNotEmpty()) {
+            this@Sheet.spanList.removeAll { it == null }
         }
     }
 

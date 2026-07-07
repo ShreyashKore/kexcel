@@ -225,8 +225,8 @@ public class Save internal constructor(private val excel: Excel, private val par
 
         innerCellStyle.forEach { cellStyle ->
             val fs = FontStyle(
-                bold = cellStyle.isBold,
-                italic = cellStyle.isItalic,
+                isBold = cellStyle.isBold,
+                isItalic = cellStyle.isItalic,
                 fontColorHex = cellStyle.fontColor,
                 underline = cellStyle.underline,
                 fontSize = cellStyle.fontSize,
@@ -368,8 +368,8 @@ public class Save internal constructor(private val excel: Excel, private val par
         innerCellStyle.forEach { cellStyle ->
             val bgColor = cellStyle.backgroundColor.colorHex
             val fs = FontStyle(
-                bold = cellStyle.isBold,
-                italic = cellStyle.isItalic,
+                isBold = cellStyle.isBold,
+                isItalic = cellStyle.isItalic,
                 fontColorHex = cellStyle.fontColor,
                 underline = cellStyle.underline,
                 fontSize = cellStyle.fontSize,

@@ -11,24 +11,17 @@ import dev.shreyash.kxcel.utils.toExcelColor
  */
 internal class FontStyle(
     fontColorHex: ExcelColor? = ExcelColor.black,
-    fontSize: Int? = null,
-    fontFamily: String? = null,
-    fontScheme: FontScheme = FontScheme.Unset,
-    bold: Boolean = false,
-    underline: Underline = Underline.None,
-    italic: Boolean = false,
+    var fontSize: Int? = null,
+    var fontFamily: String? = null,
+    var fontScheme: FontScheme = FontScheme.Unset,
+    var isBold: Boolean = false,
+    var underline: Underline = Underline.None,
+    var isItalic: Boolean = false,
 ) {
     var fontColorHex: ExcelColor = if (fontColorHex != null)
         isColorAppropriate(fontColorHex.colorHex).toExcelColor()
     else
         ExcelColor.black
-
-    var fontFamily: String? = fontFamily
-    var fontScheme: FontScheme = fontScheme
-    var isBold: Boolean = bold
-    var isItalic: Boolean = italic
-    var underline: Underline = underline
-    var fontSize: Int? = fontSize
 
     private fun props(): List<Any?> = listOf(isBold, isItalic, fontSize, underline, fontFamily, fontColorHex)
 

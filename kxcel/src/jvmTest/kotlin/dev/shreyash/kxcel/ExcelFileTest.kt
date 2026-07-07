@@ -19,7 +19,6 @@ import dev.shreyash.kxcel.utils.toExcelColor
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.zip.ZipInputStream
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -518,7 +517,7 @@ class ExcelFileTest {
         val ex = assertFailsWith<UnsupportedOperationException> {
             Excel.decodeBytes(fixture("oldXLSFile.xls"))
         }
-        assertTrue(ex.message?.contains("Only .xlsx files are supported") == true)
+        assertEquals(ex.message?.contains("Only .xlsx files are supported"), true)
     }
 
     // Dart: 'Exception when opening new .xls file'
@@ -527,7 +526,7 @@ class ExcelFileTest {
         val ex = assertFailsWith<UnsupportedOperationException> {
             Excel.decodeBytes(fixture("newXLSFile.xls"))
         }
-        assertTrue(ex.message?.contains("Only .xlsx files are supported") == true)
+        assertEquals(ex.message?.contains("Only .xlsx files are supported"), true)
     }
 
     // endregion
