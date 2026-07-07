@@ -8,16 +8,16 @@ import com.fleeksoft.ksoup.nodes.TextNode
 import com.fleeksoft.ksoup.parser.Tag
 
 class HeaderFooter(
-    val alignWithMargins: Boolean?,
-    val differentFirst: Boolean?,
-    val differentOddEven: Boolean?,
-    val scaleWithDoc: Boolean?,
-    val evenFooter: String?,
-    val evenHeader: String?,
-    val firstFooter: String?,
-    val firstHeader: String?,
-    val oddFooter: String?,
-    val oddHeader: String?,
+    var alignWithMargins: Boolean?,
+    var differentFirst: Boolean?,
+    var differentOddEven: Boolean?,
+    var scaleWithDoc: Boolean?,
+    var evenFooter: String?,
+    var evenHeader: String?,
+    var firstFooter: String?,
+    var firstHeader: String?,
+    var oddFooter: String?,
+    var oddHeader: String?,
 ) {
 
     fun toXmlElement(): Element {
@@ -50,42 +50,42 @@ class HeaderFooter(
         if (evenHeader != null) {
             children.add(
                 Element(
-                    "evenHeader", TextNode(evenHeader.simplifyText())
+                    "evenHeader", TextNode(evenHeader!!.simplifyText())
                 )
             );
         }
         if (evenFooter != null) {
             children.add(
                 Element(
-                    "evenFooter", TextNode(evenFooter.simplifyText())
+                    "evenFooter", TextNode(evenFooter!!.simplifyText())
                 )
             );
         }
         if (firstHeader != null) {
             children.add(
                 Element(
-                    "firstHeader", TextNode(firstHeader.simplifyText())
+                    "firstHeader", TextNode(firstHeader!!.simplifyText())
                 )
             );
         }
         if (firstFooter != null) {
             children.add(
                 Element(
-                    "firstFooter", TextNode(firstFooter.simplifyText())
+                    "firstFooter", TextNode(firstFooter!!.simplifyText())
                 )
             );
         }
         if (oddHeader != null) {
             children.add(
                 Element(
-                    "oddHeader", TextNode(oddHeader.simplifyText())
+                    "oddHeader", TextNode(oddHeader!!.simplifyText())
                 )
             );
         }
         if (oddFooter != null) {
             children.add(
                 Element(
-                    "oddFooter", TextNode(oddFooter.simplifyText())
+                    "oddFooter", TextNode(oddFooter!!.simplifyText())
                 )
             );
         }

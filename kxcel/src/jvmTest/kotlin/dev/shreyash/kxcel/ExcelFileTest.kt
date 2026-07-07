@@ -281,17 +281,41 @@ class ExcelFileTest {
     // region --- Header/Footer group ---
 
     // Dart: 'Update header/footer'.
-    // KMP port: HeaderFooter is immutable (all `val`, no oddHeader/oddFooter setters),
-    // so this mutation-based test cannot be expressed against the current API.
-    @Ignore
     @Test
-    fun updateHeaderFooter() = Unit
+    fun updateHeaderFooter() {
+        val bytes = fixture("example.xlsx")
+        val excel = Excel.decodeBytes(bytes)
+        val sheetObject = excel.tables["Sheet1"]!!
+
+        sheetObject.headerFooter!!.oddHeader = "Foo"
+        sheetObject.headerFooter!!.oddFooter = "Bar"
+
+        excel.copy("Sheet1", "test_sheet")
+        val newSheet = excel.tables["test_sheet"]!!
+        assertEquals(
+            newSheet.headerFooter!!.oddHeader!!, "Foo")
+        assertEquals(
+            newSheet.headerFooter!!.oddFooter!!, "Bar")
+    }
 
     // Dart: 'Clone header/footer of existing Workbook'.
     // KMP port: same immutability limitation as updateHeaderFooter.
-    @Ignore
     @Test
-    fun cloneHeaderFooter() = Unit
+    fun cloneHeaderFooter() {
+        val bytes = fixture("example.xlsx")
+        val excel = Excel.decodeBytes(bytes)
+        val sheetObject = excel.tables["Sheet1"]
+
+        sheetObject!!.headerFooter!!.oddHeader = "Foo"
+        sheetObject!!.headerFooter!!.oddFooter = "Bar"
+
+        excel.copy("Sheet1", "test_sheet");
+
+        val testSheet = excel.tables["test_sheet"];
+
+        assertEquals(testSheet!!.headerFooter!!.oddHeader!!, "Foo")
+        assertEquals(testSheet.headerFooter!!.oddFooter!!, "Bar")
+    }
 
     // Dart: 'Remove header/footer from Workbook' — the Dart test body is empty.
     @Test
