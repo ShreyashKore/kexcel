@@ -134,8 +134,8 @@ jobs:
           cache-overwrite-existing: true
           gradle-home-cache-cleanup: true
 
-      - name: Build Compose and View sample
-        run: ./gradlew sample:assembleDebug
+      - name: Build Compose sample (Android + Desktop)
+        run: ./gradlew :sample:androidApp:assembleDebug :sample:desktopApp:assemble
 
       - name: Verify selected Xcode
         run: |
@@ -147,7 +147,7 @@ jobs:
       - name: Build iOS app
         run: |
           xcodebuild \
-            -project iosApp/iosApp.xcodeproj \
+            -project sample/iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \

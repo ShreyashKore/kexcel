@@ -35,9 +35,6 @@ val excel = Excel.decodeStream(inputStream)
 
 ### Run Sample App
 
- - Desktop JVM: `./gradlew :sample:composeApp:run`
- - Android: `open project in Android Studio and run the sample app`
- - iOS: `open 'sample/iosApp/iosApp.xcodeproj' in Xcode and run the sample app`
- - JavaScript: `./gradlew :sample:composeApp:jsBrowserDevelopmentRun`
- - Wasm: `./gradlew :sample:composeApp:wasmJsBrowserDevelopmentRun`
- - Linux/Macos/Windows native: `./gradlew :sample:terminalApp:runDebugExecutable[architecture]`
+ - Desktop JVM: `./gradlew :sample:desktopApp:run`
+ - Android: open the project in Android Studio and run the `sample/androidApp` configuration
+ - iOS: open `sample/iosApp/iosApp.xcodeproj` in Xcode and run
