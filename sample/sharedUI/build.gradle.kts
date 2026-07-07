@@ -36,7 +36,7 @@ kotlin {
     }
 }
 android {
-    namespace = "dev.shreyash.kxcel.sharedUI"
+    namespace = "com.gyanoba.kxcel.sharedUI"
     compileSdk = 37
     defaultConfig {
         minSdk = 23

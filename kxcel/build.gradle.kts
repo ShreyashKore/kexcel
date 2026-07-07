@@ -54,7 +54,7 @@ kotlin {
 }
 
 android {
-    namespace = "dev.shreyash.kxcel.kxcel"
+    namespace = "com.gyanoba.kxcel.kxcel"
     compileSdk = 37
     defaultConfig {
         minSdk = 23
@@ -69,7 +69,7 @@ android {
 //https://www.jetbrains.com/help/kotlin-multiplatform-dev/multiplatform-publish-libraries.html
 mavenPublishing {
     publishToMavenCentral()
-    coordinates("dev.shreyash.kxcel", "kxcel", "1.0.0")
+    coordinates("com.gyanoba.kxcel", "kxcel", "1.0.0")
 
     pom {
         name = "Kxcel"
