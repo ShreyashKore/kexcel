@@ -24,7 +24,7 @@ kotlin {
             api(libs.compose.runtime)
             api(libs.compose.ui)
             api(libs.compose.foundation)
-            implementation(project(":kxcel"))
+            implementation(project(":kexcel"))
         }
     }
 
@@ -36,7 +36,7 @@ kotlin {
     }
 }
 android {
-    namespace = "com.gyanoba.kxcel.sharedUI"
+    namespace = "com.gyanoba.kexcel.sharedUI"
     compileSdk = 37
     defaultConfig {
         minSdk = 23

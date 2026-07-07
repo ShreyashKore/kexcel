@@ -1,4 +1,4 @@
-rootProject.name = "Kxcel"
+rootProject.name = "Kexcel"
 
 pluginManagement {
     repositories {
@@ -28,7 +28,7 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-include(":kxcel")
+include(":kexcel")
 include(":sample:sharedUI")
 include(":sample:androidApp")
 include(":sample:desktopApp")

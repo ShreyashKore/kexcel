@@ -1,4 +1,4 @@
-# Kxcel
+# Kexcel
 
 Kotlin Multiplatform Library
 
@@ -13,15 +13,15 @@ Kotlin Multiplatform Library
 
 ### Publish to MavenLocal
 
-1) Run `./gradlew :kxcel:publishToMavenLocal`
-2) Open `~/.m2/repository/dev/shreyash/kxcel/`
+1) Run `./gradlew :kexcel:publishToMavenLocal`
+2) Open `~/.m2/repository/dev/shreyash/kexcel/`
 
 ### Publish to MavenCentral
 
 1) Create an account and a namespace on Sonatype:  
    https://central.sonatype.org/register/central-portal/#create-an-account
 2) Add developer id, name, email and the project url to  
-   `./kxcel/build.gradle.kts`
+   `./kexcel/build.gradle.kts`
 3) Generate a GPG key:  
    https://getstream.io/blog/publishing-libraries-to-mavencentral-2021/#generating-a-gpg-key-pair
    ```
@@ -37,4 +37,4 @@ Kotlin Multiplatform Library
    mavenCentralUsername=[generated username]
    mavenCentralPassword=[generated password]
    ```
-5) Run `./gradlew :kxcel:publishAndReleaseToMavenCentral --no-configuration-cache`
+5) Run `./gradlew :kexcel:publishAndReleaseToMavenCentral --no-configuration-cache`

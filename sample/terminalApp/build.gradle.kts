@@ -17,7 +17,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":kxcel"))
+            implementation(project(":kexcel"))
         }
     }
 }
