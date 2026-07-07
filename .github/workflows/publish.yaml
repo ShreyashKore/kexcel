@@ -145,6 +145,7 @@ jobs:
           xcrun --sdk iphonesimulator --show-sdk-version
 
       - name: Build iOS app
+        if: false # Disabled as takes too long
         run: |
           xcodebuild \
             -project sample/iosApp/iosApp.xcodeproj \

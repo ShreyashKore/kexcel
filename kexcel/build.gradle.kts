@@ -71,5 +71,10 @@ android {
 mavenPublishing {
     publishToMavenCentral()
     coordinates("com.gyanoba.kexcel", "kexcel", "0.0.1")
-    if (project.hasProperty("signing.keyId")) signAllPublications()
+    // Maven Central rejects unsigned releases. Sign whenever credentials are
+    // present: `signing.keyId` for a local GPG keyring (see README) or
+    // `signingInMemoryKey` from the ORG_GRADLE_PROJECT_* env vars used in CI.
+    if (project.hasProperty("signing.keyId") || project.hasProperty("signingInMemoryKey")) {
+        signAllPublications()
+    }
 }
