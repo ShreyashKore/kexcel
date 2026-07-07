@@ -9,7 +9,7 @@ import dev.shreyash.kxcel.utils.toExcelColor
 /**
  * Internal styling class holding font properties parsed from the Excel styles XML.
  */
-class FontStyle(
+internal class FontStyle(
     fontColorHex: ExcelColor? = ExcelColor.black,
     fontSize: Int? = null,
     fontFamily: String? = null,

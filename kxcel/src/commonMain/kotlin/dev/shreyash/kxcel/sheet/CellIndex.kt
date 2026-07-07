@@ -3,18 +3,18 @@ package dev.shreyash.kxcel.sheet
 import dev.shreyash.kxcel.utils.cellCoordsFromCellId
 import dev.shreyash.kxcel.utils.getCellId
 
-class CellIndex private constructor(
-    val columnIndex: Int,
-    val rowIndex: Int,
+public class CellIndex private constructor(
+    public val columnIndex: Int,
+    public val rowIndex: Int,
 ) {
-    companion object {
+    public companion object {
         /**
          * ```
          * CellIndex.indexByColumnRow(columnIndex = 0, rowIndex = 0) // A1
          * CellIndex.indexByColumnRow(columnIndex = 0, rowIndex = 1) // A2
          * ```
          */
-        fun indexByColumnRow(columnIndex: Int, rowIndex: Int): CellIndex =
+        public fun indexByColumnRow(columnIndex: Int, rowIndex: Int): CellIndex =
             CellIndex(columnIndex = columnIndex, rowIndex = rowIndex)
 
         /**
@@ -23,7 +23,7 @@ class CellIndex private constructor(
          * CellIndex.indexByString("A2") // columnIndex: 0, rowIndex: 1
          * ```
          */
-        fun indexByString(cellIndex: String): CellIndex {
+        public fun indexByString(cellIndex: String): CellIndex {
             val (row, column) = cellCoordsFromCellId(cellIndex)
             return CellIndex(columnIndex = column, rowIndex = row)
         }
@@ -33,7 +33,7 @@ class CellIndex private constructor(
      * Returns the cell ID string (e.g. "A1").
      * Avoid using this in hot paths — it is a relatively expensive operation.
      */
-    val cellId: String
+    public val cellId: String
         get() = getCellId(columnIndex, rowIndex)
 
     override fun equals(other: Any?): Boolean {

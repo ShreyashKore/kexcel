@@ -6,7 +6,7 @@ package dev.shreyash.kxcel.archive
  *
  * Ported from the Dart `archive` package's `FileContent`.
  */
-abstract class FileContent {
+internal abstract class FileContent {
     /** The size of the file content in bytes. */
     abstract val length: Int
 
@@ -38,7 +38,7 @@ abstract class FileContent {
 }
 
 /** A [FileContent] that is resident in memory. */
-class FileContentMemory(data: ByteArray) : FileContent() {
+internal class FileContentMemory(data: ByteArray) : FileContent() {
     var bytes: ByteArray? = data
 
     override val length: Int get() = bytes?.size ?: 0
@@ -60,7 +60,7 @@ class FileContentMemory(data: ByteArray) : FileContent() {
 }
 
 /** A [FileContent] that is backed by a stream. */
-class FileContentStream(val stream: InputStream) : FileContent() {
+internal class FileContentStream(val stream: InputStream) : FileContent() {
     override val length: Int get() = stream.length
 
     override fun getStream(decompress: Boolean): InputStream = stream

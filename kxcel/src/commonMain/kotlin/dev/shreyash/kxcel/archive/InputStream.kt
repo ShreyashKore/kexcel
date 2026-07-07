@@ -7,7 +7,7 @@ package dev.shreyash.kxcel.archive
  * that can exceed the signed 32-bit range ([readUint32], [readUint64]) return
  * [Long] so the full unsigned value is preserved.
  */
-abstract class InputStream(
+internal abstract class InputStream(
     /** The current endian order of the stream. */
     var byteOrder: ByteOrder,
 ) {
@@ -63,7 +63,7 @@ abstract class InputStream(
     fun readUint16(): Int {
         val b1 = readByte()
         val b2 = readByte()
-        return if (byteOrder == ByteOrder.bigEndian) (b1 shl 8) or b2 else (b2 shl 8) or b1
+        return if (byteOrder == ByteOrder.BigEndian) (b1 shl 8) or b2 else (b2 shl 8) or b1
     }
 
     /** Read a 24-bit word from the stream. */
@@ -71,7 +71,7 @@ abstract class InputStream(
         val b1 = readByte()
         val b2 = readByte()
         val b3 = readByte()
-        return if (byteOrder == ByteOrder.bigEndian) {
+        return if (byteOrder == ByteOrder.BigEndian) {
             b3 or (b2 shl 8) or (b1 shl 16)
         } else {
             b1 or (b2 shl 8) or (b3 shl 16)
@@ -84,7 +84,7 @@ abstract class InputStream(
         val b2 = readByte().toLong()
         val b3 = readByte().toLong()
         val b4 = readByte().toLong()
-        return if (byteOrder == ByteOrder.bigEndian) {
+        return if (byteOrder == ByteOrder.BigEndian) {
             (b1 shl 24) or (b2 shl 16) or (b3 shl 8) or b4
         } else {
             (b4 shl 24) or (b3 shl 16) or (b2 shl 8) or b1
@@ -101,7 +101,7 @@ abstract class InputStream(
         val b6 = readByte().toLong()
         val b7 = readByte().toLong()
         val b8 = readByte().toLong()
-        return if (byteOrder == ByteOrder.bigEndian) {
+        return if (byteOrder == ByteOrder.BigEndian) {
             (b1 shl 56) or (b2 shl 48) or (b3 shl 40) or (b4 shl 32) or
                 (b5 shl 24) or (b6 shl 16) or (b7 shl 8) or b8
         } else {

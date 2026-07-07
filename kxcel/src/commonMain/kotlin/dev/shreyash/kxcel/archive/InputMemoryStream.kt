@@ -8,9 +8,9 @@ package dev.shreyash.kxcel.archive
  * [ByteArray] plus a [start] offset so that [subset] can share the buffer
  * without copying.
  */
-class InputMemoryStream(
+internal class InputMemoryStream(
     bytes: ByteArray,
-    byteOrder: ByteOrder = ByteOrder.littleEndian,
+    byteOrder: ByteOrder = ByteOrder.LittleEndian,
     offset: Int = 0,
     length: Int? = null,
 ) : InputStream(byteOrder) {
@@ -33,7 +33,7 @@ class InputMemoryStream(
     companion object {
         fun empty(): InputMemoryStream = InputMemoryStream(ByteArray(0))
 
-        fun fromList(bytes: ByteArray, byteOrder: ByteOrder = ByteOrder.littleEndian): InputMemoryStream =
+        fun fromList(bytes: ByteArray, byteOrder: ByteOrder = ByteOrder.LittleEndian): InputMemoryStream =
             InputMemoryStream(bytes.copyOf(), byteOrder)
 
         /** Create a copy of [other] that shares the same buffer. */

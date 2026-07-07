@@ -2,7 +2,6 @@ package dev.shreyash.kxcel
 
 import com.fleeksoft.ksoup.nodes.Document
 import com.fleeksoft.ksoup.nodes.Element
-import com.fleeksoft.ksoup.nodes.XmlDeclaration
 import dev.shreyash.kxcel.number_format.NumFormatMaintainer
 import dev.shreyash.kxcel.parser.Parser
 import dev.shreyash.kxcel.save.Save
@@ -24,33 +23,12 @@ import no.synth.kmpzip.io.ByteArrayInputStream
 import no.synth.kmpzip.io.InputStream
 import kotlin.io.encoding.Base64
 
-private const val SPREADSHEET_XLSX = "xlsx"
-
-fun newExcel(archive: Archive): Excel {
-    var format: String? = null
-
-    val mimetype = archive.findFile("mimetype")
-    if (mimetype == null) {
-        val xl = archive.findFile("xl/workbook.xml")
-        if (xl != null) {
-            format = SPREADSHEET_XLSX
-        }
-    }
-
-    return when (format) {
-        SPREADSHEET_XLSX -> Excel(archive)
-        else -> throw UnsupportedOperationException(
-            "Excel format unsupported. Only .xlsx files are supported"
-        )
-    }
-}
-
 /**
  * Decode an Excel file.
  */
-class Excel internal constructor(internal var archive: Archive) {
+public class Excel internal constructor(internal var archive: Archive) {
 
-    var styleChanges: Boolean = false
+    internal var styleChanges: Boolean = false
     internal var mergeChanges: Boolean = false
     internal var rtlChanges: Boolean = false
 
@@ -90,33 +68,34 @@ class Excel internal constructor(internal var archive: Archive) {
         parser.startParsing()
     }
 
-    companion object {
-        fun createExcel(): Excel {
-            val decoded = Base64.Default.decode(NEW_SHEET)
+    public companion object {
+        public fun createExcel(): Excel {
+            val decoded = Base64.decode(NEW_SHEET)
             return decodeBytes(decoded)
         }
 
-        fun decodeBytes(data: ByteArray): Excel {
+        public fun decodeBytes(data: ByteArray): Excel {
             val archive: Archive = try {
                 val inputStream = ByteArrayInputStream(data)
                 readZipArchive(inputStream)
             } catch (e: Exception) {
                 throw UnsupportedOperationException(
-                    "Excel format unsupported. Only .xlsx files are supported"
+                    "Excel format unsupported. Only .xlsx files are supported",
+                    e
                 )
             }
-            return newExcel(archive)
+            return decodeExcel(archive)
         }
 
-        fun decodeStream(input: InputStream): Excel {
-            return newExcel(readZipArchive(input))
+        public fun decodeStream(input: InputStream): Excel {
+            return decodeExcel(readZipArchive(input))
         }
     }
 
     /**
      * Returns `tables` as a map to mimic previous versions reading the data.
      */
-    val tables: Map<String, Sheet>
+    public val tables: Map<String, Sheet>
         get() {
             if (sheetMap.isEmpty()) {
                 damagedExcel(text = "Corrupted Excel file.")
@@ -128,7 +107,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * Returns the SheetObject of [sheet].
      * If the [sheet] does not exist it will be created with a new Sheet Object.
      */
-    operator fun get(sheet: String): Sheet {
+    public operator fun get(sheet: String): Sheet {
         availSheet(sheet)
         return sheetMap[sheet]!!
     }
@@ -136,13 +115,13 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * Returns `Map<String, Sheet>` where key is the Sheet Name and value is the Sheet Object.
      */
-    fun getSheets(): Map<String, Sheet> = sheetMap.toMap()
+    public fun getSheets(): Map<String, Sheet> = sheetMap.toMap()
 
     /**
      * If [sheet] does not exist it will be automatically created with contents of [sheetObject].
      * Newly created sheet will have a separate reference and will not be linked to sheetObject.
      */
-    operator fun set(sheet: String, sheetObject: Sheet) {
+    public operator fun set(sheet: String, sheetObject: Sheet) {
         availSheet(sheet)
         sheetMap[sheet] = Sheet.clone(this, sheet, sheetObject)
     }
@@ -152,7 +131,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * If [sheet1] does not exist it will be automatically created.
      * After linkage, operations on [sheet1] will also be performed on [existingSheetObject] and vice-versa.
      */
-    fun link(sheet1: String, existingSheetObject: Sheet) {
+    public fun link(sheet1: String, existingSheetObject: Sheet) {
         if (sheetMap[existingSheetObject.sheetName] != null) {
             availSheet(sheet1)
             sheetMap[sheet1] = sheetMap[existingSheetObject.sheetName]!!
@@ -165,7 +144,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * If [sheet] is linked with any other sheet's object, the link will be broken.
      */
-    fun unLink(sheet: String) {
+    public fun unLink(sheet: String) {
         if (sheetMap[sheet] != null) {
             // Copying the sheet into itself breaks the linkage since Sheet.clone() provides a new reference
             copy(sheet, sheet)
@@ -177,7 +156,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * [fromSheet] should exist in `tables.keys`.
      * If [toSheet] does not exist it will be automatically created.
      */
-    fun copy(fromSheet: String, toSheet: String) {
+    public fun copy(fromSheet: String, toSheet: String) {
         availSheet(toSheet)
         if (sheetMap[fromSheet] != null) {
             this[toSheet] = this[fromSheet]
@@ -191,7 +170,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * Renames [oldSheetName] to [newSheetName].
      * [oldSheetName] must exist and [newSheetName] must not exist.
      */
-    fun rename(oldSheetName: String, newSheetName: String) {
+    public fun rename(oldSheetName: String, newSheetName: String) {
         if (sheetMap[oldSheetName] != null && sheetMap[newSheetName] == null) {
             if (defaultSheet == oldSheetName) {
                 defaultSheet = newSheetName
@@ -204,7 +183,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * If [sheet] exists in `tables.keys` and `tables.keys.size >= 2`, it will be deleted.
      */
-    fun delete(sheet: String) {
+    public fun delete(sheet: String) {
         if (sheetMap.size <= 1) return
 
         if (defaultSheet == sheet) {
@@ -259,7 +238,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * Sets the edited values of [sheetMap] into the files and exports the file.
      */
-    fun encode(): ByteArray? {
+    public fun encode(): ByteArray? {
         val s = Save(this, parser)
         return s.save()
     }
@@ -267,7 +246,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * Saves the file and returns its bytes.
      */
-    fun save(fileName: String = "FlutterExcel.xlsx"): ByteArray? {
+    public fun save(fileName: String = "FlutterExcel.xlsx"): ByteArray? {
         val s = Save(this, parser)
         val onValue = s.save()
         return SavingHelper.saveFile(onValue, fileName)
@@ -276,32 +255,27 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * Returns the name of the default sheet (the sheet which opens first when the xlsx file is opened).
      */
-    fun getDefaultSheet(): String? {
+    public fun getDefaultSheet(): String? {
         return defaultSheet ?: getDefaultSheetInternal()
     }
 
     /**
      * Internal function which returns the default sheet name by reading from `workbook.xml`.
      */
-    fun getDefaultSheetInternal(): String? {
+    internal fun getDefaultSheetInternal(): String? {
         val elements = xmlFiles["xl/workbook.xml"]?.getElementsByTag("sheet")
         val sheet = elements?.firstOrNull()
 
         return if (sheet != null) {
-            val name = sheet.attr("name")
-            if (name != null) {
-                name
-            } else {
-                damagedExcel(text = "Excel sheet corrupted!! Try creating new excel file.")
-                null
-            }
+            val name = sheet.attribute("name")?.value
+            name ?: damagedExcel(text = "Excel sheet corrupted!! Try creating new excel file.")
         } else null
     }
 
     /**
      * Returns `true` if [sheetName] is successfully set as the default opening sheet, otherwise `false`.
      */
-    fun setDefaultSheet(sheetName: String): Boolean {
+    public fun setDefaultSheet(sheetName: String): Boolean {
         return if (sheetMap[sheetName] != null) {
             defaultSheet = sheetName
             true
@@ -315,7 +289,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * If [columnIndex] < 0 it will not execute.
      * If [sheet] does not exist it will be created automatically.
      */
-    fun insertColumn(sheet: String, columnIndex: Int) {
+    public fun insertColumn(sheet: String, columnIndex: Int) {
         if (columnIndex < 0) return
         availSheet(sheet)
         sheetMap[sheet]!!.insertColumn(columnIndex)
@@ -324,7 +298,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * If [sheet] exists and [columnIndex] < maxColumns, removes column at [columnIndex].
      */
-    fun removeColumn(sheet: String, columnIndex: Int) {
+    public fun removeColumn(sheet: String, columnIndex: Int) {
         if (columnIndex >= 0 && sheetMap[sheet] != null) {
             sheetMap[sheet]!!.removeColumn(columnIndex)
         }
@@ -335,7 +309,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * If [rowIndex] < 0 it will not execute.
      * If [sheet] does not exist it will be created automatically.
      */
-    fun insertRow(sheet: String, rowIndex: Int) {
+    public fun insertRow(sheet: String, rowIndex: Int) {
         if (rowIndex < 0) return
         availSheet(sheet)
         sheetMap[sheet]!!.insertRow(rowIndex)
@@ -344,7 +318,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * If [sheet] exists and [rowIndex] < maxRows, removes row at [rowIndex].
      */
-    fun removeRow(sheet: String, rowIndex: Int) {
+    public fun removeRow(sheet: String, rowIndex: Int) {
         if (rowIndex >= 0 && sheetMap[sheet] != null) {
             sheetMap[sheet]!!.removeRow(rowIndex)
         }
@@ -354,7 +328,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * Appends [row] iterables just after the last filled index in [sheet].
      * If [sheet] does not exist it will be automatically created.
      */
-    fun appendRow(sheet: String, row: List<CellValue?>) {
+    public fun appendRow(sheet: String, row: List<CellValue?>) {
         if (row.isEmpty()) return
         availSheet(sheet)
         val targetRow = sheetMap[sheet]!!.maxRows
@@ -369,7 +343,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * @param overwriteMergedCells when `true` will overwrite merged cells;
      *   when `false` puts the value in merged cells only once and jumps to next unique cell.
      */
-    fun insertRowIterables(
+    public fun insertRowIterables(
         sheet: String,
         row: List<CellValue?>,
         rowIndex: Int,
@@ -391,7 +365,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * [source] can be a Regex or a String.
      * Optional [first] limits replacement to the first N occurrences.
      */
-    fun findAndReplace(
+    public fun findAndReplace(
         sheet: String,
         source: Regex, // Regex or String
         target: String,
@@ -431,7 +405,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * Indexing starts from 0; e.g. `CellIndex.indexByColumnRow(0, 0)` or `CellIndex.indexByString("A3")`.
      * If [sheet] does not exist it will be automatically created.
      */
-    fun updateCell(
+    public fun updateCell(
         sheet: String,
         cellIndex: CellIndex,
         value: CellValue?,
@@ -446,7 +420,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * If [customValue] is not defined, it looks for the first available value in range row-wise left to right.
      * If [sheet] does not exist it will be automatically created.
      */
-    fun merge(
+    public fun merge(
         sheet: String,
         start: CellIndex,
         end: CellIndex,
@@ -459,7 +433,7 @@ class Excel internal constructor(internal var archive: Archive) {
     /**
      * Returns a list of cell IDs for previously merged cells.
      */
-    fun getMergedCells(sheet: String): List<String> {
+    public fun getMergedCells(sheet: String): List<String> {
         return sheetMap[sheet]?.spannedItems?.toList() ?: emptyList()
     }
 
@@ -472,7 +446,7 @@ class Excel internal constructor(internal var archive: Archive) {
      * excel.unMerge(sheet, "A1:A2")
      * ```
      */
-    fun unMerge(sheet: String, unmergeCells: String) {
+    public fun unMerge(sheet: String, unmergeCells: String) {
         sheetMap[sheet]?.unMerge(unmergeCells)
     }
 
@@ -493,5 +467,26 @@ class Excel internal constructor(internal var archive: Archive) {
             rtlChangeLook.add(value)
             rtlChanges = true
         }
+    }
+}
+
+private const val SPREADSHEET_XLSX = "xlsx"
+
+private fun decodeExcel(archive: Archive): Excel {
+    var format: String? = null
+
+    val mimetype = archive.findFile("mimetype")
+    if (mimetype == null) {
+        val xl = archive.findFile("xl/workbook.xml")
+        if (xl != null) {
+            format = SPREADSHEET_XLSX
+        }
+    }
+
+    return when (format) {
+        SPREADSHEET_XLSX -> Excel(archive)
+        else -> throw UnsupportedOperationException(
+            "Excel format unsupported. Only .xlsx files are supported"
+        )
     }
 }

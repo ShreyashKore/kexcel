@@ -18,7 +18,7 @@ private const val DEFAULT_BUFFER_SIZE = 8192
  * `ZipDecoder`). Replace this with a native decoder to drop the `kmp-zip`
  * dependency.
  */
-fun readZipArchive(inputStream: InputStream): Archive {
+internal fun readZipArchive(inputStream: InputStream): Archive {
     val archive = Archive()
     ZipInputStream(inputStream).use { zis ->
         var entry: ZipEntry? = zis.nextEntry

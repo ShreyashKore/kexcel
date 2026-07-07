@@ -12,7 +12,7 @@ import dev.shreyash.kxcel.utils.toExcelColor
 
 // region --- SharedStringsMaintainer ---
 
-class SharedStringsMaintainer {
+internal class SharedStringsMaintainer {
 
     val map: MutableMap<SharedString, IndexingHolder> = mutableMapOf()
     private val mapString: MutableMap<String, SharedString> = mutableMapOf()
@@ -63,7 +63,7 @@ class SharedStringsMaintainer {
 
 // region --- IndexingHolder ---
 
-class IndexingHolder(val index: Int, count: Int = 1) {
+internal class IndexingHolder(val index: Int, count: Int = 1) {
     var count: Int = count
         private set
 
@@ -76,11 +76,11 @@ class IndexingHolder(val index: Int, count: Int = 1) {
 
 // region --- SharedString ---
 
-class SharedString(val node: Element) {
+public class SharedString internal constructor(internal val node: Element) {
 
     private val cachedHashCode: Int = node.toString().hashCode()
 
-    val textSpan: TextSpan
+    public val textSpan: TextSpan
         get() {
             fun getBool(element: Element): Boolean =
                 element.attr("val")?.toBooleanStrictOrNull() ?: true
@@ -146,7 +146,7 @@ class SharedString(val node: Element) {
             return TextSpan(text = text, children = children)
         }
 
-    val stringValue: String
+    public val stringValue: String
         get() {
             val buffer = StringBuilder()
             node.getElementsByTag("t").forEach { child ->
@@ -158,7 +158,7 @@ class SharedString(val node: Element) {
             return buffer.toString()
         }
 
-    fun matches(value: String): Boolean = value.isNotEmpty() && value == stringValue
+    public fun matches(value: String): Boolean = value.isNotEmpty() && value == stringValue
 
     override fun hashCode(): Int = cachedHashCode
 
@@ -175,10 +175,10 @@ class SharedString(val node: Element) {
 
 // region --- TextSpan ---
 
-data class TextSpan(
-    val text: String? = null,
-    val children: List<TextSpan>? = null,
-    val style: CellStyle? = null,
+public data class TextSpan(
+    public val text: String? = null,
+    public val children: List<TextSpan>? = null,
+    public val style: CellStyle? = null,
 ) {
     override fun toString(): String {
         val sb = StringBuilder()

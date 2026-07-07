@@ -1,34 +1,34 @@
 package dev.shreyash.kxcel.utils
 
 // enum for `wrapping` up the text
-enum class TextWrapping {
+public enum class TextWrapping {
     WrapText,
     Clip
 }
 
 // enum for setting `vertical alignment`
-enum class VerticalAlign {
+public enum class VerticalAlign {
     Top,
     Center,
     Bottom
 }
 
 // enum for setting `horizontal alignment`
-enum class HorizontalAlign {
+public enum class HorizontalAlign {
     Left,
     Center,
     Right
 }
 
 // `Underline`
-enum class Underline {
+public enum class Underline {
     None,
     Single,
     Double
 }
 
 // enum for setting `font scheme`
-enum class FontScheme {
+public enum class FontScheme {
     Unset,
     Major,
     Minor

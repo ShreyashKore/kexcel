@@ -19,7 +19,7 @@ import kotlin.math.roundToLong
 
 // region --- Helpers ---
 
-fun <K, V> createInverseMap(map: Map<K, V>): Map<V, K> {
+internal fun <K, V> createInverseMap(map: Map<K, V>): Map<V, K> {
     val inverse = mutableMapOf<V, K>()
     for ((key, value) in map) {
         require(!inverse.containsKey(value)) { "map values are not unique" }
@@ -32,15 +32,15 @@ fun <K, V> createInverseMap(map: Map<K, V>): Map<V, K> {
 
 // region --- NumFormatMaintainer ---
 
-class NumFormatMaintainer {
+public class NumFormatMaintainer {
 
     private val firstCustomFmtId = 164
     private var nextFmtId = firstCustomFmtId
-    var map: MutableMap<Int, NumFormat> = standardNumFormats.toMutableMap()
+    internal var map: MutableMap<Int, NumFormat> = standardNumFormats.toMutableMap()
         private set
     private var inverseMap: MutableMap<NumFormat, Int> = createInverseMap(standardNumFormats).toMutableMap()
 
-    fun add(numFmtId: Int, format: CustomNumFormat) {
+    public fun add(numFmtId: Int, format: CustomNumFormat) {
         require(!map.containsKey(numFmtId)) { "numFmtId $numFmtId already exists" }
         require(numFmtId >= firstCustomFmtId) {
             "invalid numFmtId $numFmtId, custom numFmtId must be $firstCustomFmtId or greater"
@@ -52,7 +52,7 @@ class NumFormatMaintainer {
         }
     }
 
-    fun findOrAdd(format: CustomNumFormat): Int {
+    public fun findOrAdd(format: CustomNumFormat): Int {
         inverseMap[format]?.let { return it }
         val fmtId = nextFmtId++
         map[fmtId] = format
@@ -60,64 +60,64 @@ class NumFormatMaintainer {
         return fmtId
     }
 
-    fun clear() {
+    public fun clear() {
         nextFmtId = firstCustomFmtId
         map = standardNumFormats.toMutableMap()
         inverseMap = createInverseMap(standardNumFormats).toMutableMap()
     }
 
-    fun getByNumFmtId(numFmtId: Int): NumFormat? = map[numFmtId]
+    public fun getByNumFmtId(numFmtId: Int): NumFormat? = map[numFmtId]
 }
 
 // endregion
 
 // region --- NumFormat sealed hierarchy ---
 
-interface NumFormat {
-    val formatCode: String
+public interface NumFormat {
+    public val formatCode: String
 
-    fun read(v: String): CellValue
+    public fun read(v: String): CellValue
 
-    fun accepts(value: CellValue?): Boolean
+    public fun accepts(value: CellValue?): Boolean
 
-    companion object {
-        val defaultNumeric: BaseNumFormat get() = standard_1
-        val defaultFloat: BaseNumFormat get() = standard_2
-        val defaultBool: BaseNumFormat get() = standard_0
-        val defaultDate: BaseNumFormat get() = standard_14
-        val defaultTime: BaseNumFormat get() = standard_20
-        val defaultDateTime: BaseNumFormat get() = standard_22
+    public companion object {
+        public val defaultNumeric: BaseNumFormat get() = standard_1
+        public val defaultFloat: BaseNumFormat get() = standard_2
+        public val defaultBool: BaseNumFormat get() = standard_0
+        public val defaultDate: BaseNumFormat get() = standard_14
+        public val defaultTime: BaseNumFormat get() = standard_20
+        public val defaultDateTime: BaseNumFormat get() = standard_22
 
-        val standard_0  = StandardNumericNumFormat(numFmtId = 0,  formatCode = "General")
-        val standard_1  = StandardNumericNumFormat(numFmtId = 1,  formatCode = "0")
-        val standard_2  = StandardNumericNumFormat(numFmtId = 2,  formatCode = "0.00")
-        val standard_3  = StandardNumericNumFormat(numFmtId = 3,  formatCode = "#,##0")
-        val standard_4  = StandardNumericNumFormat(numFmtId = 4,  formatCode = "#,##0.00")
-        val standard_9  = StandardNumericNumFormat(numFmtId = 9,  formatCode = "0%")
-        val standard_10 = StandardNumericNumFormat(numFmtId = 10, formatCode = "0.00%")
-        val standard_11 = StandardNumericNumFormat(numFmtId = 11, formatCode = "0.00E+00")
-        val standard_12 = StandardNumericNumFormat(numFmtId = 12, formatCode = "# ?/?")
-        val standard_13 = StandardNumericNumFormat(numFmtId = 13, formatCode = "# ??/??")
-        val standard_14 = StandardDateTimeNumFormat(numFmtId = 14, formatCode = "mm-dd-yy")
-        val standard_15 = StandardDateTimeNumFormat(numFmtId = 15, formatCode = "d-mmm-yy")
-        val standard_16 = StandardDateTimeNumFormat(numFmtId = 16, formatCode = "d-mmm")
-        val standard_17 = StandardDateTimeNumFormat(numFmtId = 17, formatCode = "mmm-yy")
-        val standard_18 = StandardTimeNumFormat(numFmtId = 18, formatCode = "h:mm AM/PM")
-        val standard_19 = StandardTimeNumFormat(numFmtId = 19, formatCode = "h:mm:ss AM/PM")
-        val standard_20 = StandardTimeNumFormat(numFmtId = 20, formatCode = "h:mm")
-        val standard_21 = StandardTimeNumFormat(numFmtId = 21, formatCode = "h:mm:dd")
-        val standard_22 = StandardDateTimeNumFormat(numFmtId = 22, formatCode = "m/d/yy h:mm")
-        val standard_37 = StandardNumericNumFormat(numFmtId = 37, formatCode = "#,##0 ;(#,##0)")
-        val standard_38 = StandardNumericNumFormat(numFmtId = 38, formatCode = "#,##0 ;[Red](#,##0)")
-        val standard_39 = StandardNumericNumFormat(numFmtId = 39, formatCode = "#,##0.00;(#,##0.00)")
-        val standard_40 = StandardNumericNumFormat(numFmtId = 40, formatCode = "#,##0.00;[Red](#,#)")
-        val standard_45 = StandardTimeNumFormat(numFmtId = 45, formatCode = "mm:ss")
-        val standard_46 = StandardTimeNumFormat(numFmtId = 46, formatCode = "[h]:mm:ss")
-        val standard_47 = StandardTimeNumFormat(numFmtId = 47, formatCode = "mmss.0")
-        val standard_48 = StandardNumericNumFormat(numFmtId = 48, formatCode = "##0.0")
-        val standard_49 = StandardNumericNumFormat(numFmtId = 49, formatCode = "@")
+        public val standard_0: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 0,  formatCode = "General")
+        public val standard_1: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 1,  formatCode = "0")
+        public val standard_2: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 2,  formatCode = "0.00")
+        public val standard_3: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 3,  formatCode = "#,##0")
+        public val standard_4: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 4,  formatCode = "#,##0.00")
+        public val standard_9: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 9,  formatCode = "0%")
+        public val standard_10: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 10, formatCode = "0.00%")
+        public val standard_11: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 11, formatCode = "0.00E+00")
+        public val standard_12: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 12, formatCode = "# ?/?")
+        public val standard_13: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 13, formatCode = "# ??/??")
+        public val standard_14: StandardDateTimeNumFormat = StandardDateTimeNumFormat(numFmtId = 14, formatCode = "mm-dd-yy")
+        public val standard_15: StandardDateTimeNumFormat = StandardDateTimeNumFormat(numFmtId = 15, formatCode = "d-mmm-yy")
+        public val standard_16: StandardDateTimeNumFormat = StandardDateTimeNumFormat(numFmtId = 16, formatCode = "d-mmm")
+        public val standard_17: StandardDateTimeNumFormat = StandardDateTimeNumFormat(numFmtId = 17, formatCode = "mmm-yy")
+        public val standard_18: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 18, formatCode = "h:mm AM/PM")
+        public val standard_19: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 19, formatCode = "h:mm:ss AM/PM")
+        public val standard_20: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 20, formatCode = "h:mm")
+        public val standard_21: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 21, formatCode = "h:mm:dd")
+        public val standard_22: StandardDateTimeNumFormat = StandardDateTimeNumFormat(numFmtId = 22, formatCode = "m/d/yy h:mm")
+        public val standard_37: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 37, formatCode = "#,##0 ;(#,##0)")
+        public val standard_38: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 38, formatCode = "#,##0 ;[Red](#,##0)")
+        public val standard_39: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 39, formatCode = "#,##0.00;(#,##0.00)")
+        public val standard_40: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 40, formatCode = "#,##0.00;[Red](#,#)")
+        public val standard_45: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 45, formatCode = "mm:ss")
+        public val standard_46: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 46, formatCode = "[h]:mm:ss")
+        public val standard_47: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 47, formatCode = "mmss.0")
+        public val standard_48: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 48, formatCode = "##0.0")
+        public val standard_49: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 49, formatCode = "@")
 
-        fun custom(formatCode: String): CustomNumFormat {
+        public fun custom(formatCode: String): CustomNumFormat {
             if (formatCode == "General") {
                 return CustomNumericNumFormat(formatCode = "General")
             }
@@ -128,7 +128,7 @@ interface NumFormat {
             }
         }
 
-        fun defaultFor(value: CellValue?): BaseNumFormat = when (value) {
+        public fun defaultFor(value: CellValue?): BaseNumFormat = when (value) {
             null,
             is FormulaCellValue,
             is TextCellValue   -> standard_0
@@ -142,7 +142,7 @@ interface NumFormat {
     }
 }
 
-sealed class BaseNumFormat(override val formatCode: String): NumFormat {
+public sealed class BaseNumFormat(override val formatCode: String): NumFormat {
 
     abstract override fun read(v: String): CellValue
 
@@ -157,11 +157,11 @@ sealed class BaseNumFormat(override val formatCode: String): NumFormat {
 }
 
 // Marker interfaces replacing Dart's sealed sub-interfaces
-interface StandardNumFormat: NumFormat {
-    val numFmtId: Int
+public interface StandardNumFormat: NumFormat {
+    public val numFmtId: Int
 }
 
-interface CustomNumFormat: NumFormat {
+public interface CustomNumFormat: NumFormat {
     override val formatCode: String
 }
 
@@ -169,7 +169,7 @@ interface CustomNumFormat: NumFormat {
 
 // region --- NumericNumFormat ---
 
-sealed class NumericNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
+public sealed class NumericNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
 
     override fun read(v: String): CellValue {
         val eIdx = v.indexOf('E')
@@ -194,12 +194,12 @@ sealed class NumericNumFormat(override val formatCode: String) : BaseNumFormat(f
         return DoubleCellValue(v.toDouble())
     }
 
-    fun writeDouble(value: DoubleCellValue): String = value.value.toString()
+    public fun writeDouble(value: DoubleCellValue): String = value.value.toString()
 
-    fun writeInt(value: IntCellValue): String = value.value.toString()
+    public fun writeInt(value: IntCellValue): String = value.value.toString()
 }
 
-class StandardNumericNumFormat(
+public class StandardNumericNumFormat(
     override val numFmtId: Int,
     override val formatCode: String,
 ) : NumericNumFormat(formatCode), StandardNumFormat {
@@ -216,10 +216,10 @@ class StandardNumericNumFormat(
         is DateTimeCellValue -> false
     }
 
-    override fun toString() = "StandardNumericNumFormat($numFmtId, \"$formatCode\")"
+    override fun toString(): String = "StandardNumericNumFormat($numFmtId, \"$formatCode\")"
 }
 
-class CustomNumericNumFormat(
+public class CustomNumericNumFormat(
     override val formatCode: String,
 ) : NumericNumFormat(formatCode), CustomNumFormat {
 
@@ -235,7 +235,7 @@ class CustomNumericNumFormat(
         is DateTimeCellValue -> false
     }
 
-    override fun toString() = "CustomNumericNumFormat(\"$formatCode\")"
+    override fun toString(): String = "CustomNumericNumFormat(\"$formatCode\")"
 }
 
 // endregion
@@ -249,7 +249,7 @@ private val DATE_OFFSET_MILLIS: Long by lazy {
         .toEpochMilliseconds()
 }
 
-sealed class DateTimeNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
+public sealed class DateTimeNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
 
     override fun read(v: String): CellValue {
         if (v == "0") {
@@ -269,13 +269,13 @@ sealed class DateTimeNumFormat(override val formatCode: String) : BaseNumFormat(
         }
     }
 
-    fun writeDate(value: DateCellValue): String {
+    public fun writeDate(value: DateCellValue): String {
         val epochMs = value.asDateTimeUtc().toInstant(TimeZone.UTC).toEpochMilliseconds()
         val dayFractions = (epochMs - DATE_OFFSET_MILLIS).toDouble() / (1000 * 3600 * 24)
         return dayFractions.toString()
     }
 
-    fun writeDateTime(value: DateTimeCellValue): String {
+    public fun writeDateTime(value: DateTimeCellValue): String {
         val epochMs = value.asDateTimeUtc().toInstant(TimeZone.UTC).toEpochMilliseconds()
         val dayFractions = (epochMs - DATE_OFFSET_MILLIS).toDouble() / (1000 * 3600 * 24)
         return dayFractions.toString()
@@ -294,24 +294,24 @@ sealed class DateTimeNumFormat(override val formatCode: String) : BaseNumFormat(
     }
 }
 
-class StandardDateTimeNumFormat(
+public class StandardDateTimeNumFormat(
     override val numFmtId: Int,
     override val formatCode: String,
 ) : DateTimeNumFormat(formatCode), StandardNumFormat {
-    override fun toString() = "StandardDateTimeNumFormat($numFmtId, \"$formatCode\")"
+    override fun toString(): String = "StandardDateTimeNumFormat($numFmtId, \"$formatCode\")"
 }
 
-class CustomDateTimeNumFormat(
+public class CustomDateTimeNumFormat(
     override val formatCode: String,
 ) : DateTimeNumFormat(formatCode), CustomNumFormat {
-    override fun toString() = "CustomDateTimeNumFormat(\"$formatCode\")"
+    override fun toString(): String = "CustomDateTimeNumFormat(\"$formatCode\")"
 }
 
 // endregion
 
 // region --- TimeNumFormat ---
 
-sealed class TimeNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
+public sealed class TimeNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
 
     override fun read(v: String): CellValue {
         if (v == "0") {
@@ -353,7 +353,7 @@ sealed class TimeNumFormat(override val formatCode: String) : BaseNumFormat(form
         }
     }
 
-    fun writeTime(value: TimeCellValue): String {
+    public fun writeTime(value: TimeCellValue): String {
         val fractionOfDay = value.asDuration().inWholeMilliseconds.toDouble() / (1000 * 3600 * 24)
         return fractionOfDay.toString()
     }
@@ -371,24 +371,24 @@ sealed class TimeNumFormat(override val formatCode: String) : BaseNumFormat(form
     }
 }
 
-class StandardTimeNumFormat(
+public class StandardTimeNumFormat(
     override val numFmtId: Int,
     override val formatCode: String,
 ) : TimeNumFormat(formatCode), StandardNumFormat {
-    override fun toString() = "StandardTimeNumFormat($numFmtId, \"$formatCode\")"
+    override fun toString(): String = "StandardTimeNumFormat($numFmtId, \"$formatCode\")"
 }
 
-class CustomTimeNumFormat(
+public class CustomTimeNumFormat(
     override val formatCode: String,
 ) : TimeNumFormat(formatCode), CustomNumFormat {
-    override fun toString() = "CustomTimeNumFormat(\"$formatCode\")"
+    override fun toString(): String = "CustomTimeNumFormat(\"$formatCode\")"
 }
 
 // endregion
 
 // region --- Standard formats map ---
 
-val standardNumFormats: Map<Int, NumFormat> = mapOf(
+internal val standardNumFormats: Map<Int, NumFormat> = mapOf(
     0  to NumFormat.standard_0,
     1  to NumFormat.standard_1,
     2  to NumFormat.standard_2,
@@ -423,7 +423,7 @@ val standardNumFormats: Map<Int, NumFormat> = mapOf(
 
 // region --- formatCodeLooksLikeDateTime ---
 
-fun formatCodeLooksLikeDateTime(formatCode: String): Boolean {
+internal fun formatCodeLooksLikeDateTime(formatCode: String): Boolean {
     var inEscape = false
     var inQuotes = false
     for (c in formatCode) {

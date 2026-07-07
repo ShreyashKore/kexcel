@@ -46,7 +46,7 @@ import kotlin.math.truncate
 
 private const val EXCEL_DEFAULT_COLUMN_WIDTH = 8.0
 
-class Save(private val excel: Excel, private val parser: Parser) {
+public class Save internal constructor(private val excel: Excel, private val parser: Parser) {
 
     private val archiveFiles: MutableMap<String, ArchiveFile> = mutableMapOf()
     private val innerCellStyle: MutableList<CellStyle> = mutableListOf()
@@ -484,7 +484,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
 
     // region --- Save ---
 
-    fun save(): ByteArray? {
+    internal fun save(): ByteArray? {
         if (excel.styleChanges) processStylesFile()
         setSheetElements()
         if (excel.defaultSheet != null) setDefaultSheet(excel.defaultSheet)

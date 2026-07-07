@@ -7,7 +7,7 @@ package dev.shreyash.kxcel.archive
  * collection of [ArchiveFile]s; decoding a zip/tar into an [Archive] is a
  * separate concern (see the zip reader in `dev.shreyash.kxcel.utils`).
  */
-class Archive : Iterable<ArchiveFile> {
+internal class Archive : Iterable<ArchiveFile> {
     private val _files = mutableListOf<ArchiveFile>()
     private val _fileMap = mutableMapOf<String, Int>()
 

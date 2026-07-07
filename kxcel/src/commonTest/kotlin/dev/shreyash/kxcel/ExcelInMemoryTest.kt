@@ -146,9 +146,9 @@ class ExcelInMemoryTest {
         val newName = "Sheet1Replacement"
         val defaultSheetName = "Sheet1"
 
-        val backgroundColor = ExcelColor.values.filter { it.type == ColorType.material }
-        val fontColor = ExcelColor.values.filter { it.type == ColorType.color }
-        val borderColor = ExcelColor.values.filter { it.type == ColorType.materialAccent }
+        val backgroundColor = ExcelColor.values.filter { it.type == ColorType.Material }
+        val fontColor = ExcelColor.values.filter { it.type == ColorType.Color }
+        val borderColor = ExcelColor.values.filter { it.type == ColorType.MaterialAccent }
 
         for (element in excelFiles) {
             assertEquals(defaultSheetName, element.getDefaultSheet())

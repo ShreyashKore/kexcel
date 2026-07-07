@@ -2,7 +2,7 @@ package dev.shreyash.kxcel.utils
 
 import dev.shreyash.kxcel.sheet.CellIndex
 
-data class Span(
+internal data class Span(
     val rowSpanStart: Int,
     val columnSpanStart: Int,
     val rowSpanEnd: Int,

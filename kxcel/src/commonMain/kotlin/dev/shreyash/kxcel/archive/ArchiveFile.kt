@@ -6,7 +6,7 @@ import kotlin.time.Clock
  * A callback function called when archive entries are read from or written to
  * archive files like zip or tar.
  */
-typealias ArchiveCallback = (ArchiveFile) -> Unit
+internal typealias ArchiveCallback = (ArchiveFile) -> Unit
 
 private fun nowSeconds(): Int = (Clock.System.now().toEpochMilliseconds() / 1000).toInt()
 
@@ -19,7 +19,7 @@ private fun nowSeconds(): Int = (Clock.System.now().toEpochMilliseconds() / 1000
  * [noCompress]). The Dart `close`/`closeSync` async surface is collapsed to
  * synchronous calls since the ported content is always in memory.
  */
-class ArchiveFile private constructor(
+internal class ArchiveFile private constructor(
     /** The name of the file or directory. */
     var name: String,
 ) {
@@ -142,7 +142,7 @@ class ArchiveFile private constructor(
             this.size = size
             _content = FileContentMemory(data)
             _rawContent = FileContentMemory(data)
-            compression = CompressionType.none
+            compression = CompressionType.NONE
         }
     }
 

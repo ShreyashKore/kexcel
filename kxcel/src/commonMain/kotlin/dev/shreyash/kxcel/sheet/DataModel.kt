@@ -12,26 +12,26 @@ import kotlin.time.Duration.Companion.seconds
 
 // region --- Data ---
 
-class Data private constructor(
+public class Data private constructor(
     private var sheet: Sheet,
-    var _rowIndex: Int,
-    var _columnIndex: Int,
-    var _value: CellValue? = null,
-     var _cellStyle: CellStyle? = null,
+    internal var _rowIndex: Int,
+    internal var _columnIndex: Int,
+    internal var _value: CellValue? = null,
+    internal var _cellStyle: CellStyle? = null,
 ) {
     private var _sheetName: String = sheet.sheetName
 
-    companion object {
+    public companion object {
         /**
          * Returns a new Data object — called from Sheet class.
          */
-        fun newData(sheet: Sheet, row: Int, column: Int): Data =
+        public fun newData(sheet: Sheet, row: Int, column: Int): Data =
             Data(sheet, row, column)
 
         /**
          * Clones a Data object, updating the sheet reference while copying all values.
          */
-        fun clone(sheet: Sheet, dataObject: Data): Data =
+        internal fun clone(sheet: Sheet, dataObject: Data): Data =
             Data(
                 sheet = sheet,
                 _rowIndex = dataObject.rowIndex,
@@ -42,16 +42,16 @@ class Data private constructor(
     }
 
     /** Returns the row index. */
-    val rowIndex: Int get() = _rowIndex
+    public val rowIndex: Int get() = _rowIndex
 
     /** Returns the column index. */
-    val columnIndex: Int get() = _columnIndex
+    public val columnIndex: Int get() = _columnIndex
 
     /** Returns the sheet name. */
-    val sheetName: String get() = _sheetName
+    public val sheetName: String get() = _sheetName
 
     /** Returns the cell index as a [CellIndex] (e.g. A1, Z5). */
-    val cellIndex: CellIndex
+    public val cellIndex: CellIndex
         get() = CellIndex.indexByColumnRow(columnIndex = _columnIndex, rowIndex = _rowIndex)
 
     /**
@@ -61,12 +61,12 @@ class Data private constructor(
      * cell.setFormula("=SUM(1,2)")
      * ```
      */
-    fun setFormula(formula: String) {
+    public fun setFormula(formula: String) {
         sheet.updateCell(cellIndex, FormulaCellValue(formula))
     }
 
     /** Returns the value stored in this cell, or `null` if empty. */
-    var value: CellValue?
+    public var value: CellValue?
         get() = _value
         set(newValue) {
             sheet.updateCell(cellIndex, newValue)
@@ -76,7 +76,7 @@ class Data private constructor(
      * Returns the user-defined [CellStyle], or `null` if none is set.
      * Setting this marks the workbook as having style changes.
      */
-    var cellStyle: CellStyle?
+    public var cellStyle: CellStyle?
         get() = _cellStyle
         set(newStyle) {
             sheet.excel.styleChanges = true
@@ -100,44 +100,44 @@ class Data private constructor(
 
 // region --- CellValue sealed hierarchy ---
 
-sealed class CellValue
+public sealed class CellValue
 
 // endregion
 
 // region --- CellValue subclasses ---
 
-class FormulaCellValue(val formula: String) : CellValue() {
+public class FormulaCellValue(public val formula: String) : CellValue() {
     override fun toString(): String = formula
     override fun hashCode(): Int = 31 * this::class.hashCode() + formula.hashCode()
     override fun equals(other: Any?): Boolean =
         other is FormulaCellValue && other.formula == formula
 }
 
-class IntCellValue(val value: Long) : CellValue() {
-    constructor(value: Int) : this(value.toLong())
+public class IntCellValue(public val value: Long) : CellValue() {
+    public constructor(value: Int) : this(value.toLong())
 
     override fun toString(): String = value.toString()
     override fun hashCode(): Int = 31 * this::class.hashCode() + value.hashCode()
     override fun equals(other: Any?): Boolean = other is IntCellValue && other.value == value
 }
 
-class DoubleCellValue(val value: Double) : CellValue() {
+public class DoubleCellValue(public val value: Double) : CellValue() {
     override fun toString(): String = value.toString()
     override fun hashCode(): Int = 31 * this::class.hashCode() + value.hashCode()
     override fun equals(other: Any?): Boolean = other is DoubleCellValue && other.value == value
 }
 
-class BoolCellValue(val value: Boolean) : CellValue() {
+public class BoolCellValue(public val value: Boolean) : CellValue() {
     override fun toString(): String = value.toString()
     override fun hashCode(): Int = 31 * this::class.hashCode() + value.hashCode()
     override fun equals(other: Any?): Boolean = other is BoolCellValue && other.value == value
 }
 
-class TextCellValue private constructor(val value: TextSpan) : CellValue() {
-    constructor(text: String) : this(TextSpan(text = text))
+public class TextCellValue private constructor(public val value: TextSpan) : CellValue() {
+    public constructor(text: String) : this(TextSpan(text = text))
 
-    companion object {
-        fun span(value: TextSpan): TextCellValue = TextCellValue(value)
+    public companion object {
+        public fun span(value: TextSpan): TextCellValue = TextCellValue(value)
     }
 
     override fun toString(): String = value.toString()
@@ -149,10 +149,10 @@ class TextCellValue private constructor(val value: TextSpan) : CellValue() {
 
 // region --- DateCellValue ---
 
-class DateCellValue(
-    val year: Int,
-    val month: Int,
-    val day: Int,
+public class DateCellValue(
+    public val year: Int,
+    public val month: Int,
+    public val day: Int,
 ) : CellValue() {
 
     init {
@@ -160,17 +160,17 @@ class DateCellValue(
         require(day in 1..31) { "day must be in 1..31, was $day" }
     }
 
-    companion object {
-        fun fromLocalDateTime(dt: LocalDateTime): DateCellValue =
+    public companion object {
+        public fun fromLocalDateTime(dt: LocalDateTime): DateCellValue =
             DateCellValue(year = dt.year, month = dt.monthNumber, day = dt.dayOfMonth)
 
-        fun fromLocalDate(dt: LocalDate): DateCellValue =
+        public fun fromLocalDate(dt: LocalDate): DateCellValue =
             DateCellValue(year = dt.year, month = dt.monthNumber, day = dt.dayOfMonth)
     }
 
-    fun asLocalDate(): LocalDate = LocalDate(year, month, day)
+    public fun asLocalDate(): LocalDate = LocalDate(year, month, day)
 
-    fun asDateTimeUtc(): LocalDateTime = LocalDateTime(year, month, day, 0, 0, 0)
+    public fun asDateTimeUtc(): LocalDateTime = LocalDateTime(year, month, day, 0, 0, 0)
 
     override fun toString(): String = asLocalDate().toString()
 
@@ -190,12 +190,12 @@ class DateCellValue(
 
 // region --- TimeCellValue ---
 
-class TimeCellValue(
-    val hour: Int = 0,
-    val minute: Int = 0,
-    val second: Int = 0,
-    val millisecond: Int = 0,
-    val microsecond: Int = 0,
+public class TimeCellValue(
+    public val hour: Int = 0,
+    public val minute: Int = 0,
+    public val second: Int = 0,
+    public val millisecond: Int = 0,
+    public val microsecond: Int = 0,
 ) : CellValue() {
 
     init {
@@ -206,16 +206,16 @@ class TimeCellValue(
         require(microsecond in 0..1000) { "microsecond must be in 0..1000, was $microsecond" }
     }
 
-    companion object {
+    public companion object {
         /**
          * [fractionOfDay] = 1.0 is 24 hours, 0.5 is 12 hours, etc.
          */
-        fun fromFractionOfDay(fractionOfDay: Double): TimeCellValue {
+        public fun fromFractionOfDay(fractionOfDay: Double): TimeCellValue {
             val totalMs = (fractionOfDay * 24 * 3600 * 1000).toLong()
             return fromDuration(totalMs.milliseconds)
         }
 
-        fun fromDuration(duration: Duration): TimeCellValue {
+        public fun fromDuration(duration: Duration): TimeCellValue {
             val totalMs = duration.inWholeMilliseconds
             val h = (totalMs / (3600 * 1000)).toInt()
             val m = ((totalMs % (3600 * 1000)) / 60_000).toInt()
@@ -230,7 +230,7 @@ class TimeCellValue(
             )
         }
 
-        fun fromLocalDateTime(dt: LocalDateTime): TimeCellValue = TimeCellValue(
+        public fun fromLocalDateTime(dt: LocalDateTime): TimeCellValue = TimeCellValue(
             hour = dt.hour,
             minute = dt.minute,
             second = dt.second,
@@ -239,7 +239,7 @@ class TimeCellValue(
         )
     }
 
-    fun asDuration(): Duration =
+    public fun asDuration(): Duration =
         hour.hours + minute.minutes + second.seconds + millisecond.milliseconds + microsecond.microseconds
 
     override fun toString(): String =
@@ -272,15 +272,15 @@ class TimeCellValue(
  * Excel does not know if this is UTC or not.
  * Use [asDateTimeLocal] or [asDateTimeUtc] to get the [LocalDateTime] you prefer.
  */
-class DateTimeCellValue(
-    val year: Int,
-    val month: Int,
-    val day: Int,
-    val hour: Int,
-    val minute: Int,
-    val second: Int = 0,
-    val millisecond: Int = 0,
-    val microsecond: Int = 0,
+public class DateTimeCellValue(
+    public val year: Int,
+    public val month: Int,
+    public val day: Int,
+    public val hour: Int,
+    public val minute: Int,
+    public val second: Int = 0,
+    public val millisecond: Int = 0,
+    public val microsecond: Int = 0,
 ) : CellValue() {
 
     init {
@@ -293,8 +293,8 @@ class DateTimeCellValue(
         require(microsecond in 0..1000) { "microsecond must be in 0..1000, was $microsecond" }
     }
 
-    companion object {
-        fun fromLocalDateTime(dt: LocalDateTime): DateTimeCellValue = DateTimeCellValue(
+    public companion object {
+        public fun fromLocalDateTime(dt: LocalDateTime): DateTimeCellValue = DateTimeCellValue(
             year = dt.year,
             month = dt.monthNumber,
             day = dt.dayOfMonth,
@@ -307,7 +307,7 @@ class DateTimeCellValue(
     }
 
     /** Returns this value as a local [LocalDateTime] (no timezone conversion). */
-    fun asDateTimeLocal(): LocalDateTime =
+    public fun asDateTimeLocal(): LocalDateTime =
         LocalDateTime(
             year,
             month,
@@ -319,7 +319,7 @@ class DateTimeCellValue(
         )
 
     /** Returns this value as a UTC [LocalDateTime] (no timezone conversion — caller must treat it as UTC). */
-    fun asDateTimeUtc(): LocalDateTime = asDateTimeLocal()
+    public fun asDateTimeUtc(): LocalDateTime = asDateTimeLocal()
 
     override fun toString(): String = asDateTimeLocal().toString()
 

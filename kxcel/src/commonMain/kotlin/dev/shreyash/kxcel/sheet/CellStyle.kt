@@ -16,7 +16,7 @@ import dev.shreyash.kxcel.utils.toExcelColor
 /**
  * Styling class for cells.
  */
-class CellStyle(
+public class CellStyle(
     fontColorHex: ExcelColor = ExcelColor.black,
     backgroundColorHex: ExcelColor = ExcelColor.none,
     fontSize: Int? = null,
@@ -36,7 +36,7 @@ class CellStyle(
     diagonalBorder: Border? = null,
     diagonalBorderUp: Boolean = false,
     diagonalBorderDown: Boolean = false,
-    var numberFormat: NumFormat = NumFormat.standard_0,
+    public var numberFormat: NumFormat = NumFormat.standard_0,
 ) {
     // region --- Backing fields ---
 
@@ -64,7 +64,7 @@ class CellStyle(
 
     // region --- copyWith ---
 
-    fun copyWith(
+    public fun copyWith(
         fontColorHexVal: ExcelColor? = null,
         backgroundColorHexVal: ExcelColor? = null,
         fontFamilyVal: String? = null,
@@ -113,7 +113,7 @@ class CellStyle(
     // region --- Font color ---
 
     /** Get font color. */
-    var fontColor: ExcelColor
+    public var fontColor: ExcelColor
         get() = _fontColorHex.toExcelColor()
         set(value) { _fontColorHex = isColorAppropriate(value.colorHex) }
 
@@ -122,7 +122,7 @@ class CellStyle(
     // region --- Background color ---
 
     /** Get background color. */
-    var backgroundColor: ExcelColor
+    public var backgroundColor: ExcelColor
         get() = _backgroundColorHex.toExcelColor()
         set(value) { _backgroundColorHex = isColorAppropriate(value.colorHex) }
 
@@ -131,12 +131,12 @@ class CellStyle(
     // region --- Alignment ---
 
     /** Get/set horizontal alignment. */
-    var horizontalAlignment: HorizontalAlign
+    public var horizontalAlignment: HorizontalAlign
         get() = _horizontalAlign
         set(value) { _horizontalAlign = value }
 
     /** Get/set vertical alignment. */
-    var verticalAlignment: VerticalAlign
+    public var verticalAlignment: VerticalAlign
         get() = _verticalAlign
         set(value) { _verticalAlign = value }
 
@@ -145,7 +145,7 @@ class CellStyle(
     // region --- Text wrapping ---
 
     /** Get/set text wrapping. */
-    var wrap: TextWrapping?
+    public var wrap: TextWrapping?
         get() = _textWrapping
         set(value) { _textWrapping = value }
 
@@ -154,17 +154,17 @@ class CellStyle(
     // region --- Font family / scheme / size ---
 
     /** Get/set font family. */
-    var fontFamily: String?
+    public var fontFamily: String?
         get() = _fontFamily
         set(value) { _fontFamily = value }
 
     /** Get/set font scheme. */
-    var fontScheme: FontScheme
+    public var fontScheme: FontScheme
         get() = _fontScheme
         set(value) { _fontScheme = value }
 
     /** Get/set font size. */
-    var fontSize: Int?
+    public var fontSize: Int?
         get() = _fontSize
         set(value) { _fontSize = value }
 
@@ -177,7 +177,7 @@ class CellStyle(
      * Out-of-range values are clamped to 0.
      * Negative values are stored as `abs(value) + 90` to match Excel's encoding.
      */
-    var rotation: Int
+    public var rotation: Int
         get() = _rotation
         set(value) {
             var r = value
@@ -191,17 +191,17 @@ class CellStyle(
     // region --- Text style ---
 
     /** Get/set underline. */
-    var underline: Underline
+    public var underline: Underline
         get() = _underline
         set(value) { _underline = value }
 
     /** Get/set bold. */
-    var isBold: Boolean
+    public var isBold: Boolean
         get() = _bold
         set(value) { _bold = value }
 
     /** Get/set italic. */
-    var isItalic: Boolean
+    public var isItalic: Boolean
         get() = _italic
         set(value) { _italic = value }
 
@@ -210,37 +210,37 @@ class CellStyle(
     // region --- Borders ---
 
     /** Get/set left border. */
-    var leftBorder: Border
+    public var leftBorder: Border
         get() = _leftBorder
         set(value) { _leftBorder = value }
 
     /** Get/set right border. */
-    var rightBorder: Border
+    public var rightBorder: Border
         get() = _rightBorder
         set(value) { _rightBorder = value }
 
     /** Get/set top border. */
-    var topBorder: Border
+    public var topBorder: Border
         get() = _topBorder
         set(value) { _topBorder = value }
 
     /** Get/set bottom border. */
-    var bottomBorder: Border
+    public var bottomBorder: Border
         get() = _bottomBorder
         set(value) { _bottomBorder = value }
 
     /** Get/set diagonal border. */
-    var diagonalBorder: Border
+    public var diagonalBorder: Border
         get() = _diagonalBorder
         set(value) { _diagonalBorder = value }
 
     /** Get/set diagonal border up. */
-    var diagonalBorderUp: Boolean
+    public var diagonalBorderUp: Boolean
         get() = _diagonalBorderUp
         set(value) { _diagonalBorderUp = value }
 
     /** Get/set diagonal border down. */
-    var diagonalBorderDown: Boolean
+    public var diagonalBorderDown: Boolean
         get() = _diagonalBorderDown
         set(value) { _diagonalBorderDown = value }
 

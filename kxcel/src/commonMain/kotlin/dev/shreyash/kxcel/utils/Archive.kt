@@ -5,7 +5,7 @@ import dev.shreyash.kxcel.archive.ArchiveFile
 import dev.shreyash.kxcel.archive.CompressionType
 
 
-fun cloneArchive(
+internal fun cloneArchive(
     archive: Archive,
     archiveFiles: Map<String, ArchiveFile>,
     excludedFile: String? = null
@@ -26,9 +26,9 @@ fun cloneArchive(
                         val content = file.content
                         val compression =
                             if (NO_COMPRESSION.contains(file.name))
-                                CompressionType.none
+                                CompressionType.NONE
                             else
-                                CompressionType.deflate
+                                CompressionType.DEFLATE
 
                         ArchiveFile(file.name, content.size, content).apply {
                             this.compression = compression

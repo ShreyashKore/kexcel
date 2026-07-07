@@ -8,6 +8,9 @@ plugins {
 }
 
 kotlin {
+    // This is a library: require explicit visibility & return types on public API.
+    explicitApi()
+
     androidTarget {
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
     }
@@ -52,7 +55,7 @@ kotlin {
 
 android {
     namespace = "dev.shreyash.kxcel.kxcel"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         minSdk = 23
     }

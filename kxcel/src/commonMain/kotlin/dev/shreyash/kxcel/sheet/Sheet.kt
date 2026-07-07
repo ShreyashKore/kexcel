@@ -6,8 +6,8 @@ import dev.shreyash.kxcel.utils.Span
 import kotlin.math.max
 
 
-class Sheet constructor(
-    val excel: Excel,
+public class Sheet internal constructor(
+    internal val excel: Excel,
     private val _sheet: String,
     sh: Map<Int, Map<Int, Data>>? = null,
     spanL_: List<Span?>? = null,
@@ -23,19 +23,19 @@ class Sheet constructor(
     private var _isRTL: Boolean = false
     private var _maxRows: Int = 0
     private var _maxColumns: Int = 0
-    var _defaultColumnWidth: Double? = null
-    var _defaultRowHeight: Double? = null
-    var _columnWidths: MutableMap<Int, Double> = mutableMapOf()
-    var _rowHeights: MutableMap<Int, Double> = mutableMapOf()
-    var _columnAutoFit: MutableMap<Int, Boolean> = mutableMapOf()
-    var _spannedItems: MutableList<String> = mutableListOf()
-    var spanList: MutableList<Span?> = mutableListOf()
-    var sheetData: MutableMap<Int, MutableMap<Int, Data>> = mutableMapOf()
-    var _headerFooter: HeaderFooter? = null
+    internal var _defaultColumnWidth: Double? = null
+    internal var _defaultRowHeight: Double? = null
+    internal var _columnWidths: MutableMap<Int, Double> = mutableMapOf()
+    internal var _rowHeights: MutableMap<Int, Double> = mutableMapOf()
+    internal var _columnAutoFit: MutableMap<Int, Boolean> = mutableMapOf()
+    internal var _spannedItems: MutableList<String> = mutableListOf()
+    internal var spanList: MutableList<Span?> = mutableListOf()
+    internal var sheetData: MutableMap<Int, MutableMap<Int, Data>> = mutableMapOf()
+    internal var _headerFooter: HeaderFooter? = null
 
-    companion object {
-        const val _excelDefaultColumnWidth = 8.43
-        const val _excelDefaultRowHeight = 15.0
+    internal companion object {
+        const val excelDefaultColumnWidth = 8.43
+        const val excelDefaultRowHeight = 15.0
 
         fun clone(excel: Excel, sheetName: String, oldSheetObject: Sheet): Sheet {
             return Sheet(
@@ -97,10 +97,10 @@ class Sheet constructor(
                 }
             }
         }
-        _countRowsAndColumns()
+        countRowsAndColumns()
     }
 
-    fun removeCell(rowIndex: Int, columnIndex: Int) {
+    internal fun removeCell(rowIndex: Int, columnIndex: Int) {
         sheetData[rowIndex]?.remove(columnIndex)
         val rowIsEmptyAfterRemovalOfCell = sheetData[rowIndex]?.isEmpty() == true
         if (rowIsEmptyAfterRemovalOfCell) {
@@ -108,18 +108,18 @@ class Sheet constructor(
         }
     }
 
-    var isRTL: Boolean
+    public var isRTL: Boolean
         get() = _isRTL
         set(value) {
             _isRTL = value
             excel.addRtlChangeLookup(sheetName)
         }
 
-    fun cell(cellIndex: CellIndex): Data {
-        _checkMaxColumn(cellIndex.columnIndex)
-        _checkMaxRow(cellIndex.rowIndex)
+    public fun cell(cellIndex: CellIndex): Data {
+        checkMaxColumn(cellIndex.columnIndex)
+        checkMaxRow(cellIndex.rowIndex)
         if (cellIndex.columnIndex < 0 || cellIndex.rowIndex < 0) {
-            _damagedExcel("Negative index does not exist.")
+            damagedExcel("Negative index does not exist.")
         }
 
         if (_maxRows < (cellIndex.rowIndex + 1)) {
@@ -141,7 +141,7 @@ class Sheet constructor(
         return sheetData[cellIndex.rowIndex]!![cellIndex.columnIndex]!!
     }
 
-    val rows: List<List<Data?>>
+    public val rows: List<List<Data?>>
         get() {
             val _data = mutableListOf<List<Data?>>()
 
@@ -160,7 +160,7 @@ class Sheet constructor(
             return _data
         }
 
-    fun selectRangeWithString(range: String): List<List<Data?>?> {
+    public fun selectRangeWithString(range: String): List<List<Data?>?> {
         val _selectedRange = mutableListOf<List<Data?>?>()
         if (!range.contains(':')) {
             val start = CellIndex.indexByString(range)
@@ -173,12 +173,12 @@ class Sheet constructor(
         }
     }
 
-    fun selectRange(start: CellIndex, end: CellIndex? = null): List<List<Data?>?> {
-        _checkMaxColumn(start.columnIndex)
-        _checkMaxRow(start.rowIndex)
+    public fun selectRange(start: CellIndex, end: CellIndex? = null): List<List<Data?>?> {
+        checkMaxColumn(start.columnIndex)
+        checkMaxRow(start.rowIndex)
         end?.let {
-            _checkMaxColumn(it.columnIndex)
-            _checkMaxRow(it.rowIndex)
+            checkMaxColumn(it.columnIndex)
+            checkMaxRow(it.rowIndex)
         }
 
         var _startColumn = start.columnIndex
@@ -218,7 +218,7 @@ class Sheet constructor(
         return _selectedRange
     }
 
-    fun selectRangeValuesWithString(range: String): List<List<Any?>> {
+    public fun selectRangeValuesWithString(range: String): List<List<Any?>> {
         val _selectedRange = mutableListOf<List<Any?>>()
         if (!range.contains(':')) {
             val start = CellIndex.indexByString(range)
@@ -231,14 +231,14 @@ class Sheet constructor(
         }
     }
 
-    fun selectRangeValues(start: CellIndex, end: CellIndex? = null): List<List<Any?>> {
+    public fun selectRangeValues(start: CellIndex, end: CellIndex? = null): List<List<Any?>> {
         val _list = if (end == null) selectRange(start) else selectRange(start, end = end)
         return _list.map { e ->
             e?.map { it?.value } ?: emptyList()
         }
     }
 
-    fun _countRowsAndColumns() {
+    internal fun countRowsAndColumns() {
         var maximumColumnIndex = -1
         var maximumRowIndex = -1
         val sortedKeys = sheetData.keys.sorted()
@@ -259,8 +259,8 @@ class Sheet constructor(
         _maxRows = maximumRowIndex + 1
     }
 
-    fun removeColumn(columnIndex: Int) {
-        _checkMaxColumn(columnIndex)
+    public fun removeColumn(columnIndex: Int) {
+        checkMaxColumn(columnIndex)
         if (columnIndex < 0 || columnIndex >= maxColumns) {
             return
         }
@@ -337,11 +337,11 @@ class Sheet constructor(
         }
     }
 
-    fun insertColumn(columnIndex: Int) {
+    public fun insertColumn(columnIndex: Int) {
         if (columnIndex < 0) {
             return
         }
-        _checkMaxColumn(columnIndex)
+        checkMaxColumn(columnIndex)
 
         var updateSpanCell = false
 
@@ -416,11 +416,11 @@ class Sheet constructor(
         }
     }
 
-    fun removeRow(rowIndex: Int) {
+    public fun removeRow(rowIndex: Int) {
         if (rowIndex < 0 || rowIndex >= _maxRows) {
             return
         }
-        _checkMaxRow(rowIndex)
+        checkMaxRow(rowIndex)
 
         var updateSpanCell = false
 
@@ -487,12 +487,12 @@ class Sheet constructor(
         }
     }
 
-    fun insertRow(rowIndex: Int) {
+    public fun insertRow(rowIndex: Int) {
         if (rowIndex < 0) {
             return
         }
 
-        _checkMaxRow(rowIndex)
+        checkMaxRow(rowIndex)
 
         var updateSpanCell = false
 
@@ -556,25 +556,25 @@ class Sheet constructor(
         }
     }
 
-    fun updateCell(cellIndex: CellIndex, value: CellValue?, cellStyle: CellStyle? = null) {
+    public fun updateCell(cellIndex: CellIndex, value: CellValue?, cellStyle: CellStyle? = null) {
         val columnIndex = cellIndex.columnIndex
         val rowIndex = cellIndex.rowIndex
         if (columnIndex < 0 || rowIndex < 0) {
             return
         }
-        _checkMaxColumn(columnIndex)
-        _checkMaxRow(rowIndex)
+        checkMaxColumn(columnIndex)
+        checkMaxRow(rowIndex)
 
         var newRowIndex = rowIndex
         var newColumnIndex = columnIndex
 
         if (spanList.isNotEmpty()) {
-            val (nr, nc) = _isInsideSpanning(rowIndex, columnIndex)
+            val (nr, nc) = isInsideSpanning(rowIndex, columnIndex)
             newRowIndex = nr
             newColumnIndex = nc
         }
 
-        _putData(newRowIndex, newColumnIndex, value)
+        putData(newRowIndex, newColumnIndex, value)
 
         var cellStyleToUse = cellStyle
         if (cellStyle != null) {
@@ -595,22 +595,22 @@ class Sheet constructor(
         }
     }
 
-    fun merge(start: CellIndex, end: CellIndex, customValue: CellValue? = null) {
+    public fun merge(start: CellIndex, end: CellIndex, customValue: CellValue? = null) {
         var startColumn = start.columnIndex
         var startRow = start.rowIndex
         var endColumn = end.columnIndex
         var endRow = end.rowIndex
 
-        _checkMaxColumn(startColumn)
-        _checkMaxColumn(endColumn)
-        _checkMaxRow(startRow)
-        _checkMaxRow(endRow)
+        checkMaxColumn(startColumn)
+        checkMaxColumn(endColumn)
+        checkMaxRow(startRow)
+        checkMaxRow(endRow)
 
         if ((startColumn == endColumn && startRow == endRow) || (startColumn < 0 || startRow < 0 || endColumn < 0 || endRow < 0) || (_spannedItems.contains(getSpanCellId(startColumn, startRow, endColumn, endRow)))) {
             return
         }
 
-        val gotPosition = _getSpanPosition(start, end)
+        val gotPosition = getSpanPosition(start, end)
 
         excel.mergeChanges = true
 
@@ -665,7 +665,7 @@ class Sheet constructor(
         excel.addMergeChangeLookup(sheetName)
     }
 
-    fun unMerge(unmergeCells: String) {
+    public fun unMerge(unmergeCells: String) {
         if (_spannedItems.isNotEmpty() && spanList.isNotEmpty() && _spannedItems.contains(unmergeCells)) {
             val lis = unmergeCells.split(Regex(":"))
             if (lis.size == 2) {
@@ -689,7 +689,7 @@ class Sheet constructor(
         }
     }
 
-    fun setMergedCellStyle(start: CellIndex, mergedCellStyle: CellStyle) {
+    public fun setMergedCellStyle(start: CellIndex, mergedCellStyle: CellStyle) {
         val _mergedCells = spannedItems.map { e ->
             e.split(":").map { CellIndex.indexByString(it) }
         }
@@ -739,7 +739,7 @@ class Sheet constructor(
                     if (i == start.rowIndex && j == start.columnIndex) {
                         cell(start).cellStyle = cellStyle
                     } else {
-                        _putData(i, j, null)
+                        putData(i, j, null)
                         sheetData[i]!![j]!!.cellStyle = cellStyle
                     }
                 }
@@ -747,7 +747,7 @@ class Sheet constructor(
         }
     }
 
-    fun _getSpanPosition(start: CellIndex, end: CellIndex): List<Int> {
+    internal fun getSpanPosition(start: CellIndex, end: CellIndex): List<Int> {
         var startColumn = start.columnIndex
         var startRow = start.rowIndex
         var endColumn = end.columnIndex
@@ -767,7 +767,7 @@ class Sheet constructor(
         for (i in 0 until spanList.size) {
             val spanObj = spanList[i] ?: continue
 
-            val locationChange = _isLocationChangeRequired(startColumn, startRow, endColumn, endRow, spanObj)
+            val locationChange = isLocationChangeRequired(startColumn, startRow, endColumn, endRow, spanObj)
 
             if (locationChange.first) {
                 startColumn = locationChange.second[0]
@@ -789,12 +789,12 @@ class Sheet constructor(
         return listOf(startColumn, startRow, endColumn, endRow)
     }
 
-    fun appendRow(row: List<CellValue?>) {
+    public fun appendRow(row: List<CellValue?>) {
         val targetRow = maxRows
         insertRowIterables(row, targetRow)
     }
 
-    fun _getSpannedObjects(rowIndex: Int, startingColumnIndex: Int): List<Span> {
+    internal fun getSpannedObjects(rowIndex: Int, startingColumnIndex: Int): List<Span> {
         val obtained = mutableListOf<Span>()
 
         if (spanList.isNotEmpty()) {
@@ -805,7 +805,7 @@ class Sheet constructor(
         return obtained
     }
 
-    fun _isInsideSpanObject(spanObjectList: List<Span>, columnIndex: Int, rowIndex: Int): Boolean {
+    internal fun isInsideSpanObject(spanObjectList: List<Span>, columnIndex: Int, rowIndex: Int): Boolean {
         for (spanObject in spanObjectList) {
             if (spanObject.columnSpanStart <= columnIndex && columnIndex <= spanObject.columnSpanEnd && spanObject.rowSpanStart <= rowIndex && rowIndex <= spanObject.rowSpanEnd) {
                 if (columnIndex < spanObject.columnSpanEnd) {
@@ -818,37 +818,37 @@ class Sheet constructor(
         return true
     }
 
-    fun insertRowIterables(row: List<CellValue?>, rowIndex: Int, startingColumn: Int = 0, overwriteMergedCells: Boolean = true) {
+    public fun insertRowIterables(row: List<CellValue?>, rowIndex: Int, startingColumn: Int = 0, overwriteMergedCells: Boolean = true) {
         if (row.isEmpty() || rowIndex < 0) {
             return
         }
 
-        _checkMaxRow(rowIndex)
+        checkMaxRow(rowIndex)
         var columnIndex = 0
         if (startingColumn > 0) {
             columnIndex = startingColumn
         }
-        _checkMaxColumn(columnIndex + row.size)
+        checkMaxColumn(columnIndex + row.size)
         val rowsLength = _maxRows
         val maxIterationIndex = row.size - 1
         var currentRowPosition = 0
 
         if (overwriteMergedCells || rowIndex >= rowsLength) {
             while (currentRowPosition <= maxIterationIndex) {
-                _putData(rowIndex, columnIndex++, row[currentRowPosition++])
+                putData(rowIndex, columnIndex++, row[currentRowPosition++])
             }
         } else {
-            _selfCorrectSpanMap(excel)
-            val _spanObjectsList = _getSpannedObjects(rowIndex, columnIndex)
+            selfCorrectSpanMap(excel)
+            val _spanObjectsList = getSpannedObjects(rowIndex, columnIndex)
 
             if (_spanObjectsList.isEmpty()) {
                 while (currentRowPosition <= maxIterationIndex) {
-                    _putData(rowIndex, columnIndex++, row[currentRowPosition++])
+                    putData(rowIndex, columnIndex++, row[currentRowPosition++])
                 }
             } else {
                 while (currentRowPosition <= maxIterationIndex) {
-                    if (_isInsideSpanObject(_spanObjectsList, columnIndex, rowIndex)) {
-                        _putData(rowIndex, columnIndex, row[currentRowPosition++])
+                    if (isInsideSpanObject(_spanObjectsList, columnIndex, rowIndex)) {
+                        putData(rowIndex, columnIndex, row[currentRowPosition++])
                     }
                     columnIndex++
                 }
@@ -856,7 +856,7 @@ class Sheet constructor(
         }
     }
 
-    fun _putData(rowIndex: Int, columnIndex: Int, value: CellValue?) {
+    internal fun putData(rowIndex: Int, columnIndex: Int, value: CellValue?) {
         var row = sheetData[rowIndex]
         if (row == null) {
             row = mutableMapOf()
@@ -883,66 +883,66 @@ class Sheet constructor(
         }
     }
 
-    val defaultRowHeight: Double?
+    public val defaultRowHeight: Double?
         get() = _defaultRowHeight
 
-    val defaultColumnWidth: Double?
+    public val defaultColumnWidth: Double?
         get() = _defaultColumnWidth
 
-    val getColumnAutoFits: Map<Int, Boolean>
+    public val getColumnAutoFits: Map<Int, Boolean>
         get() = _columnAutoFit
 
-    val getColumnWidths: Map<Int, Double>
+    public val getColumnWidths: Map<Int, Double>
         get() = _columnWidths
 
-    val getRowHeights: Map<Int, Double>
+    public val getRowHeights: Map<Int, Double>
         get() = _rowHeights
 
-    fun getColumnAutoFit(columnIndex: Int): Boolean {
+    public fun getColumnAutoFit(columnIndex: Int): Boolean {
         return _columnAutoFit[columnIndex] ?: false
     }
 
-    fun getColumnWidth(columnIndex: Int): Double {
+    public fun getColumnWidth(columnIndex: Int): Double {
         return _columnWidths[columnIndex] ?: _defaultColumnWidth!!
     }
 
-    fun getRowHeight(rowIndex: Int): Double {
+    public fun getRowHeight(rowIndex: Int): Double {
         return _rowHeights[rowIndex] ?: _defaultRowHeight!!
     }
 
-    fun setDefaultColumnWidth(columnWidth: Double = _excelDefaultColumnWidth) {
+    public fun setDefaultColumnWidth(columnWidth: Double = excelDefaultColumnWidth) {
         if (columnWidth < 0) return
         _defaultColumnWidth = columnWidth
     }
 
-    fun setDefaultRowHeight(rowHeight: Double = _excelDefaultRowHeight) {
+    public fun setDefaultRowHeight(rowHeight: Double = excelDefaultRowHeight) {
         if (rowHeight < 0) return
         _defaultRowHeight = rowHeight
     }
 
-    fun setColumnAutoFit(columnIndex: Int) {
-        _checkMaxColumn(columnIndex)
+    public fun setColumnAutoFit(columnIndex: Int) {
+        checkMaxColumn(columnIndex)
         if (columnIndex < 0) return
         _columnAutoFit[columnIndex] = true
     }
 
-    fun setColumnWidth(columnIndex: Int, columnWidth: Double) {
-        _checkMaxColumn(columnIndex)
+    public fun setColumnWidth(columnIndex: Int, columnWidth: Double) {
+        checkMaxColumn(columnIndex)
         if (columnWidth < 0) return
         _columnWidths[columnIndex] = columnWidth
     }
 
-    fun setRowHeight(rowIndex: Int, rowHeight: Double) {
-        _checkMaxRow(rowIndex)
+    public fun setRowHeight(rowIndex: Int, rowHeight: Double) {
+        checkMaxRow(rowIndex)
         if (rowHeight < 0) return
         _rowHeights[rowIndex] = rowHeight
     }
 
-    fun addSpannedItem(ref: String) {
+    internal fun addSpannedItem(ref: String) {
         _spannedItems.add(ref)
     }
 
-    fun findAndReplace(source: Regex, target: String, first: Int = -1, startingRow: Int = -1, endingRow: Int = -1, startingColumn: Int = -1, endingColumn: Int = -1): Int {
+    public fun findAndReplace(source: Regex, target: String, first: Int = -1, startingRow: Int = -1, endingRow: Int = -1, startingColumn: Int = -1, endingColumn: Int = -1): Int {
         var replaceCount = 0
         var _startingRow = 0
         var _endingRow = -1
@@ -999,7 +999,7 @@ class Sheet constructor(
         return replaceCount
     }
 
-    fun clearRow(rowIndex: Int): Boolean {
+    public fun clearRow(rowIndex: Int): Boolean {
         if (rowIndex < 0) {
             return false
         }
@@ -1024,7 +1024,7 @@ class Sheet constructor(
         return isNotInside
     }
 
-    fun _isInsideSpanning(rowIndex: Int, columnIndex: Int): Pair<Int, Int> {
+    internal fun isInsideSpanning(rowIndex: Int, columnIndex: Int): Pair<Int, Int> {
         var newRowIndex = rowIndex
         var newColumnIndex = columnIndex
 
@@ -1041,7 +1041,7 @@ class Sheet constructor(
         return Pair(newRowIndex, newColumnIndex)
     }
 
-    fun _checkMaxColumn(columnIndex: Int) {
+    internal fun checkMaxColumn(columnIndex: Int) {
         if (_maxColumns >= 16384 || columnIndex >= 16384) {
             throw IllegalArgumentException("Reached Max (16384) or (XFD) columns value.")
         }
@@ -1050,7 +1050,7 @@ class Sheet constructor(
         }
     }
 
-    fun _checkMaxRow(rowIndex: Int) {
+    internal fun checkMaxRow(rowIndex: Int) {
         if (_maxRows >= 1048576 || rowIndex >= 1048576) {
             throw IllegalArgumentException("Reached Max (1048576) rows value.")
         }
@@ -1059,7 +1059,7 @@ class Sheet constructor(
         }
     }
 
-    val spannedItems: List<String>
+    public val spannedItems: List<String>
         get() {
             _spannedItems = mutableListOf()
 
@@ -1074,16 +1074,16 @@ class Sheet constructor(
             return _spannedItems
         }
 
-    fun cleanUpSpanMap() {
+    internal fun cleanUpSpanMap() {
         if (spanList.isNotEmpty()) {
             spanList.removeAll { it == null }
         }
     }
 
-    val sheetName: String
+    public val sheetName: String
         get() = _sheet
 
-    fun row(rowIndex: Int): List<Data?> {
+    public fun row(rowIndex: Int): List<Data?> {
         if (rowIndex < 0) {
             return emptyList()
         }
@@ -1099,13 +1099,13 @@ class Sheet constructor(
         return emptyList()
     }
 
-    val maxRows: Int
+    public val maxRows: Int
         get() = _maxRows
 
-    val maxColumns: Int
+    public val maxColumns: Int
         get() = _maxColumns
 
-    var headerFooter: HeaderFooter?
+    public var headerFooter: HeaderFooter?
         get() = _headerFooter
         set(value) {
             _headerFooter = value
@@ -1113,20 +1113,74 @@ class Sheet constructor(
 }
 
 // Helper functions that are not defined in the provided code, assuming they exist or need to be implemented
-fun getSpanCellId(startColumn: Int, startRow: Int, endColumn: Int, endRow: Int): String {
+internal fun getSpanCellId(startColumn: Int, startRow: Int, endColumn: Int, endRow: Int): String {
     // Implement based on CellIndex
     return "${CellIndex.indexByColumnRow(startColumn, startRow)}:${CellIndex.indexByColumnRow(endColumn, endRow)}"
 }
 
-fun _damagedExcel(text: String) {
+internal fun damagedExcel(text: String) {
     throw IllegalArgumentException(text)
 }
 
-fun _selfCorrectSpanMap(excel: Excel) {
-    // Implement if needed
+internal fun selfCorrectSpanMap(excel: Excel) {
+    excel.mergeChangeLook.forEach { key: String ->
+        if (excel.sheetMap[key] != null &&
+            excel.sheetMap[key]!!.spanList.isNotEmpty()
+        ) {
+            var spanList = excel.sheetMap[key]!!.spanList.toMutableList()
+
+            for (i in 0..<spanList.size) {
+                val checkerPos = spanList[i] ?: continue
+                var startRow = checkerPos.rowSpanStart
+                var startColumn = checkerPos.columnSpanStart
+                var endRow = checkerPos.rowSpanEnd
+                var endColumn = checkerPos.columnSpanEnd
+
+                for (j in (i + 1)..<spanList.size) {
+                    val spanObj = spanList[j] ?: continue
+
+                    val locationChange = isLocationChangeRequired(
+                        startColumn, startRow, endColumn, endRow, spanObj
+                    )
+                    if (locationChange.first) {
+                        startColumn = locationChange.second[0]
+                        startRow = locationChange.second[1]
+                        endColumn = locationChange.second[2]
+                        endRow = locationChange.second[3]
+                        spanList[j] = null
+                    } else {
+                        val locationChange2 = isLocationChangeRequired(
+                            spanObj.columnSpanStart,
+                            spanObj.rowSpanStart,
+                            spanObj.columnSpanEnd,
+                            spanObj.rowSpanEnd,
+                            checkerPos
+                        )
+
+                        if (locationChange2.first) {
+                            startColumn = locationChange2.second[0]
+                            startRow = locationChange2.second[1]
+                            endColumn = locationChange2.second[2]
+                            endRow = locationChange2.second[3]
+                            spanList[j] = null;
+                        }
+                    }
+                }
+                val spanObj1 = Span(
+                    rowSpanStart = startRow,
+                    columnSpanStart = startColumn,
+                    rowSpanEnd = endRow,
+                    columnSpanEnd = endColumn,
+                );
+                spanList[i] = spanObj1
+            }
+            excel.sheetMap[key]!!.spanList = spanList.toMutableList()
+            excel.sheetMap[key]!!.cleanUpSpanMap()
+        }
+    }
 }
 
-fun _isLocationChangeRequired(startColumn: Int, startRow: Int, endColumn: Int, endRow: Int, spanObj: Span): Pair<Boolean, List<Int>> {
+internal fun isLocationChangeRequired(startColumn: Int, startRow: Int, endColumn: Int, endRow: Int, spanObj: Span): Pair<Boolean, List<Int>> {
     // Implement based on original logic, assuming it's a method that checks if location changes
     // For now, return false and original positions
     return Pair(false, listOf(startColumn, startRow, endColumn, endRow))

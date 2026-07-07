@@ -7,20 +7,20 @@ import com.fleeksoft.ksoup.nodes.Node
 import com.fleeksoft.ksoup.nodes.TextNode
 import com.fleeksoft.ksoup.parser.Tag
 
-class HeaderFooter(
-    var alignWithMargins: Boolean?,
-    var differentFirst: Boolean?,
-    var differentOddEven: Boolean?,
-    var scaleWithDoc: Boolean?,
-    var evenFooter: String?,
-    var evenHeader: String?,
-    var firstFooter: String?,
-    var firstHeader: String?,
-    var oddFooter: String?,
-    var oddHeader: String?,
+public class HeaderFooter(
+    public var alignWithMargins: Boolean?,
+    public var differentFirst: Boolean?,
+    public var differentOddEven: Boolean?,
+    public var scaleWithDoc: Boolean?,
+    public var evenFooter: String?,
+    public var evenHeader: String?,
+    public var firstFooter: String?,
+    public var firstHeader: String?,
+    public var oddFooter: String?,
+    public var oddHeader: String?,
 ) {
 
-    fun toXmlElement(): Element {
+    internal fun toXmlElement(): Element {
         val attributes = mutableListOf<Attribute>();
         if (alignWithMargins != null) {
             attributes.add(
@@ -95,7 +95,7 @@ class HeaderFooter(
         }
     }
 
-    companion object {
+    internal companion object {
         fun fromXmlElement(headerFooterElement: Element): HeaderFooter {
             return HeaderFooter(
                 alignWithMargins =
@@ -117,7 +117,7 @@ class HeaderFooter(
     }
 }
 
-fun String.parseBool(): Boolean {
+internal fun String.parseBool(): Boolean {
     var value = lowercase()
     if (value == "true" || value == "1") {
         return true;
@@ -128,7 +128,7 @@ fun String.parseBool(): Boolean {
     throw IllegalStateException("\"$this\" can not be parsed to boolean.")
 }
 
-fun String.simplifyText(): String {
+internal fun String.simplifyText(): String {
     var value = this.replace("&amp", "&");
     value = value.replace("amp", "&");
     value = value.replace("&", "&amp;");
@@ -136,15 +136,15 @@ fun String.simplifyText(): String {
     return value;
 }
 
-fun Element(tag: String, vararg children: Node): Element = Element(tag).apply {
+internal fun Element(tag: String, vararg children: Node): Element = Element(tag).apply {
     addChildren(*children)
 }
 
-fun Attributes(list: List<Attribute>): Attributes = Attributes().apply {
+internal fun Attributes(list: List<Attribute>): Attributes = Attributes().apply {
     list.forEach { add(it.key, it.value) }
 }
 
-fun Element(tag: String, attributes: List<Attribute>, children: List<Node> = emptyList()): Element = Element(Tag(tag), null, Attributes(attributes)).apply {
+internal fun Element(tag: String, attributes: List<Attribute>, children: List<Node> = emptyList()): Element = Element(Tag(tag), null, Attributes(attributes)).apply {
     addChildren(*children.toTypedArray())
 }
 

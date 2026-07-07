@@ -4,7 +4,7 @@ import dev.shreyash.kxcel.utils.ExcelColor
 import dev.shreyash.kxcel.utils.isColorAppropriate
 
 
-enum class BorderStyle(val style: String) {
+public enum class BorderStyle(public val style: String) {
     None("none"),
     DashDot("dashDot"),
     DashDotDot("dashDotDot"),
@@ -21,7 +21,7 @@ enum class BorderStyle(val style: String) {
     Thin("thin");
 }
 
-fun getBorderStyleByName(name: String): BorderStyle? =
+public fun getBorderStyleByName(name: String): BorderStyle? =
     BorderStyle.entries.firstOrNull {
         it.name.equals(name, ignoreCase = true)
     }
@@ -30,12 +30,12 @@ fun getBorderStyleByName(name: String): BorderStyle? =
 
 // region --- Border ---
 
-class Border(
+public class Border(
     borderStyle: BorderStyle? = null,
     borderColorHex: ExcelColor? = null,
 ) {
-    val borderStyle: BorderStyle? = if (borderStyle == BorderStyle.None) null else borderStyle
-    val borderColorHex: String? = borderColorHex?.colorHex?.let { isColorAppropriate(it) }
+    public val borderStyle: BorderStyle? = if (borderStyle == BorderStyle.None) null else borderStyle
+    public val borderColorHex: String? = borderColorHex?.colorHex?.let { isColorAppropriate(it) }
 
     override fun toString(): String =
         "Border(borderStyle: $borderStyle, borderColorHex: $borderColorHex)"
@@ -57,7 +57,7 @@ class Border(
 
 // region --- BorderSet ---
 
-class BorderSet(
+internal class BorderSet(
     val leftBorder: Border,
     val rightBorder: Border,
     val topBorder: Border,

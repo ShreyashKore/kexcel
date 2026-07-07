@@ -7,7 +7,7 @@ package dev.shreyash.kxcel.archive
  * that can exceed the signed 32-bit range ([writeUint32], [writeUint64]) take
  * [Long] so the full unsigned value can be written.
  */
-abstract class OutputStream(var byteOrder: ByteOrder) {
+internal abstract class OutputStream(var byteOrder: ByteOrder) {
 
     abstract val length: Int
 
@@ -35,7 +35,7 @@ abstract class OutputStream(var byteOrder: ByteOrder) {
 
     /** Write a 16-bit word to the output stream. */
     fun writeUint16(value: Int) {
-        if (byteOrder == ByteOrder.bigEndian) {
+        if (byteOrder == ByteOrder.BigEndian) {
             writeByte((value ushr 8) and 0xff)
             writeByte(value and 0xff)
         } else {
@@ -46,7 +46,7 @@ abstract class OutputStream(var byteOrder: ByteOrder) {
 
     /** Write a 32-bit word to the end of the buffer. */
     fun writeUint32(value: Long) {
-        if (byteOrder == ByteOrder.bigEndian) {
+        if (byteOrder == ByteOrder.BigEndian) {
             writeByte(((value ushr 24) and 0xff).toInt())
             writeByte(((value ushr 16) and 0xff).toInt())
             writeByte(((value ushr 8) and 0xff).toInt())
@@ -61,7 +61,7 @@ abstract class OutputStream(var byteOrder: ByteOrder) {
 
     /** Write a 64-bit word to the end of the buffer. */
     fun writeUint64(value: Long) {
-        if (byteOrder == ByteOrder.bigEndian) {
+        if (byteOrder == ByteOrder.BigEndian) {
             writeByte(((value ushr 56) and 0xff).toInt())
             writeByte(((value ushr 48) and 0xff).toInt())
             writeByte(((value ushr 40) and 0xff).toInt())

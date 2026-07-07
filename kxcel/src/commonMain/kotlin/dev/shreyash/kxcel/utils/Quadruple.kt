@@ -1,5 +1,5 @@
 package dev.shreyash.kxcel.utils
 
-data class Quadruple(
+internal data class Quadruple(
     val startColumn: Int, val startRow: Int, val endColumn: Int, val endRow: Int
 )

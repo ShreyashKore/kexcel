@@ -8,7 +8,7 @@ import dev.shreyash.kxcel.utils.isLocationChangeRequired
  * Self-corrects the spanning of rows and columns by checking cross-sectional
  * relationships between spans and merging overlapping ones.
  */
-fun selfCorrectSpanMap(excel: Excel) {
+internal fun selfCorrectSpanMap(excel: Excel) {
     excel.mergeChangeLook.forEach { key ->
         val sheet = excel.sheetMap[key] ?: return@forEach
         if (sheet.spanList.isEmpty()) return@forEach
@@ -66,7 +66,7 @@ fun selfCorrectSpanMap(excel: Excel) {
     }
 }
 
-data class LocationChanged(
+internal data class LocationChanged(
     val changed: Boolean,
     val bounds: SpanBounds,
 )
@@ -77,12 +77,12 @@ data class LocationChanged(
  * @property changed Whether the bounds need to be updated.
  * @property bounds  The new merged bounds (only meaningful when [changed] is true).
  */
-data class LocationChangeResult(
+internal data class LocationChangeResult(
     val changed: Boolean,
     val bounds: SpanBounds,
 )
 
-data class SpanBounds(
+internal data class SpanBounds(
     val startColumn: Int,
     val startRow: Int,
     val endColumn: Int,

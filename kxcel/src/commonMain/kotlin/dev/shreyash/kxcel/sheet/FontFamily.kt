@@ -1,6 +1,6 @@
 package dev.shreyash.kxcel.sheet
 
-enum class FontFamily {
+public enum class FontFamily {
     Al_Bayan_Plain,
     Abadi_MT_Condensed_Light,
     Abadi_MT_Condensed_Extra_Bold,
@@ -185,11 +185,11 @@ enum class FontFamily {
     Myanmar_Text;
 
     /** Returns the human-readable font family name (e.g. "Arial Narrow"). */
-    fun displayName(): String = name.replace('_', ' ')
+    public fun displayName(): String = name.replace('_', ' ')
 }
 
 /**
  * Returns the human-readable font family name for the given [FontFamily].
  * e.g. `FontFamily.Arial_Narrow` → `"Arial Narrow"`
  */
-fun getFontFamily(fontFamily: FontFamily): String = fontFamily.displayName()
+public fun getFontFamily(fontFamily: FontFamily): String = fontFamily.displayName()

@@ -36,12 +36,12 @@ import dev.shreyash.kxcel.utils.getRowNumber
 import dev.shreyash.kxcel.utils.normalizeNewLine
 import dev.shreyash.kxcel.utils.toExcelColor
 
-class Parser(private val excel: Excel) {
+public class Parser internal constructor(private val excel: Excel) {
 
     private val rId: MutableList<String> = mutableListOf()
     private val worksheetTargets: MutableMap<String, String> = mutableMapOf()
 
-    fun startParsing() {
+    internal fun startParsing() {
         putContentXml()
         parseRelations()
         parseStyles(excel.stylesTarget)
@@ -54,7 +54,7 @@ class Parser(private val excel: Excel) {
         if (sheet.maxRows == 0 || sheet.maxColumns == 0) {
             sheet.sheetData.clear()
         }
-        sheet._countRowsAndColumns()
+        sheet.countRowsAndColumns()
     }
 
     private fun putContentXml() {
@@ -800,7 +800,7 @@ class Parser(private val excel: Excel) {
         }
     }
 
-    companion object {
+    internal companion object {
         fun parseValue(node: Element?): String {
             if (node == null) return ""
             // Dart's _parseValue concatenates only this element's own text nodes

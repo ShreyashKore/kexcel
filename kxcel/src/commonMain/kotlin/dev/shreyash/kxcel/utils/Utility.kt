@@ -10,7 +10,7 @@ import kotlin.math.round
 
 /// Format a [Double] with exactly two decimal places, e.g. 8.0 -> "8.00".
 /// Multiplatform replacement for the JVM-only "%.2f".format(value).
-fun Double.toFixed2(): String {
+internal fun Double.toFixed2(): String {
     val scaled = round(abs(this) * 100.0).toLong()
     val intPart = scaled / 100
     val frac = (scaled % 100).toString().padStart(2, '0')
@@ -18,16 +18,16 @@ fun Double.toFixed2(): String {
     return "$sign$intPart.$frac"
 }
 
-val NO_COMPRESSION = listOf(
+internal val NO_COMPRESSION = listOf(
     "mimetype",
     "Thumbnails/thumbnail.png"
 )
 
-fun getCellId(columnIndex: Int, rowIndex: Int): String {
+public fun getCellId(columnIndex: Int, rowIndex: Int): String {
     return "${numericToLetters(columnIndex + 1)}${rowIndex + 1}"
 }
 
-fun isColorAppropriate(value: String): String {
+internal fun isColorAppropriate(value: String): String {
     return when (value.length) {
         7 -> value.replace("#", "FF")
         9 -> value.replace("#", "")
@@ -36,7 +36,7 @@ fun isColorAppropriate(value: String): String {
 }
 
 /// Convert a character based column
-fun lettersToNumeric(letters: String): Int {
+public fun lettersToNumeric(letters: String): Int {
     var sum = 0
     var mul = 1
 
@@ -54,30 +54,30 @@ fun lettersToNumeric(letters: String): Int {
     return sum
 }
 
-fun findRows(table: Element?): List<Element> {
+internal fun findRows(table: Element?): List<Element> {
     if (table == null) return emptyList()
     return table.getElementsByTag("row").toList()
 }
 
-fun findCells(row: Element?): List<Element> {
+internal fun findCells(row: Element?): List<Element> {
     if (row == null) return emptyList()
     return row.getElementsByTag("c").toList()
 }
 
-fun getCellNumber(cell: Element): Int? {
+internal fun getCellNumber(cell: Element): Int? {
     val r = cell.attr("r") ?: return null
     return cellCoordsFromCellId(r).second
 }
 
-fun getRowNumber(row: Element?): Int? {
+internal fun getRowNumber(row: Element?): Int? {
     return row?.attr("r")?.toIntOrNull()
 }
 
-fun checkPosition(list: List<CellStyle>, cellStyle: CellStyle): Int {
+internal fun checkPosition(list: List<CellStyle>, cellStyle: CellStyle): Int {
     return list.indexOf(cellStyle)
 }
 
-fun letterOnly(rune: Int): Int {
+internal fun letterOnly(rune: Int): Int {
     return when (rune) {
         in 65..90 -> rune
         in 97..122 -> rune - 32
@@ -85,12 +85,12 @@ fun letterOnly(rune: Int): Int {
     }
 }
 
-fun twoDigits(n: Int): String {
+internal fun twoDigits(n: Int): String {
     return if (n > 9) "$n" else "0$n"
 }
 
 /// Convert a number to character based column
-fun numericToLetters(numberInput: Int): String {
+internal fun numericToLetters(numberInput: Int): String {
     var number = numberInput
     var letters = ""
 
@@ -108,12 +108,12 @@ fun numericToLetters(numberInput: Int): String {
 }
 
 /// Normalize line
-fun normalizeNewLine(text: String): String {
+internal fun normalizeNewLine(text: String): String {
     return text.replace("\r\n", "\n")
 }
 
 /// Returns the coordinates from a cell name.
-fun cellCoordsFromCellId(cellId: String): Pair<Int, Int> {
+internal fun cellCoordsFromCellId(cellId: String): Pair<Int, Int> {
     val lettersPart = cellId
         .map { letterOnly(it.code) }
         .filter { it > 0 }
@@ -129,12 +129,12 @@ fun cellCoordsFromCellId(cellId: String): Pair<Int, Int> {
 }
 
 /// Throw error when excel is damaged
-fun damagedExcel(text: String = ""): Nothing {
+internal fun damagedExcel(text: String = ""): Nothing {
     throw IllegalArgumentException("\nDamaged Excel file: $text\n")
 }
 
 /// return A2:B2
-fun getSpanCellId(
+public fun getSpanCellId(
     startColumn: Int,
     startRow: Int,
     endColumn: Int,
@@ -144,7 +144,7 @@ fun getSpanCellId(
 }
 
 /// Returns updated SpanObject location
-fun isLocationChangeRequired(
+internal fun isLocationChangeRequired(
     startColumnInput: Int,
     startRowInput: Int,
     endColumnInput: Int,
@@ -203,14 +203,14 @@ fun isLocationChangeRequired(
     return LocationChanged(changeValue, SpanBounds(startColumn, startRow, endColumn, endRow))
 }
 
-fun getColumnAlphabet(columnIndex: Int): String {
+public fun getColumnAlphabet(columnIndex: Int): String {
     return numericToLetters(columnIndex + 1)
 }
 
-fun getColumnIndex(columnAlphabet: String): Int {
+public fun getColumnIndex(columnAlphabet: String): Int {
     return cellCoordsFromCellId(columnAlphabet).second
 }
 
-fun fontStyleIndex(list: List<FontStyle>, fontStyle: FontStyle): Int {
+internal fun fontStyleIndex(list: List<FontStyle>, fontStyle: FontStyle): Int {
     return list.indexOf(fontStyle)
 }

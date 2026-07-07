@@ -5,17 +5,17 @@ package dev.shreyash.kxcel.archive
  *
  * Ported from the Dart `archive` package's `OutputMemoryStream`.
  */
-class OutputMemoryStream(
-    size: Int? = defaultBufferSize,
-    byteOrder: ByteOrder = ByteOrder.littleEndian,
+internal class OutputMemoryStream(
+    size: Int? = DEFAULT_BUFFER_SIZE,
+    byteOrder: ByteOrder = ByteOrder.LittleEndian,
 ) : OutputStream(byteOrder) {
 
     override var length: Int = 0
 
-    private var _buffer: ByteArray = ByteArray(size ?: defaultBufferSize)
+    private var _buffer: ByteArray = ByteArray(size ?: DEFAULT_BUFFER_SIZE)
 
     companion object {
-        const val defaultBufferSize = 0x8000 // 32k block-size
+        const val DEFAULT_BUFFER_SIZE = 0x8000 // 32k block-size
     }
 
     override fun flush() {}
@@ -79,8 +79,8 @@ class OutputMemoryStream(
 
     /** Grow the buffer to accommodate additional data. */
     private fun expandBuffer(required: Int? = null) {
-        var blockSize = defaultBufferSize
-        if (required != null && required > defaultBufferSize) {
+        var blockSize = DEFAULT_BUFFER_SIZE
+        if (required != null && required > DEFAULT_BUFFER_SIZE) {
             blockSize = required
         }
         val newLength = (_buffer.size + blockSize) * 2
