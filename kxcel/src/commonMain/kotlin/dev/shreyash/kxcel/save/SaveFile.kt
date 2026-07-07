@@ -54,7 +54,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
     // region --- Column helpers ---
 
     private fun addNewColumn(columns: Element, min: Int, max: Int, width: Double) {
-        columns.children().add(
+        columns.appendChild(
             Element(
                 "col",
                 listOf(
@@ -198,7 +198,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
             attrs.add(Attribute("customHeight", "1"))
         }
         val row = Element("row", attrs, mutableListOf())
-        table.children().add(row)
+        table.appendChild(row)
         return row
     }
 
@@ -287,7 +287,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
                 fontChildren.add(Element("sz", listOf(Attribute("val", fSize.toString()))))
             }
 
-            fonts.children().add(Element("font", emptyList(), fontChildren))
+            fonts.appendChild(Element("font", emptyList(), fontChildren))
         }
 
         // --- fills ---
@@ -302,7 +302,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
             if (color.length >= 2) {
                 when {
                     color.substring(0, 2).uppercase() == "FF" -> {
-                        fills.children().add(
+                        fills.appendChild(
                             Element("fill", emptyList(), listOf(
                                 Element("patternFill", listOf(Attribute("patternType", "solid")), listOf(
                                     Element("fgColor", listOf(Attribute("rgb", color))),
@@ -312,7 +312,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
                         )
                     }
                     color == "none" || color == "gray125" || color == "lightGray" -> {
-                        fills.children().add(
+                        fills.appendChild(
                             Element("fill", emptyList(), listOf(
                                 Element("patternFill", listOf(Attribute("patternType", color)))
                             ))
@@ -350,11 +350,11 @@ class Save(private val excel: Excel, private val parser: Parser) {
                     element.attributes().add("style", it.style)
                 }
                 borderValue.borderColorHex?.let {
-                    element.children().add(Element("color", listOf(Attribute("rgb", it))))
+                    element.appendChild(Element("color", listOf(Attribute("rgb", it))))
                 }
-                borderElement.children().add(element)
+                borderElement.appendChild(element)
             }
-            borders.children().add(borderElement)
+            borders.appendChild(borderElement)
         }
 
         // --- cellXfs ---
@@ -431,12 +431,15 @@ class Save(private val excel: Excel, private val parser: Parser) {
                 xfChildren.add(Element("alignment", childAttrs, emptyList()))
             }
 
-            celx.children().add(Element("xf", attrs, xfChildren))
+            celx.appendChild(Element("xf", attrs, xfChildren))
         }
 
         // --- custom numFmts ---
+        // Only custom formats are written back; standard (built-in) formats live
+        // implicitly in the reader and must not be emitted as <numFmt> entries.
         val customNumberFormats = excel.numFormats.map
             .entries
+            .filter { it.value is CustomNumFormat }
             .sortedBy { it.key }
 
         if (customNumberFormats.isNotEmpty()) {
@@ -446,7 +449,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
 
             if (numFmtsElement == null) {
                 numFmtsElement = Element("numFmts", mutableListOf(), mutableListOf())
-                stylesXml.getElementsByTag("styleSheet").first()?.children()?.add(0, numFmtsElement)
+                stylesXml.getElementsByTag("styleSheet").first()?.prependChildren(listOf(numFmtsElement))
             }
 
             var count = numFmtsElement.attribute("count")?.value?.toIntOrNull() ?: 0
@@ -456,10 +459,10 @@ class Save(private val excel: Excel, private val parser: Parser) {
                 val formatCode = format.formatCode
                 val existing = numFmtsElement!!.children()
                     .filterIsInstance<Element>()
-                    .firstOrNull { it.normalName() == "numFmt" && it.attribute("numFmtId")?.value == numFmtIdString }
+                    .firstOrNull { it.normalName() == "numfmt" && it.attribute("numFmtId")?.value == numFmtIdString }
 
                 if (existing == null) {
-                    numFmtsElement.children().add(
+                    numFmtsElement.appendChild(
                         Element(
                             "numFmt",
                             listOf(
@@ -523,12 +526,9 @@ class Save(private val excel: Excel, private val parser: Parser) {
         }
 
         if (columnElements.isEmpty()) {
-            val worksheet = xmlFile.getElementsByTag("worksheet").first()
-                ?: damagedExcel("Missing <worksheet> element in sheet XML")
             val sheetData = xmlFile.getElementsByTag("sheetData").first()
                 ?: damagedExcel("Missing <sheetData> element in sheet XML")
-            val index = worksheet.children().indexOf(sheetData)
-            worksheet.children().add(index, Element("cols"))
+            sheetData.before(Element("cols"))
         }
 
         val columns = xmlFile.getElementsByTag("cols").first()
@@ -594,8 +594,8 @@ class Save(private val excel: Excel, private val parser: Parser) {
         if (position == 0) return true
 
         val sheets = excel.xmlFiles["xl/workbook.xml"]!!.getElementsByTag("sheets").first()
-        sheets?.children()?.removeAt(position)
-        sheets?.children()?.add(0, elementFound)
+        elementFound.remove()
+        sheets?.prependChildren(listOf(elementFound))
 
         return excel.getDefaultSheetInternal() == sheetName
     }
@@ -609,7 +609,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
         val existing = worksheetEl.getElementsByTag("headerFooter").toList()
         if (existing.isNotEmpty()) worksheetEl.children().remove(existing.first())
 
-        sheet.headerFooter?.let { worksheetEl.children().add(it.toXmlElement()) }
+        sheet.headerFooter?.let { worksheetEl.appendChild(it.toXmlElement()) }
     }
 
     private fun setMerge() {
@@ -631,7 +631,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
                 val index = worksheetEl.children().indexOf(sheetDataEl)
                 if (index == -1) damagedExcel()
                 val newMerge = Element("mergeCells", listOf(Attribute("count", "0")))
-                worksheetEl.children().add(index + 1, newMerge)
+                sheetDataEl.after(newMerge)
                 newMerge
             }
 
@@ -646,7 +646,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
 
             mergeElement.children().clear()
             spannedItems.forEach { ref ->
-                mergeElement.children().add(
+                mergeElement.appendChild(
                     Element("mergeCell", listOf(Attribute("ref", ref)))
                 )
             }
@@ -671,11 +671,11 @@ class Save(private val excel: Excel, private val parser: Parser) {
             if (sheetViewsIter.isNotEmpty()) {
                 val sheetViewsEl = sheetViewsIter.first()
                 sheetViewsEl.children().clear()
-                sheetViewsEl.children().add(sheetViewEl)
+                sheetViewsEl.appendChild(sheetViewEl)
             } else {
                 val worksheetEl = xmlDoc.getElementsByTag("worksheet").first()
                     ?: damagedExcel("Missing <worksheet> element in sheet XML")
-                worksheetEl.children().add(
+                worksheetEl.appendChild(
                     Element("sheetViews", emptyList(), mutableListOf(sheetViewEl))
                 )
             }
@@ -694,7 +694,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
         excel.sharedStrings.map.forEach { (sharedString, indexingHolder) ->
             uniqueCount++
             count += indexingHolder.count
-            shareString?.children()?.add(sharedString.node)
+            shareString?.appendChild(sharedString.node)
         }
 
         listOf("count" to "$count", "uniqueCount" to "$uniqueCount").forEach { (key, value) ->
@@ -732,7 +732,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
                 }
             } else if (defaultRowHeight != null || defaultColumnWidth != null) {
                 sheetFormatPrEl = Element("sheetFormatPr")
-                worksheetEl?.children()?.add(0, sheetFormatPrEl)
+                worksheetEl?.prependChildren(listOf(sheetFormatPrEl))
             }
 
             defaultRowHeight?.let {
@@ -761,7 +761,7 @@ class Save(private val excel: Excel, private val parser: Parser) {
         numberFormat: NumFormat?,
     ): Element {
         val cell = createCell(sheet, columnIndex, rowIndex, value, numberFormat)
-        row.children().add(cell)
+        row.appendChild(cell)
         return cell
     }
 

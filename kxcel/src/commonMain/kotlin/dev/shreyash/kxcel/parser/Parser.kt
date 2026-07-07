@@ -60,7 +60,7 @@ class Parser(private val excel: Excel) {
     private fun putContentXml() {
         val file = excel.archive.findFile("[Content_Types].xml") ?: damagedExcel()
         file.decompress()
-        excel.xmlFiles["[Content_Types].xml"] = Ksoup.parse(file.content.decodeToString())
+        excel.xmlFiles["[Content_Types].xml"] = Ksoup.parseXml(file.content.decodeToString())
     }
 
     private fun parseRelations() {
@@ -68,7 +68,7 @@ class Parser(private val excel: Excel) {
             ?: damagedExcel()
 
         relations.decompress()
-        val document = Ksoup.parse(relations.content.decodeToString())
+        val document = Ksoup.parseXml(relations.content.decodeToString())
         excel.xmlFiles["xl/_rels/workbook.xml.rels"] = document
 
         document.getElementsByTag("Relationship").forEach { node ->
@@ -103,8 +103,7 @@ class Parser(private val excel: Excel) {
                 excel.xmlFiles["xl/_rels/workbook.xml.rels"]
                     ?.getElementsByTag("Relationships")
                     ?.firstOrNull()
-                    ?.children()
-                    ?.add(
+                    ?.appendChild(
                         Element(
                             "Relationship",
                             listOf(
@@ -138,8 +137,7 @@ class Parser(private val excel: Excel) {
                     excel.xmlFiles["[Content_Types].xml"]
                         ?.getElementsByTag("Types")
                         ?.firstOrNull()
-                        ?.children()
-                        ?.add(
+                        ?.appendChild(
                             Element(
                                 "Override",
                                 listOf(
@@ -161,7 +159,7 @@ class Parser(private val excel: Excel) {
         }
 
         sharedStrings!!.decompress()
-        val document = Ksoup.parse(sharedStrings.content.decodeToString())
+        val document = Ksoup.parseXml(sharedStrings.content.decodeToString())
         excel.xmlFiles["xl/${excel.sharedStringsTarget}"] = document
 
         document.getElementsByTag("si").forEach { node ->
@@ -177,7 +175,7 @@ class Parser(private val excel: Excel) {
     private fun parseContent(run: Boolean = true) {
         val workbook = excel.archive.findFile("xl/workbook.xml") ?: damagedExcel()
         workbook.decompress()
-        val document = Ksoup.parse(workbook.content.decodeToString())
+        val document = Ksoup.parseXml(workbook.content.decodeToString())
         excel.xmlFiles["xl/workbook.xml"] = document
 
         document.getElementsByTag("sheet").forEach { node ->
@@ -261,7 +259,7 @@ class Parser(private val excel: Excel) {
             ?: damagedExcel(text = "styles")
 
         styles.decompress()
-        val document = Ksoup.parse(styles.content.decodeToString())
+        val document = Ksoup.parseXml(styles.content.decodeToString())
         excel.xmlFiles["xl/$stylesTarget"] = document
 
         excel.fontStyleList = mutableListOf()
@@ -284,10 +282,10 @@ class Parser(private val excel: Excel) {
         }
 
         document.getElementsByTag("border").forEach { node ->
-            val diagonalUp = node.attr("diagonalUp")?.trim()
-                .let { it != null && it != "0" && it != "false" }
-            val diagonalDown = node.attr("diagonalDown")?.trim()
-                .let { it != null && it != "0" && it != "false" }
+            val diagonalUp = node.attr("diagonalUp").trim()
+                .let { it.isNotEmpty() && it != "0" && it != "false" }
+            val diagonalDown = node.attr("diagonalDown").trim()
+                .let { it.isNotEmpty() && it != "0" && it != "false" }
 
             val borderElementNames = listOf("left", "right", "top", "bottom", "diagonal")
             val borderElements = mutableMapOf<String, Border>()
@@ -297,7 +295,7 @@ class Parser(private val excel: Excel) {
                 val borderStyle = element?.attr("style")?.trim()
                     ?.let { getBorderStyleByName(it) }
                 val borderColorHex = element?.getElementsByTag("color")?.singleOrNull()
-                    ?.attr("rgb")?.trim()
+                    ?.attr("rgb")?.trim()?.takeIf { it.isNotEmpty() }
 
                 borderElements[elementName] = Border(
                     borderStyle = borderStyle,
@@ -516,7 +514,7 @@ class Parser(private val excel: Excel) {
         val file = excel.archive.findFile("xl/$target")!!
         file.decompress()
 
-        val content = Ksoup.parse(file.content.decodeToString())
+        val content = Ksoup.parseXml(file.content.decodeToString())
         val worksheet = content.getElementsByTag("worksheet").first()
 
         // Check for right-to-left view
@@ -723,7 +721,7 @@ class Parser(private val excel: Excel) {
 
         val newSheetFile = excel.archive.findFile("xl/worksheets/sheet$sheetNumber.xml")!!
         newSheetFile.decompress()
-        val document = Ksoup.parse(newSheetFile.content.decodeToString())
+        val document = Ksoup.parseXml(newSheetFile.content.decodeToString())
         excel.xmlFiles["xl/worksheets/sheet$sheetNumber.xml"] = document
         excel.xmlSheetId[newSheet] = "xl/worksheets/sheet$sheetNumber.xml"
 
@@ -804,13 +802,12 @@ class Parser(private val excel: Excel) {
 
     companion object {
         fun parseValue(node: Element?): String {
-            val buffer = StringBuilder()
-            node?.children()?.forEach { child ->
-                if (child.hasText()) {
-                    buffer.append(normalizeNewLine(child.value()))
-                }
-            }
-            return buffer.toString()
+            if (node == null) return ""
+            // Dart's _parseValue concatenates only this element's own text nodes
+            // (ignoring descendant elements), preserving whitespace. Ksoup's
+            // wholeOwnText() is the exact equivalent; children() would exclude
+            // text nodes entirely and yield "".
+            return normalizeNewLine(node.wholeOwnText())
         }
     }
 }

@@ -99,13 +99,13 @@ class HeaderFooter(
         fun fromXmlElement(headerFooterElement: Element): HeaderFooter {
             return HeaderFooter(
                 alignWithMargins =
-                    headerFooterElement.attr("alignWithMargins").parseBool(),
+                    headerFooterElement.attr("alignWithMargins").takeIf { it.isNotEmpty() }?.parseBool(),
                 differentFirst =
-                    headerFooterElement.attr("differentFirst").parseBool(),
+                    headerFooterElement.attr("differentFirst").takeIf { it.isNotEmpty() }?.parseBool(),
                 differentOddEven =
-                    headerFooterElement.attr("differentOddEven").parseBool(),
+                    headerFooterElement.attr("differentOddEven").takeIf { it.isNotEmpty() }?.parseBool(),
                 scaleWithDoc =
-                    headerFooterElement.attr("scaleWithDoc").parseBool(),
+                    headerFooterElement.attr("scaleWithDoc").takeIf { it.isNotEmpty() }?.parseBool(),
                 evenHeader = headerFooterElement.getElementsByTag("evenHeader").first()?.text(),
                 evenFooter = headerFooterElement.getElementsByTag("evenFooter").first()?.text(),
                 firstHeader = headerFooterElement.getElementsByTag("firstHeader").first()?.text(),

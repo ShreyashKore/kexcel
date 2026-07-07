@@ -15,6 +15,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.math.roundToLong
 
 // region --- Helpers ---
 
@@ -258,7 +259,7 @@ sealed class DateTimeNumFormat(override val formatCode: String) : BaseNumFormat(
         if (value < 1.0) {
             return TimeCellValue.fromFractionOfDay(value)
         }
-        val deltaMs = (value * 24 * 3600 * 1000).toLong()
+        val deltaMs = (value * 24 * 3600 * 1000).roundToLong()
         val utcDate = Instant.fromEpochMilliseconds(DATE_OFFSET_MILLIS + deltaMs)
             .toLocalDateTime(TimeZone.UTC)
         return if (!v.contains('.') || v.endsWith(".0")) {
@@ -318,7 +319,7 @@ sealed class TimeNumFormat(override val formatCode: String) : BaseNumFormat(form
         }
         val value = v.toDouble()
         if (value < 1.0) {
-            val deltaMs = (value * 24 * 3600 * 1000).toLong()
+            val deltaMs = (value * 24 * 3600 * 1000).roundToLong()
             val duration = deltaMs.milliseconds
             val totalSeconds = duration.inWholeSeconds
             val hours = (totalSeconds / 3600).toInt()
@@ -333,7 +334,7 @@ sealed class TimeNumFormat(override val formatCode: String) : BaseNumFormat(form
                 microsecond = 0
             )
         }
-        val deltaMs = (value * 24 * 3600 * 1000).toLong()
+        val deltaMs = (value * 24 * 3600 * 1000).roundToLong()
         val utcDate = Instant.fromEpochMilliseconds(DATE_OFFSET_MILLIS + deltaMs)
             .toLocalDateTime(TimeZone.UTC)
         return if (!v.contains('.') || v.endsWith(".0")) {

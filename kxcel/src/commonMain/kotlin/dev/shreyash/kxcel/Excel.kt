@@ -220,18 +220,14 @@ class Excel internal constructor(internal var archive: Archive) {
             val sheetId2 = sheetPath
 
             xmlFiles["xl/_rels/workbook.xml.rels"]
-                ?.root()
-                ?.children()
-                ?.removeAll { child ->
-                    child.attr("Target") == sheetId1
-                }
+                ?.getElementsByTag("Relationship")
+                ?.filter { child -> child.attr("Target") == sheetId1 }
+                ?.forEach { it.remove() }
 
             xmlFiles["[Content_Types].xml"]
-                ?.root()
-                ?.children()
-                ?.removeAll { child ->
-                    child.attr("PartName") == "/$sheetId2"
-                }
+                ?.getElementsByTag("Override")
+                ?.filter { child -> child.attr("PartName") == "/$sheetId2" }
+                ?.forEach { it.remove() }
 
             xmlFiles.remove(xmlSheetId[sheet])
 
@@ -252,9 +248,8 @@ class Excel internal constructor(internal var archive: Archive) {
                 ?.getElementsByTag("sheets")
                 ?.firstOrNull()
                 ?.children()
-                ?.removeAll { element ->
-                    element.attribute("name")?.toString() == sheet
-                }
+                ?.filter { element -> element.attr("name") == sheet }
+                ?.forEach { it.remove() }
             sheets.remove(sheet)
         }
 

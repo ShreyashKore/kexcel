@@ -99,7 +99,9 @@ class SharedString(val node: Element) {
                 when (child.nodeName()) {
                     // 18.4.12 t (Text)
                     "t" -> {
-                        text = (text ?: "") + child.text()
+                        // wholeText() preserves significant whitespace (xml:space="preserve");
+                        // text() would collapse/trim it and drop spaces between runs.
+                        text = (text ?: "") + child.wholeText()
                     }
 
                     // 18.4.4 r (Rich Text Run)
@@ -130,7 +132,7 @@ class SharedString(val node: Element) {
                                 // 18.4.12 t (Text)
                                 "t" -> {
                                     if (children == null) children = mutableListOf()
-                                    children!!.add(TextSpan(text = runChild.text(), style = style))
+                                    children!!.add(TextSpan(text = runChild.wholeText(), style = style))
                                 }
                             }
                         }
