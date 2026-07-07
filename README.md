@@ -4,6 +4,8 @@
 
 A **Kotlin Multiplatform** library for working with Excel (`.xlsx`) files. Written in **pure Kotlin** with no platform-specific dependencies.
 
+Kexcel is a Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel) library by [justkawal](https://github.com/justkawal).
+
 ## Getting Started
 
 The `Excel` class is the entry point. Use its companion object to create or load a workbook:

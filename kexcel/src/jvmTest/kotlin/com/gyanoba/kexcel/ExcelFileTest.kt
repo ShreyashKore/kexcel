@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 /**
  * JVM-only port of the Dart `excel` tests that read `.xlsx` fixtures from disk.
  *
- * Fixtures live under `src/commonTest/kotlin/dev/shreyash/kexcel/test_resources/`.
+ * Fixtures live under `src/commonTest/kotlin/com/gyanoba/kexcel/test_resources/`.
  * In-memory (fixture-less) tests are in the multiplatform [ExcelInMemoryTest].
  *
  * Disk round-trips in the Dart originals (write to ./tmp, read back) are replaced by
@@ -41,8 +41,8 @@ class ExcelFileTest {
 
     private fun fixture(name: String): ByteArray {
         val candidates = listOf(
-            "src/commonTest/kotlin/dev/shreyash/kexcel/test_resources/$name",
-            "kexcel/src/commonTest/kotlin/dev/shreyash/kexcel/test_resources/$name",
+            "src/commonTest/kotlin/com/gyanoba/kexcel/test_resources/$name",
+            "kexcel/src/commonTest/kotlin/com/gyanoba/kexcel/test_resources/$name",
         )
         for (path in candidates) {
             val f = File(path)
