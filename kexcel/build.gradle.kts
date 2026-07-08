@@ -32,9 +32,9 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)
 
-            implementation("no.synth:kmp-zip:0.9.2")
-            implementation("no.synth:kmp-zip-kotlinx:0.9.2")
-            implementation("com.fleeksoft.ksoup:ksoup:0.2.6")
+            implementation(libs.kmp.zip)
+            implementation(libs.kmp.zip.kotlinx)
+            implementation(libs.ksoup)
         }
 
         commonTest.dependencies {
