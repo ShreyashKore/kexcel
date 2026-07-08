@@ -211,9 +211,7 @@ internal class ArchiveFile private constructor(
      */
     fun decompress(output: OutputStream? = null) {
         if (_content != null) {
-            if (output != null) {
-                output.writeStream(_content!!.getStream())
-            }
+            output?.writeStream(_content!!.getStream())
             return
         }
 

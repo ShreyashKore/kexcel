@@ -33,9 +33,3 @@ internal class FontStyle(
 
     override fun hashCode(): Int = props().hashCode()
 }
-
-/**
- * Returns the index of [fontStyle] in [fontStyleList], or -1 if not found.
- */
-internal fun fontStyleIndex(fontStyleList: List<FontStyle>, fontStyle: FontStyle): Int =
-    fontStyleList.indexOf(fontStyle)

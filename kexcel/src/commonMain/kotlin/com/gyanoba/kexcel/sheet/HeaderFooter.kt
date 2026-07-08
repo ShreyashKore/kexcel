@@ -118,7 +118,7 @@ public class HeaderFooter(
 }
 
 internal fun String.parseBool(): Boolean {
-    var value = lowercase()
+    val value = lowercase()
     if (value == "true" || value == "1") {
         return true
     } else if (value == "false" || value == "0") {

@@ -66,18 +66,13 @@ internal fun selfCorrectSpanMap(excel: Excel) {
     }
 }
 
-internal data class LocationChanged(
-    val changed: Boolean,
-    val bounds: SpanBounds,
-)
-
 /**
  * Result of [isLocationChangeRequired].
  *
  * @property changed Whether the bounds need to be updated.
  * @property bounds  The new merged bounds (only meaningful when [changed] is true).
  */
-internal data class LocationChangeResult(
+internal data class LocationChanged(
     val changed: Boolean,
     val bounds: SpanBounds,
 )

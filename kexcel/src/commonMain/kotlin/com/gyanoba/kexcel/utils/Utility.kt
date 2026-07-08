@@ -3,7 +3,6 @@ package com.gyanoba.kexcel.utils
 import com.fleeksoft.ksoup.nodes.Element
 import com.gyanoba.kexcel.save.LocationChanged
 import com.gyanoba.kexcel.save.SpanBounds
-import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.FontStyle
 import kotlin.math.abs
 import kotlin.math.round
@@ -26,6 +25,7 @@ internal val NO_COMPRESSION = listOf(
 public fun getCellId(columnIndex: Int, rowIndex: Int): String {
     return "${numericToLetters(columnIndex + 1)}${rowIndex + 1}"
 }
+
 
 internal fun isColorAppropriate(value: String): String {
     return when (value.length) {
@@ -71,10 +71,6 @@ internal fun getCellNumber(cell: Element): Int? {
 
 internal fun getRowNumber(row: Element?): Int? {
     return row?.attr("r")?.toIntOrNull()
-}
-
-internal fun checkPosition(list: List<CellStyle>, cellStyle: CellStyle): Int {
-    return list.indexOf(cellStyle)
 }
 
 internal fun letterOnly(rune: Int): Int {
@@ -166,8 +162,8 @@ internal fun isLocationChangeRequired(
                 ) ||
                 (
                         (
-                                (startColumn < spanObj.columnSpanStart && endColumn >= spanObj.columnSpanStart) ||
-                                        (startColumn <= spanObj.columnSpanEnd && endColumn > spanObj.columnSpanEnd)
+                                (spanObj.columnSpanStart in (startColumn + 1)..endColumn) ||
+                                        (spanObj.columnSpanEnd in startColumn..<endColumn)
                                 ) &&
                                 (
                                         (startRow in spanObj.rowSpanStart..spanObj.rowSpanEnd) ||
@@ -176,8 +172,8 @@ internal fun isLocationChangeRequired(
                         ) ||
                 (
                         (
-                                (startRow < spanObj.rowSpanStart && endRow >= spanObj.rowSpanStart) ||
-                                        (startRow <= spanObj.rowSpanEnd && endRow > spanObj.rowSpanEnd)
+                                (spanObj.rowSpanStart in (startRow + 1)..endRow) ||
+                                        (spanObj.rowSpanEnd in startRow..<endRow)
                                 ) &&
                                 (
                                         (startColumn in spanObj.columnSpanStart..spanObj.columnSpanEnd) ||
@@ -211,6 +207,8 @@ public fun getColumnIndex(columnAlphabet: String): Int {
     return cellCoordsFromCellId(columnAlphabet).second
 }
 
-internal fun fontStyleIndex(list: List<FontStyle>, fontStyle: FontStyle): Int {
-    return list.indexOf(fontStyle)
-}
+/**
+ * Returns the index of [fontStyle] in [fontStyleList], or -1 if not found.
+ */
+internal fun fontStyleIndex(fontStyleList: List<FontStyle>, fontStyle: FontStyle): Int =
+    fontStyleList.indexOf(fontStyle)

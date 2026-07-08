@@ -552,7 +552,7 @@ public class Parser internal constructor(private val excel: Excel) {
     private fun parseCell(node: Element, sheetObject: Sheet, rowIndex: Int, name: String) {
         val columnIndex = getCellNumber(node) ?: return
 
-        val s1 = node.attr("s")
+        val s1 = node.attribute("s")?.value
         var s = 0
         if (s1 != null) {
             s = s1.trim().toIntOrNull() ?: 0

@@ -15,6 +15,7 @@ import com.gyanoba.kexcel.sheet.Sheet
 import com.gyanoba.kexcel.archive.Archive
 import com.gyanoba.kexcel.archive.ArchiveFile
 import com.gyanoba.kexcel.utils.NEW_SHEET
+import com.gyanoba.kexcel.utils.SPREADSHEET_XLSX
 import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.readZipArchive
@@ -375,10 +376,9 @@ public class Excel internal constructor(internal var archive: Archive) {
         startingColumn: Int = -1,
         endingColumn: Int = -1
     ): Int {
-        var replaceCount = 0
-        if (sheetMap[sheet] == null) return replaceCount
+        if (sheetMap[sheet] == null) return 0
 
-        sheetMap[sheet]!!.findAndReplace(
+        return sheetMap[sheet]!!.findAndReplace(
             source,
             target,
             first = first,
@@ -387,8 +387,6 @@ public class Excel internal constructor(internal var archive: Archive) {
             startingColumn = startingColumn,
             endingColumn = endingColumn
         )
-
-        return replaceCount
     }
 
     /**
@@ -469,8 +467,6 @@ public class Excel internal constructor(internal var archive: Archive) {
         }
     }
 }
-
-private const val SPREADSHEET_XLSX = "xlsx"
 
 private fun decodeExcel(archive: Archive): Excel {
     var format: String? = null

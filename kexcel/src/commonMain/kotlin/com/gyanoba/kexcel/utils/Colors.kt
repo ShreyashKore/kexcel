@@ -68,12 +68,6 @@ internal fun String.toExcelColor(): ExcelColor = when {
     else                  -> ExcelColor.black
 }
 
-/**
- * Validates a color hex string and returns it unchanged if valid, or [ExcelColor.black]'s hex if not.
- */
-internal fun _isColorAppropriate(colorHex: String): String =
-    if (assertHexString(colorHex) || colorHex == "none") colorHex else ExcelColor.black.colorHex
-
 // endregion
 
 // region --- ExcelColor ---
@@ -426,7 +420,7 @@ public class ExcelColor private constructor(
         }
 
         internal val valuesAsMap: Map<String, ExcelColor> by lazy {
-            values.associate { it.colorHex to it }
+            values.associateBy { it.colorHex }
         }
     }
 

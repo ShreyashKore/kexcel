@@ -1,8 +1,10 @@
 package com.gyanoba.kexcel.sheet
 
 import com.gyanoba.kexcel.shared_strings.TextSpan
+import com.gyanoba.kexcel.utils.twoDigits
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.number
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.microseconds
@@ -162,10 +164,10 @@ public class DateCellValue(
 
     public companion object {
         public fun fromLocalDateTime(dt: LocalDateTime): DateCellValue =
-            DateCellValue(year = dt.year, month = dt.monthNumber, day = dt.dayOfMonth)
+            DateCellValue(year = dt.year, month = dt.month.number, day = dt.day)
 
         public fun fromLocalDate(dt: LocalDate): DateCellValue =
-            DateCellValue(year = dt.year, month = dt.monthNumber, day = dt.dayOfMonth)
+            DateCellValue(year = dt.year, month = dt.month.number, day = dt.day)
     }
 
     public fun asLocalDate(): LocalDate = LocalDate(year, month, day)
@@ -296,8 +298,8 @@ public class DateTimeCellValue(
     public companion object {
         public fun fromLocalDateTime(dt: LocalDateTime): DateTimeCellValue = DateTimeCellValue(
             year = dt.year,
-            month = dt.monthNumber,
-            day = dt.dayOfMonth,
+            month = dt.month.number,
+            day = dt.day,
             hour = dt.hour,
             minute = dt.minute,
             second = dt.second,
@@ -347,11 +349,5 @@ public class DateTimeCellValue(
                 other.millisecond == millisecond &&
                 other.microsecond == microsecond
 }
-
-// endregion
-
-// region --- Helpers ---
-
-private fun twoDigits(n: Int): String = if (n < 10) "0$n" else "$n"
 
 // endregion

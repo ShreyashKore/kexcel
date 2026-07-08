@@ -1,3 +1,5 @@
+@file:Suppress("EnumEntryName")
+
 package com.gyanoba.kexcel.sheet
 
 public enum class FontFamily {

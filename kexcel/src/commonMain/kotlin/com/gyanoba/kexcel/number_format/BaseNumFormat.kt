@@ -12,6 +12,7 @@ import com.gyanoba.kexcel.sheet.TimeCellValue
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.milliseconds
@@ -338,12 +339,12 @@ public sealed class TimeNumFormat(override val formatCode: String) : BaseNumForm
         val utcDate = Instant.fromEpochMilliseconds(DATE_OFFSET_MILLIS + deltaMs)
             .toLocalDateTime(TimeZone.UTC)
         return if (!v.contains('.') || v.endsWith(".0")) {
-            DateCellValue(year = utcDate.year, month = utcDate.monthNumber, day = utcDate.dayOfMonth)
+            DateCellValue(year = utcDate.year, month = utcDate.month.number, day = utcDate.day)
         } else {
             DateTimeCellValue(
                 year = utcDate.year,
-                month = utcDate.monthNumber,
-                day = utcDate.dayOfMonth,
+                month = utcDate.month.number,
+                day = utcDate.day,
                 hour = utcDate.hour,
                 minute = utcDate.minute,
                 second = utcDate.second,

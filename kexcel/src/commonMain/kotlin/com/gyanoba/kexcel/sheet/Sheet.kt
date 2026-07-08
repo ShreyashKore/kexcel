@@ -2,7 +2,10 @@ package com.gyanoba.kexcel.sheet
 
 import com.gyanoba.kexcel.Excel
 import com.gyanoba.kexcel.number_format.NumFormat
+import com.gyanoba.kexcel.utils.EXCEL_DEFAULT_COLUMN_WIDTH
+import com.gyanoba.kexcel.utils.EXCEL_DEFAULT_ROW_HEIGHT
 import com.gyanoba.kexcel.utils.Span
+import com.gyanoba.kexcel.utils.isLocationChangeRequired
 import kotlin.math.max
 
 
@@ -34,9 +37,6 @@ public class Sheet internal constructor(
     internal var _headerFooter: HeaderFooter? = null
 
     internal companion object {
-        const val excelDefaultColumnWidth = 8.43
-        const val excelDefaultRowHeight = 15.0
-
         fun clone(excel: Excel, sheetName: String, oldSheetObject: Sheet): Sheet {
             return Sheet(
                 excel,
@@ -161,7 +161,6 @@ public class Sheet internal constructor(
         }
 
     public fun selectRangeWithString(range: String): List<List<Data?>?> {
-        val _selectedRange = mutableListOf<List<Data?>?>()
         if (!range.contains(':')) {
             val start = CellIndex.indexByString(range)
             return selectRange(start)
@@ -197,9 +196,9 @@ public class Sheet internal constructor(
             }
         }
 
-        val _selectedRange = mutableListOf<List<Data?>?>()
+        val selectedRange = mutableListOf<List<Data?>?>()
         if (sheetData.isEmpty()) {
-            return _selectedRange
+            return selectedRange
         }
 
         for (i in startRow..(endRow ?: maxRows)) {
@@ -209,17 +208,16 @@ public class Sheet internal constructor(
                 for (j in startColumn..(endColumn ?: maxColumns)) {
                     row.add(mapData[j])
                 }
-                _selectedRange.add(row)
+                selectedRange.add(row)
             } else {
-                _selectedRange.add(null)
+                selectedRange.add(null)
             }
         }
 
-        return _selectedRange
+        return selectedRange
     }
 
     public fun selectRangeValuesWithString(range: String): List<List<Any?>> {
-        val _selectedRange = mutableListOf<List<Any?>>()
         if (!range.contains(':')) {
             val start = CellIndex.indexByString(range)
             return selectRangeValues(start)
@@ -270,9 +268,9 @@ public class Sheet internal constructor(
         for (i in 0 until this@Sheet.spanList.size) {
             val spanObj = this@Sheet.spanList[i] ?: continue
             var startColumn = spanObj.columnSpanStart
-            var startRow = spanObj.rowSpanStart
+            val startRow = spanObj.rowSpanStart
             var endColumn = spanObj.columnSpanEnd
-            var endRow = spanObj.rowSpanEnd
+            val endRow = spanObj.rowSpanEnd
 
             if (columnIndex <= endColumn) {
                 if (columnIndex < startColumn) {
@@ -349,9 +347,9 @@ public class Sheet internal constructor(
         for (i in 0 until this@Sheet.spanList.size) {
             val spanObj = this@Sheet.spanList[i] ?: continue
             var startColumn = spanObj.columnSpanStart
-            var startRow = spanObj.rowSpanStart
+            val startRow = spanObj.rowSpanStart
             var endColumn = spanObj.columnSpanEnd
-            var endRow = spanObj.rowSpanEnd
+            val endRow = spanObj.rowSpanEnd
 
             if (columnIndex <= endColumn) {
                 if (columnIndex <= startColumn) {
@@ -426,9 +424,9 @@ public class Sheet internal constructor(
 
         for (i in 0 until this@Sheet.spanList.size) {
             val spanObj = this@Sheet.spanList[i] ?: continue
-            var startColumn = spanObj.columnSpanStart
+            val startColumn = spanObj.columnSpanStart
             var startRow = spanObj.rowSpanStart
-            var endColumn = spanObj.columnSpanEnd
+            val endColumn = spanObj.columnSpanEnd
             var endRow = spanObj.rowSpanEnd
 
             if (rowIndex <= endRow) {
@@ -499,9 +497,9 @@ public class Sheet internal constructor(
         _spannedItems = mutableListOf()
         for (i in 0 until this@Sheet.spanList.size) {
             val spanObj = this@Sheet.spanList[i] ?: continue
-            var startColumn = spanObj.columnSpanStart
+            val startColumn = spanObj.columnSpanStart
             var startRow = spanObj.rowSpanStart
-            var endColumn = spanObj.columnSpanEnd
+            val endColumn = spanObj.columnSpanEnd
             var endRow = spanObj.rowSpanEnd
 
             if (rowIndex <= endRow) {
@@ -690,18 +688,18 @@ public class Sheet internal constructor(
     }
 
     public fun setMergedCellStyle(start: CellIndex, mergedCellStyle: CellStyle) {
-        val _mergedCells = this@Sheet.spannedItems.map { e ->
+        val mergedCells = this@Sheet.spannedItems.map { e ->
             e.split(":").map { CellIndex.indexByString(it) }
         }
 
-        val _startIndices = _mergedCells.map { it[0] }
-        val _endIndices = _mergedCells.map { it[1] }
+        val startIndices = mergedCells.map { it[0] }
+        val endIndices = mergedCells.map { it[1] }
 
-        if (_mergedCells.isEmpty() || start.columnIndex < 0 || start.rowIndex < 0 || !_startIndices.contains(start)) {
+        if (mergedCells.isEmpty() || start.columnIndex < 0 || start.rowIndex < 0 || !startIndices.contains(start)) {
             return
         }
 
-        val end = _endIndices[_startIndices.indexOf(start)]
+        val end = endIndices[startIndices.indexOf(start)]
 
         val hasBorder = mergedCellStyle.topBorder != Border() || mergedCellStyle.bottomBorder != Border() || mergedCellStyle.leftBorder != Border() || mergedCellStyle.rightBorder != Border() || mergedCellStyle.diagonalBorderUp || mergedCellStyle.diagonalBorderDown
         if (hasBorder) {
@@ -769,11 +767,11 @@ public class Sheet internal constructor(
 
             val locationChange = isLocationChangeRequired(startColumn, startRow, endColumn, endRow, spanObj)
 
-            if (locationChange.first) {
-                startColumn = locationChange.second[0]
-                startRow = locationChange.second[1]
-                endColumn = locationChange.second[2]
-                endRow = locationChange.second[3]
+            if (locationChange.changed) {
+                startColumn = locationChange.bounds.startColumn
+                startRow = locationChange.bounds.startRow
+                endColumn = locationChange.bounds.endColumn
+                endRow = locationChange.bounds.endRow
                 val sp = getSpanCellId(spanObj.columnSpanStart, spanObj.rowSpanStart, spanObj.columnSpanEnd, spanObj.rowSpanEnd)
                 if (_spannedItems.contains(sp)) {
                     _spannedItems.remove(sp)
@@ -839,15 +837,15 @@ public class Sheet internal constructor(
             }
         } else {
             selfCorrectSpanMap(excel)
-            val _spanObjectsList = getSpannedObjects(rowIndex, columnIndex)
+            val spanObjectsList = getSpannedObjects(rowIndex, columnIndex)
 
-            if (_spanObjectsList.isEmpty()) {
+            if (spanObjectsList.isEmpty()) {
                 while (currentRowPosition <= maxIterationIndex) {
                     putData(rowIndex, columnIndex++, row[currentRowPosition++])
                 }
             } else {
                 while (currentRowPosition <= maxIterationIndex) {
-                    if (isInsideSpanObject(_spanObjectsList, columnIndex, rowIndex)) {
+                    if (isInsideSpanObject(spanObjectsList, columnIndex, rowIndex)) {
                         putData(rowIndex, columnIndex, row[currentRowPosition++])
                     }
                     columnIndex++
@@ -910,12 +908,12 @@ public class Sheet internal constructor(
         return _rowHeights[rowIndex] ?: _defaultRowHeight!!
     }
 
-    public fun setDefaultColumnWidth(columnWidth: Double = excelDefaultColumnWidth) {
+    public fun setDefaultColumnWidth(columnWidth: Double = EXCEL_DEFAULT_COLUMN_WIDTH) {
         if (columnWidth < 0) return
         _defaultColumnWidth = columnWidth
     }
 
-    public fun setDefaultRowHeight(rowHeight: Double = excelDefaultRowHeight) {
+    public fun setDefaultRowHeight(rowHeight: Double = EXCEL_DEFAULT_ROW_HEIGHT) {
         if (rowHeight < 0) return
         _defaultRowHeight = rowHeight
     }
@@ -1088,12 +1086,12 @@ public class Sheet internal constructor(
             return emptyList()
         }
         if (rowIndex < _maxRows) {
-            if (sheetData[rowIndex] != null) {
-                return List(_maxColumns) { columnIndex ->
+            return if (sheetData[rowIndex] != null) {
+                List(_maxColumns) { columnIndex ->
                     sheetData[rowIndex]!![columnIndex]
                 }
             } else {
-                return List(_maxColumns) { null }
+                List(_maxColumns) { null }
             }
         }
         return emptyList()
@@ -1127,7 +1125,7 @@ internal fun selfCorrectSpanMap(excel: Excel) {
         if (excel.sheetMap[key] != null &&
             excel.sheetMap[key]!!.spanList.isNotEmpty()
         ) {
-            var spanList = excel.sheetMap[key]!!.spanList.toMutableList()
+            val spanList = excel.sheetMap[key]!!.spanList.toMutableList()
 
             for (i in 0..<spanList.size) {
                 val checkerPos = spanList[i] ?: continue
@@ -1142,11 +1140,11 @@ internal fun selfCorrectSpanMap(excel: Excel) {
                     val locationChange = isLocationChangeRequired(
                         startColumn, startRow, endColumn, endRow, spanObj
                     )
-                    if (locationChange.first) {
-                        startColumn = locationChange.second[0]
-                        startRow = locationChange.second[1]
-                        endColumn = locationChange.second[2]
-                        endRow = locationChange.second[3]
+                    if (locationChange.changed) {
+                        startColumn = locationChange.bounds.startColumn
+                        startRow = locationChange.bounds.startRow
+                        endColumn = locationChange.bounds.endColumn
+                        endRow = locationChange.bounds.endRow
                         spanList[j] = null
                     } else {
                         val locationChange2 = isLocationChangeRequired(
@@ -1157,12 +1155,12 @@ internal fun selfCorrectSpanMap(excel: Excel) {
                             checkerPos
                         )
 
-                        if (locationChange2.first) {
-                            startColumn = locationChange2.second[0]
-                            startRow = locationChange2.second[1]
-                            endColumn = locationChange2.second[2]
-                            endRow = locationChange2.second[3]
-                            spanList[j] = null;
+                        if (locationChange2.changed) {
+                            startColumn = locationChange2.bounds.startColumn
+                            startRow = locationChange2.bounds.startRow
+                            endColumn = locationChange2.bounds.endColumn
+                            endRow = locationChange2.bounds.endRow
+                            spanList[j] = null
                         }
                     }
                 }
@@ -1171,17 +1169,11 @@ internal fun selfCorrectSpanMap(excel: Excel) {
                     columnSpanStart = startColumn,
                     rowSpanEnd = endRow,
                     columnSpanEnd = endColumn,
-                );
+                )
                 spanList[i] = spanObj1
             }
             excel.sheetMap[key]!!.spanList = spanList.toMutableList()
             excel.sheetMap[key]!!.cleanUpSpanMap()
         }
     }
-}
-
-internal fun isLocationChangeRequired(startColumn: Int, startRow: Int, endColumn: Int, endRow: Int, spanObj: Span): Pair<Boolean, List<Int>> {
-    // Implement based on original logic, assuming it's a method that checks if location changes
-    // For now, return false and original positions
-    return Pair(false, listOf(startColumn, startRow, endColumn, endRow))
 }
