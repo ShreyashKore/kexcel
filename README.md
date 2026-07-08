@@ -1,10 +1,32 @@
 # Kexcel
 
+[![latest version](https://img.shields.io/maven-central/v/com.gyanoba.kexcel/kexcel?color=blue&label=Version)](https://central.sonatype.com/artifact/com.gyanoba.kexcel/kexcel)
+
 > ⚠️ **Experimental** — Kexcel is under active development. The API is unstable and may change without notice.
 
 A **Kotlin Multiplatform** library for working with Excel (`.xlsx`) files. Written in **pure Kotlin** with no platform-specific dependencies.
 
 Kexcel is a Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel) library by [justkawal](https://github.com/justkawal).
+
+## Installation
+
+Add Kexcel to your project.
+
+### Gradle (Kotlin DSL)
+
+```kotlin
+dependencies {
+    implementation("com.gyanoba.kexcel:kexcel:0.0.1")
+}
+```
+
+### Gradle (Groovy)
+
+```groovy
+dependencies {
+    implementation 'com.gyanoba.kexcel:kexcel:0.0.1'
+}
+```
 
 ## Getting Started
 
@@ -35,6 +57,6 @@ val excel = Excel.decodeStream(inputStream)
 
 ### Run Sample App
 
- - Desktop JVM: `./gradlew :sample:desktopApp:run`
- - Android: open the project in Android Studio and run the `sample/androidApp` configuration
- - iOS: open `sample/iosApp/iosApp.xcodeproj` in Xcode and run
+- Desktop JVM: `./gradlew :sample:desktopApp:run`
+- Android: Open the project in Android Studio and run the `sample/androidApp` configuration.
+- iOS: Open `sample/iosApp/iosApp.xcodeproj` in Xcode and run.
