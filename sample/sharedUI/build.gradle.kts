@@ -24,7 +24,12 @@ kotlin {
             api(libs.compose.runtime)
             api(libs.compose.ui)
             api(libs.compose.foundation)
+            implementation(libs.kotlinx.coroutines.core)
             implementation(project(":kexcel"))
+        }
+        jvmMain.dependencies {
+            // Swing dispatcher, used by the JVM file-dialog implementation.
+            implementation(libs.kotlinx.coroutines.swing)
         }
     }
 

@@ -19,7 +19,6 @@ import com.gyanoba.kexcel.utils.SPREADSHEET_XLSX
 import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.readZipArchive
-import com.gyanoba.kexcel.web_helper.SavingHelper
 import no.synth.kmpzip.io.ByteArrayInputStream
 import no.synth.kmpzip.io.InputStream
 import kotlin.io.encoding.Base64
@@ -242,15 +241,6 @@ public class Excel internal constructor(internal var archive: Archive) {
     public fun encode(): ByteArray? {
         val s = Save(this, parser)
         return s.save()
-    }
-
-    /**
-     * Saves the file and returns its bytes.
-     */
-    public fun save(fileName: String = "FlutterExcel.xlsx"): ByteArray? {
-        val s = Save(this, parser)
-        val onValue = s.save()
-        return SavingHelper.saveFile(onValue, fileName)
     }
 
     /**

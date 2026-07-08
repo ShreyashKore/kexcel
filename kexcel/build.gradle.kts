@@ -70,7 +70,7 @@ android {
 // in gradle.properties, read automatically by the maven-publish plugin.
 mavenPublishing {
     publishToMavenCentral()
-    coordinates("com.gyanoba.kexcel", "kexcel", "0.0.1")
+    coordinates("com.gyanoba.kexcel", "kexcel", "0.0.2")
     // Maven Central rejects unsigned releases. Sign whenever credentials are
     // present: `signing.keyId` for a local GPG keyring (see README) or
     // `signingInMemoryKey` from the ORG_GRADLE_PROJECT_* env vars used in CI.

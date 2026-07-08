@@ -88,7 +88,7 @@ class ExcelInMemoryTest {
             )
         )
 
-        val fileBytes = excel.save()
+        val fileBytes = excel.encode()
         assertNotNull(fileBytes)
 
         val newExcel = Excel.decodeBytes(fileBytes)
@@ -134,7 +134,7 @@ class ExcelInMemoryTest {
     @Test
     fun saveEmptyWorkbook() {
         val excel = Excel.createExcel()
-        assertNotNull(excel.save())
+        assertNotNull(excel.encode())
     }
 
     // Dart: '.xls file handling' group -> 'Sheet Remove and Rename Operations'
