@@ -19,10 +19,10 @@ kotlin {
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
     }
 //    js { browser() }
-//    wasmJs { browser() }
+    wasmJs { browser() }
     iosArm64()
     iosSimulatorArm64()
-//    macosArm64()
+    macosArm64()
 //    linuxX64()
 //    mingwX64()
 
@@ -41,15 +41,6 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
         }
-
-        androidMain.dependencies {
-            implementation(libs.kotlinx.coroutines.android)
-        }
-
-        jvmMain.dependencies {
-            implementation(libs.kotlinx.coroutines.swing)
-        }
-
     }
 }
 

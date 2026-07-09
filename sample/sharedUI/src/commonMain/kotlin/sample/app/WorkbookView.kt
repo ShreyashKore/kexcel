@@ -1,6 +1,9 @@
 package sample.app
 
 import com.gyanoba.kexcel.Excel
+import io.github.vinceglb.filekit.PlatformFile
+import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.readBytes
 
 /** One sheet reduced to plain strings, ready to render as text. */
 data class SheetView(
@@ -27,9 +30,10 @@ class OpenedWorkbook(
  * Large sheets are capped at [maxRows] x [maxCols] cells for display only —
  * the returned [OpenedWorkbook.excel] still holds the full, unmodified workbook.
  */
-fun openWorkbook(picked: PickedFile, maxRows: Int = 100, maxCols: Int = 26): OpenedWorkbook {
+suspend fun openWorkbook(picked: PlatformFile, maxRows: Int = 100, maxCols: Int = 26): OpenedWorkbook {
     // Decode the raw .xlsx bytes into Kexcel's in-memory model.
-    val excel = Excel.decodeBytes(picked.bytes)
+    val bytes = picked.readBytes()
+    val excel = Excel.decodeBytes(bytes)
 
     val sheets = excel.getSheets().map { (name, sheet) ->
         val rows = sheet.rows.take(maxRows).map { row ->

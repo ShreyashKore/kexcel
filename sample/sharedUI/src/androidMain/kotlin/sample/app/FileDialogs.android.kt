@@ -1,11 +1,12 @@
 package sample.app
 
-// File dialogs are not wired up on Android in this minimal sample.
-// A real implementation would use ActivityResultContracts.OpenDocument /
-// CreateDocument together with the current Activity's ContentResolver.
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.dialogs.openFileSaver
+import io.github.vinceglb.filekit.path
+import io.github.vinceglb.filekit.write
 
-actual val fileDialogsSupported: Boolean = false
-
-actual suspend fun openXlsxFile(): PickedFile? = null
-
-actual suspend fun saveXlsxFile(suggestedName: String, bytes: ByteArray): String? = null
+actual suspend fun saveXlsxFile(suggestedName: String, bytes: ByteArray): String? {
+    val file = FileKit.openFileSaver(suggestedName, defaultExtension = "xlsx")
+    file?.write(bytes)
+    return file?.path
+}

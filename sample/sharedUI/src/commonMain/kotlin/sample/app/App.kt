@@ -32,6 +32,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.dialogs.openFilePicker
+import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.size
 import kotlinx.coroutines.launch
 
 private val Background = Color(0xFF1E1E1E)
@@ -86,27 +90,18 @@ private fun OpenFileSection() {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
     ) {
-        if (!fileDialogsSupported) {
-            BasicText(
-                "File open/save dialogs are implemented for Desktop (JVM) only in this sample. " +
-                    "Run it with:  ./gradlew :sample:desktopApp:run",
-                style = SubtitleStyle,
-            )
-            Spacer(Modifier.height(14.dp))
-        }
-
         Row {
-            ActionButton(if (busy) "Working…" else "Open .xlsx…", enabled = fileDialogsSupported && !busy) {
+            ActionButton(if (busy) "Working…" else "Open .xlsx…") {
                 scope.launch {
                     busy = true
                     status = ""
                     try {
-                        val picked = openXlsxFile()
+                        val picked = FileKit.openFilePicker()
                         if (picked == null) {
                             status = "Open cancelled."
                         } else {
                             opened = openWorkbook(picked)
-                            status = "Opened '${picked.name}' (${picked.bytes.size} bytes) and decoded it with Kexcel."
+                            status = "Opened '${picked.name}' (${picked.size()} bytes) and decoded it with Kexcel."
                         }
                     } catch (t: Throwable) {
                         opened = null
@@ -120,7 +115,7 @@ private fun OpenFileSection() {
             val current = opened
             if (current != null) {
                 Spacer(Modifier.width(12.dp))
-                ActionButton("Save decoded-encoded…", enabled = fileDialogsSupported && !busy) {
+                ActionButton("Save decoded-encoded…") {
                     scope.launch {
                         busy = true
                         try {
@@ -239,12 +234,12 @@ private fun RowScope.TabButton(label: String, selected: Boolean, onClick: () -> 
 }
 
 @Composable
-private fun ActionButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+private fun ActionButton(text: String, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(if (enabled) Accent else Color(0xFF3A3A3A))
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .background(Accent)
+            .then( Modifier.clickable(onClick = onClick))
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         BasicText(

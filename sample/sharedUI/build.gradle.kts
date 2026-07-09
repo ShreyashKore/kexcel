@@ -15,9 +15,10 @@ kotlin {
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
     }
 //    js { browser() }
-//    wasmJs { browser() }
+    wasmJs { browser() }
     iosArm64()
     iosSimulatorArm64()
+    macosArm64()
 
     sourceSets {
         commonMain.dependencies {
@@ -25,11 +26,10 @@ kotlin {
             api(libs.compose.ui)
             api(libs.compose.foundation)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.filekit.core)
+            implementation(libs.filekit.dialogs)
+
             implementation(project(":kexcel"))
-        }
-        jvmMain.dependencies {
-            // Swing dispatcher, used by the JVM file-dialog implementation.
-            implementation(libs.kotlinx.coroutines.swing)
         }
     }
 
