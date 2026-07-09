@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.maven.publish)
     alias(libs.plugins.kotlinx.serialization)
+    alias(libs.plugins.dokka)
 }
 
 kotlin {
@@ -67,5 +68,28 @@ mavenPublishing {
     // `signingInMemoryKey` from the ORG_GRADLE_PROJECT_* env vars used in CI.
     if (project.hasProperty("signing.keyId") || project.hasProperty("signingInMemoryKey")) {
         signAllPublications()
+    }
+}
+
+// API reference generation. `./gradlew :kexcel:dokkaGenerate` renders HTML into
+// `kexcel/build/dokka/html`; the docs workflow copies that into the MkDocs site
+// under `/api`. See docs/ and mkdocs.yml.
+dokka {
+    moduleName.set("Kexcel")
+
+    dokkaSourceSets.configureEach {
+        // Prose that heads the generated API index (see kexcel/Module.md).
+        includes.from("Module.md")
+
+        // Turn each documented declaration into a link back to its source on GitHub.
+        sourceLink {
+            localDirectory.set(rootDir)
+            remoteUrl("https://github.com/ShreyashKore/kexcel/tree/main")
+            remoteLineSuffix.set("#L")
+        }
+    }
+
+    pluginsConfiguration.html {
+        footerMessage.set("Kexcel — a pure Kotlin Multiplatform library for .xlsx files")
     }
 }

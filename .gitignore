@@ -16,3 +16,8 @@ Pods/
 *.gpg
 *yarn.lock
 deploy.sh
+
+# Docs site (Material for MkDocs + Dokka)
+/site
+/docs/api
+.cache
