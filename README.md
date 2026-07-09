@@ -1,6 +1,12 @@
+<img src="art/logo.png" alt="Kexcel logo" align="left" width="84" height="84" hspace="16" />
+
 # Kexcel
 
+Read and write Excel (`.xlsx`) files from Kotlin Multiplatform.
+
 [![latest version](https://img.shields.io/maven-central/v/com.gyanoba.kexcel/kexcel?color=blue&label=Version)](https://central.sonatype.com/artifact/com.gyanoba.kexcel/kexcel)
+
+<br clear="left" />
 
 > ⚠️ **Experimental** — Kexcel is under active development. The API is unstable and may change without notice.
 
