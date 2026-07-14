@@ -5,10 +5,14 @@
 Read and write Excel (`.xlsx`) files from Kotlin Multiplatform.
 
 [![latest version](https://img.shields.io/maven-central/v/com.gyanoba.kexcel/kexcel?color=blue&label=Version)](https://central.sonatype.com/artifact/com.gyanoba.kexcel/kexcel)
+[![Documentation](https://img.shields.io/badge/docs-online-4CAF50?logo=materialformkdocs&logoColor=white)](https://shreyashkore.github.io/kexcel/)
 
 <br clear="left" />
 
 > ⚠️ **Experimental** — Kexcel is under active development. The API is unstable and may change without notice.
+
+📖 **Documentation:** guides, tutorials and the full API reference live at
+**[shreyashkore.github.io/kexcel](https://shreyashkore.github.io/kexcel/)**.
 
 A **Kotlin Multiplatform** library for working with Excel (`.xlsx`) files. Written in **pure Kotlin** with no platform-specific dependencies.
 
@@ -273,6 +277,12 @@ File("out.xlsx").writeBytes(bytes) // Write to disk to save as a .xlsx file
 ```
 
 ## Documentation
+
+Full documentation is hosted at **[shreyashkore.github.io/kexcel](https://shreyashkore.github.io/kexcel/)**:
+
+- **[Getting Started](https://shreyashkore.github.io/kexcel/getting-started/installation/)** — installation and a quick-start walkthrough.
+- **[Guides](https://shreyashkore.github.io/kexcel/guides/workbooks-and-sheets/)** — task-focused pages for values, styling, formulas, merging, saving and more.
+- **[API Reference](https://shreyashkore.github.io/kexcel/api/)** — the full generated Dokka reference.
 
 The [Usage](#usage) section above covers the common operations. For a full,
 runnable tour of the API see the sample app source in
