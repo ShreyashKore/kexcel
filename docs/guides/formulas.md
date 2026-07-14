@@ -1,3 +1,9 @@
+---
+description: >-
+  Write Excel formulas such as =SUM(A1:A10) into .xlsx cells from Kotlin
+  Multiplatform with FormulaCellValue.
+---
+
 # Formulas
 
 Kexcel stores formulas as strings; it does **not** evaluate them. The spreadsheet

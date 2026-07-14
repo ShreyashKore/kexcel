@@ -1,15 +1,26 @@
 ---
-title: Kexcel
+title: Kotlin Multiplatform Excel Library
+description: >-
+  Kexcel is a pure Kotlin Multiplatform library to read and write Excel (.xlsx)
+  files on JVM, Android and iOS — an Apache POI alternative with no JVM-only
+  dependencies.
 ---
 
-# Kexcel
+# Kexcel — Excel (`.xlsx`) for Kotlin Multiplatform
 
 [![Maven Central](https://img.shields.io/maven-central/v/com.gyanoba.kexcel/kexcel?color=blue&label=Maven%20Central)](https://central.sonatype.com/artifact/com.gyanoba.kexcel/kexcel)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/docs/multiplatform.html)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-A **Kotlin Multiplatform** library for reading and writing Excel (`.xlsx`) files,
-written in **pure Kotlin** with no platform-specific dependencies.
+**Kexcel** is a **Kotlin Multiplatform** library for **reading and writing Excel
+spreadsheets** (`.xlsx`, the Office Open XML format) — written in **pure Kotlin**,
+with no platform-specific dependencies.
+
+Because it doesn't wrap **Apache POI** — or any other JVM library — the *same*
+spreadsheet code compiles and runs on **JVM, Android and iOS**. That makes it a
+practical **Apache POI alternative** for Kotlin Multiplatform (KMP/KMM) and
+Compose Multiplatform apps, which otherwise have no way to touch `.xlsx` files
+outside the JVM.
 
 Kexcel is a Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel)
 library by [justkawal](https://github.com/justkawal).
@@ -86,6 +97,40 @@ val bytes: ByteArray? = excel.encode()
   reference.
 
 </div>
+
+## Frequently asked questions
+
+### Does Kexcel use Apache POI?
+
+No. Kexcel is written in pure Kotlin and depends only on multiplatform libraries
+([`kmp-zip`](https://github.com/henrik242/kmp-zip) for the ZIP container and
+[Ksoup](https://github.com/fleeksoft/ksoup) for XML). That is precisely why it
+runs outside the JVM — Apache POI, and every Kotlin wrapper built on it, is
+JVM-only.
+
+### Can I read and write Excel files on Android and iOS?
+
+Yes. JVM, Android and iOS (`iosArm64`, `iosSimulatorArm64`) are published
+targets, so the same `commonMain` code works on all of them — including in a
+Compose Multiplatform app.
+
+### Which file formats are supported?
+
+`.xlsx` (Office Open XML) only — the format Excel 2007 and later, Google Sheets,
+Numbers and LibreOffice all write. The legacy binary `.xls` format is not
+supported.
+
+### Can it do styling, formulas and merged cells?
+
+Yes — see [Cell Styling](guides/styling.md), [Formulas](guides/formulas.md) and
+[Merging Cells](guides/merging.md). Number formats, column widths, row heights
+and find-and-replace are covered in the guides too.
+
+### Does it need the filesystem?
+
+No. [`encode()`](guides/saving.md) returns the workbook as a `ByteArray`, so you
+can round-trip a spreadsheet entirely in memory and hand the bytes to whatever
+storage, network or file API your platform provides.
 
 ## License
 

@@ -2,23 +2,45 @@
 
 # Kexcel
 
-Read and write Excel (`.xlsx`) files from Kotlin Multiplatform.
+**Read and write Excel (`.xlsx`) spreadsheets from Kotlin Multiplatform — pure Kotlin, no Apache POI.**
 
 [![latest version](https://img.shields.io/maven-central/v/com.gyanoba.kexcel/kexcel?color=blue&label=Version)](https://central.sonatype.com/artifact/com.gyanoba.kexcel/kexcel)
 [![Documentation](https://img.shields.io/badge/docs-online-4CAF50?logo=materialformkdocs&logoColor=white)](https://shreyashkore.github.io/kexcel/)
+[![Kotlin Multiplatform](https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/docs/multiplatform.html)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 <br clear="left" />
 
+![Platforms: JVM | Android | iOS](https://img.shields.io/badge/Platforms-JVM%20%7C%20Android%20%7C%20iOS-blue)
+
 > ⚠️ **Experimental** — Kexcel is under active development. The API is unstable and may change without notice.
+
+**Kexcel** is a **Kotlin Multiplatform** library for **reading and writing Excel files** (`.xlsx`,
+the Office Open XML spreadsheet format). It is written in **pure Kotlin** with no platform-specific
+dependencies, so the same spreadsheet code runs on **JVM, Android and iOS** — including inside a
+**Compose Multiplatform** app.
+
+Every other Kotlin Excel library is a wrapper around **Apache POI**, which is JVM-only. Kexcel
+parses and writes the `.xlsx` format itself, which makes it a usable **Apache POI alternative** for
+KMP/KMM projects that need spreadsheets outside the JVM.
 
 📖 **Documentation:** guides, tutorials and the full API reference live at
 **[shreyashkore.github.io/kexcel](https://shreyashkore.github.io/kexcel/)**.
 
-A **Kotlin Multiplatform** library for working with Excel (`.xlsx`) files. Written in **pure Kotlin** with no platform-specific dependencies.
-
 Kexcel is a Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel) library by [justkawal](https://github.com/justkawal).
 
-Supported targets: **JVM**, **Android**, **iOS** (`iosArm64`, `iosSimulatorArm64`).
+## Features
+
+- 📄 **Read and write `.xlsx`** — parse an existing workbook, edit it, write it back out.
+- 🌍 **Truly multiplatform** — JVM, Android, iOS (`iosArm64`, `iosSimulatorArm64`) published today; `wasmJs` and `macosArm64` build.
+- 🚫 **No Apache POI, no JVM-only APIs** — pure Kotlin, so it works in `commonMain`.
+- 🎨 **Cell styling** — fonts, colors, bold/italic/underline, alignment and borders.
+- 🔢 **Number, date and time formats** — built-in and custom format strings.
+- 🧮 **Formulas** — write formula cells like `=SUM(A1:A10)`.
+- ↔️ **Rows, columns and merged cells** — insert, remove, append, merge and unmerge.
+- 📐 **Column widths & row heights** — including auto-fit.
+- 🔍 **Find and replace** — regex-based, across a sheet.
+- 💾 **In-memory round-trips** — `encode()` returns `ByteArray`; no filesystem access required.
 
 ## Installation
 
@@ -303,3 +325,43 @@ The sample app runs each API example and prints the results.
 - Build the library: `./gradlew :kexcel:build`
 - Run all tests: `./gradlew :kexcel:allTests`
 - JVM tests only (fastest): `./gradlew :kexcel:jvmTest`
+
+## FAQ
+
+### Does Kexcel use Apache POI?
+
+No. Kexcel is pure Kotlin and depends only on multiplatform libraries — [`kmp-zip`](https://github.com/henrik242/kmp-zip)
+for the ZIP container and [Ksoup](https://github.com/fleeksoft/ksoup) for XML. That is why it runs
+outside the JVM: Apache POI, and every Kotlin wrapper built on top of it, is JVM-only.
+
+### Can I read and write Excel files on Android and iOS?
+
+Yes. JVM, Android and iOS are published targets, so the same `commonMain` code works on all of
+them — including in a Compose Multiplatform app.
+
+### Does it support `.xls`?
+
+No — only `.xlsx` (Office Open XML), the format written by Excel 2007 and later, Google Sheets,
+Numbers and LibreOffice. The legacy binary `.xls` format is out of scope.
+
+### Is it production-ready?
+
+Not yet. Kexcel is `0.0.x` and explicitly experimental; the API may change between releases. Bug
+reports and pull requests are very welcome.
+
+## Contributing
+
+Issues and pull requests are welcome — see the [contributing guide](https://shreyashkore.github.io/kexcel/contributing/).
+If Kexcel is useful to you, a ⭐ helps other people find it.
+
+## License
+
+Kexcel is released under the [MIT License](LICENSE).
+
+---
+
+<sub>
+<b>Keywords:</b> Kotlin Multiplatform Excel library · KMP xlsx · read Excel file in Kotlin · write xlsx in Kotlin ·
+Kotlin spreadsheet library · Apache POI alternative for Kotlin · Excel on Android and iOS ·
+Compose Multiplatform Excel · KMM xlsx parser · Office Open XML in Kotlin
+</sub>

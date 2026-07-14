@@ -1,3 +1,9 @@
+---
+description: >-
+  Add Kexcel to your Kotlin Multiplatform project from Maven Central — Gradle
+  setup for commonMain, JVM, Android and iOS.
+---
+
 # Installation
 
 Kexcel is published to **Maven Central** under the coordinates

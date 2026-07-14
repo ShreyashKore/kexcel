@@ -1,3 +1,9 @@
+---
+description: >-
+  How to build, test and contribute to Kexcel, the Kotlin Multiplatform Excel
+  (.xlsx) library.
+---
+
 # Contributing
 
 Kexcel is a Kotlin Multiplatform library. The library itself lives in the

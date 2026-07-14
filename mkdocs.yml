@@ -1,5 +1,7 @@
 site_name: Kexcel
-site_description: A pure Kotlin Multiplatform library for reading and writing Excel (.xlsx) files.
+site_description: >-
+  Read and write Excel (.xlsx) files from Kotlin Multiplatform — JVM, Android and iOS.
+  Pure Kotlin, no Apache POI, no JVM-only dependencies.
 site_author: Shreyash Kore
 site_url: https://shreyashkore.github.io/kexcel/
 
@@ -12,8 +14,12 @@ copyright: Copyright &copy; 2026 Shreyash Kore
 theme:
   name: material
   language: en
+  # `overrides/main.html` adds the Open Graph / Twitter card tags so links to
+  # the docs unfurl with a preview image on Reddit, Slack, X and LinkedIn.
+  custom_dir: overrides
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   icon:
-    logo: material/file-table
     repo: fontawesome/brands/github
   palette:
     - media: "(prefers-color-scheme)"

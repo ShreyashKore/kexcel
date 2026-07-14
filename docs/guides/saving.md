@@ -1,3 +1,9 @@
+---
+description: >-
+  Serialize an Excel workbook to .xlsx bytes in memory with encode(), and load
+  one back, on JVM, Android and iOS.
+---
+
 # Saving & Loading
 
 Kexcel serializes a workbook to `.xlsx` bytes **in memory** with `encode()`.

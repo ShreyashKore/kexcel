@@ -1,3 +1,9 @@
+---
+description: >-
+  Set Excel column widths, row heights and auto-fit columns from Kotlin
+  Multiplatform.
+---
+
 # Column Widths & Row Heights
 
 Control the size of columns and rows, or ask Excel to auto-fit a column. These are

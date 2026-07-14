@@ -1,3 +1,9 @@
+---
+description: >-
+  Read and write typed Excel cell values — text, numbers, booleans, dates and
+  formulas — from Kotlin Multiplatform.
+---
+
 # Reading & Writing Cells
 
 Every cell value in Kexcel is wrapped in a **`CellValue`** — a sealed hierarchy of

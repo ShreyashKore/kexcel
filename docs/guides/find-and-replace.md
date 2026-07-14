@@ -1,3 +1,9 @@
+---
+description: >-
+  Regex-based find and replace across an Excel sheet from Kotlin Multiplatform,
+  using Kexcel's findAndReplace.
+---
+
 # Find & Replace
 
 `findAndReplace` replaces text across a sheet and returns the number of

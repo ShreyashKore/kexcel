@@ -1,3 +1,9 @@
+---
+description: >-
+  Style Excel cells — fonts, colors, bold, italic, alignment and borders — from
+  Kotlin Multiplatform with CellStyle.
+---
+
 # Cell Styling
 
 Pass a **`CellStyle`** when updating a cell to control colors, fonts, alignment,

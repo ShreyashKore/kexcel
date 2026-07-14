@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {% set page_title = page.meta.title if page and page.meta and page.meta.title else (page.title | striptags if page and page.title else config.site_name) %}
+  {% set title = config.site_name if page and page.is_homepage else page_title ~ " – " ~ config.site_name %}
+  {% set description = page.meta.description if page and page.meta and page.meta.description else config.site_description %}
+  {% set image = config.site_url ~ "assets/og-image.png" %}
+  {% set url = page.canonical_url if page else config.site_url %}
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ title }}">
+  <meta property="og:description" content="{{ description | trim }}">
+  <meta property="og:image" content="{{ image }}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="675">
+  <meta property="og:url" content="{{ url }}">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ title }}">
+  <meta name="twitter:description" content="{{ description | trim }}">
+  <meta name="twitter:image" content="{{ image }}">
+
+  {% if page and page.is_homepage %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        "name": "Kexcel",
+        "description": "{{ config.site_description | trim }}",
+        "codeRepository": "{{ config.repo_url }}",
+        "url": "{{ config.site_url }}",
+        "programmingLanguage": "Kotlin",
+        "runtimePlatform": ["Kotlin Multiplatform", "JVM", "Android", "iOS"],
+        "license": "https://opensource.org/licenses/MIT",
+        "author": {
+          "@type": "Person",
+          "name": "{{ config.site_author }}"
+        }
+      }
+    </script>
+  {% endif %}
+{% endblock %}

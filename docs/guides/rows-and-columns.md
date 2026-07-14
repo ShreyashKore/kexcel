@@ -1,3 +1,9 @@
+---
+description: >-
+  Append, insert and remove rows and columns in an Excel spreadsheet from Kotlin
+  Multiplatform.
+---
+
 # Rows & Columns
 
 Kexcel can append, insert and remove whole rows and columns. All indices are

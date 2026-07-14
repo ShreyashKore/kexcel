@@ -1,3 +1,8 @@
+---
+description: >-
+  Merge and unmerge cells in an Excel .xlsx worksheet from Kotlin Multiplatform.
+---
+
 # Merging Cells
 
 Merge a rectangular block of cells into one, and unmerge it later.

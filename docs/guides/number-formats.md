@@ -1,3 +1,9 @@
+---
+description: >-
+  Apply number, currency, percentage, date and time formats to Excel cells from
+  Kotlin Multiplatform, including custom format codes.
+---
+
 # Number Formats
 
 A **number format** controls how a value is *displayed* — it never changes the

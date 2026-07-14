@@ -1,3 +1,9 @@
+---
+description: >-
+  Create, copy, rename and delete worksheets in an Excel workbook from Kotlin
+  Multiplatform.
+---
+
 # Workbooks & Sheets
 
 The [`Excel`](../../api/index.html) object is the whole workbook. A workbook contains one

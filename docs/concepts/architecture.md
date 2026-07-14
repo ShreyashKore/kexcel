@@ -1,3 +1,9 @@
+---
+description: >-
+  How Kexcel parses and writes the .xlsx format in pure Kotlin — the ZIP and XML
+  pipeline that replaces Apache POI on Kotlin Multiplatform.
+---
+
 # How Kexcel Works
 
 An `.xlsx` file is a **ZIP archive of XML parts**. Kexcel reads it into an

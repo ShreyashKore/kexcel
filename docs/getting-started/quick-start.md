@@ -1,3 +1,9 @@
+---
+description: >-
+  Create, edit, save and reload an Excel (.xlsx) workbook in Kotlin
+  Multiplatform — a complete end-to-end walkthrough.
+---
+
 # Quick Start
 
 This page walks through the whole lifecycle: **create → edit → save → reload**.
