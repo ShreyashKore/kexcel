@@ -2,7 +2,7 @@
 
 kotlin = "2.3.20"
 agp = "8.12.3"
-kmpZip = "0.11.3"
+kmpZip = "0.13.0"
 ksoup = "0.2.6"
 maven-publish = "0.34.0"
 kotlinx-coroutines = "1.10.2"
