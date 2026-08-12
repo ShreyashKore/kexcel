@@ -250,7 +250,6 @@ public final class com/gyanoba/kexcel/sheet/BorderStyleKt {
 
 public final class com/gyanoba/kexcel/sheet/CellIndex {
 	public static final field Companion Lcom/gyanoba/kexcel/sheet/CellIndex$Companion;
-	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCellId ()Ljava/lang/String;
 	public final fun getColumnIndex ()I
@@ -319,7 +318,6 @@ public abstract class com/gyanoba/kexcel/sheet/CellValue {
 
 public final class com/gyanoba/kexcel/sheet/Data {
 	public static final field Companion Lcom/gyanoba/kexcel/sheet/Data$Companion;
-	public synthetic fun <init> (Lcom/gyanoba/kexcel/sheet/Sheet;IILcom/gyanoba/kexcel/sheet/CellValue;Lcom/gyanoba/kexcel/sheet/CellStyle;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCellIndex ()Lcom/gyanoba/kexcel/sheet/CellIndex;
 	public final fun getCellStyle ()Lcom/gyanoba/kexcel/sheet/CellStyle;
@@ -669,7 +667,6 @@ public final class com/gyanoba/kexcel/sheet/Sheet {
 
 public final class com/gyanoba/kexcel/sheet/TextCellValue : com/gyanoba/kexcel/sheet/CellValue {
 	public static final field Companion Lcom/gyanoba/kexcel/sheet/TextCellValue$Companion;
-	public synthetic fun <init> (Lcom/gyanoba/kexcel/shared_strings/TextSpan;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun <init> (Ljava/lang/String;)V
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getValue ()Lcom/gyanoba/kexcel/shared_strings/TextSpan;

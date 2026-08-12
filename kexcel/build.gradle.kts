@@ -1,3 +1,8 @@
+@file:OptIn(
+    org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class,
+    org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class,
+)
+
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -14,10 +19,7 @@ kotlin {
 
     // Keep a checked-in ABI baseline for the public library API. CI compares
     // changes against it so published binaries remain compatible for consumers.
-    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
-    abiValidation {
-        enabled.set(true)
-    }
+    abiValidation { }
 
     androidTarget {
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
