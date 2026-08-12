@@ -21,3 +21,4 @@ deploy.sh
 /site
 /docs/api
 .cache
+.claude/worktrees/

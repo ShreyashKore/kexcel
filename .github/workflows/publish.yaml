@@ -71,6 +71,9 @@ jobs:
       - name: Unit tests
         run: ./gradlew :kexcel:jvmTest
 
+      - name: Check Kotlin binary compatibility
+        run: ./gradlew :kexcel:checkKotlinAbi
+
   instrumentation-tests:
     name: Instrumentation tests
     if: false

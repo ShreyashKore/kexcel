@@ -1,0 +1,1067 @@
+public final class com/gyanoba/kexcel/Excel {
+	public static final field Companion Lcom/gyanoba/kexcel/Excel$Companion;
+	public final fun appendRow (Ljava/lang/String;Ljava/util/List;)V
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun delete (Ljava/lang/String;)V
+	public final fun encode ()[B
+	public final fun findAndReplace (Ljava/lang/String;Lkotlin/text/Regex;Ljava/lang/String;IIIII)I
+	public static synthetic fun findAndReplace$default (Lcom/gyanoba/kexcel/Excel;Ljava/lang/String;Lkotlin/text/Regex;Ljava/lang/String;IIIIIILjava/lang/Object;)I
+	public final fun get (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/Sheet;
+	public final fun getDefaultSheet ()Ljava/lang/String;
+	public final fun getMergedCells (Ljava/lang/String;)Ljava/util/List;
+	public final fun getSheets ()Ljava/util/Map;
+	public final fun getTables ()Ljava/util/Map;
+	public final fun insertColumn (Ljava/lang/String;I)V
+	public final fun insertRow (Ljava/lang/String;I)V
+	public final fun insertRowIterables (Ljava/lang/String;Ljava/util/List;IIZ)V
+	public static synthetic fun insertRowIterables$default (Lcom/gyanoba/kexcel/Excel;Ljava/lang/String;Ljava/util/List;IIZILjava/lang/Object;)V
+	public final fun link (Ljava/lang/String;Lcom/gyanoba/kexcel/sheet/Sheet;)V
+	public final fun merge (Ljava/lang/String;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;)V
+	public static synthetic fun merge$default (Lcom/gyanoba/kexcel/Excel;Ljava/lang/String;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;ILjava/lang/Object;)V
+	public final fun removeColumn (Ljava/lang/String;I)V
+	public final fun removeRow (Ljava/lang/String;I)V
+	public final fun rename (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun set (Ljava/lang/String;Lcom/gyanoba/kexcel/sheet/Sheet;)V
+	public final fun setDefaultSheet (Ljava/lang/String;)Z
+	public final fun unLink (Ljava/lang/String;)V
+	public final fun unMerge (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun updateCell (Ljava/lang/String;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;Lcom/gyanoba/kexcel/sheet/CellStyle;)V
+	public static synthetic fun updateCell$default (Lcom/gyanoba/kexcel/Excel;Ljava/lang/String;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;Lcom/gyanoba/kexcel/sheet/CellStyle;ILjava/lang/Object;)V
+}
+
+public final class com/gyanoba/kexcel/Excel$Companion {
+	public final fun createExcel ()Lcom/gyanoba/kexcel/Excel;
+	public final fun decodeBytes ([B)Lcom/gyanoba/kexcel/Excel;
+	public final fun decodeStream (Ljava/io/InputStream;)Lcom/gyanoba/kexcel/Excel;
+}
+
+public abstract class com/gyanoba/kexcel/number_format/BaseNumFormat : com/gyanoba/kexcel/number_format/NumFormat {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public abstract fun accepts (Lcom/gyanoba/kexcel/sheet/CellValue;)Z
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun hashCode ()I
+	public abstract fun read (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/CellValue;
+}
+
+public final class com/gyanoba/kexcel/number_format/CustomDateTimeNumFormat : com/gyanoba/kexcel/number_format/DateTimeNumFormat, com/gyanoba/kexcel/number_format/CustomNumFormat {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/gyanoba/kexcel/number_format/CustomNumFormat : com/gyanoba/kexcel/number_format/NumFormat {
+	public abstract fun getFormatCode ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/number_format/CustomNumericNumFormat : com/gyanoba/kexcel/number_format/NumericNumFormat, com/gyanoba/kexcel/number_format/CustomNumFormat {
+	public fun <init> (Ljava/lang/String;)V
+	public fun accepts (Lcom/gyanoba/kexcel/sheet/CellValue;)Z
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/number_format/CustomTimeNumFormat : com/gyanoba/kexcel/number_format/TimeNumFormat, com/gyanoba/kexcel/number_format/CustomNumFormat {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/gyanoba/kexcel/number_format/DateTimeNumFormat : com/gyanoba/kexcel/number_format/BaseNumFormat {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun accepts (Lcom/gyanoba/kexcel/sheet/CellValue;)Z
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun read (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/CellValue;
+	public final fun writeDate (Lcom/gyanoba/kexcel/sheet/DateCellValue;)Ljava/lang/String;
+	public final fun writeDateTime (Lcom/gyanoba/kexcel/sheet/DateTimeCellValue;)Ljava/lang/String;
+}
+
+public abstract interface class com/gyanoba/kexcel/number_format/NumFormat {
+	public static final field Companion Lcom/gyanoba/kexcel/number_format/NumFormat$Companion;
+	public abstract fun accepts (Lcom/gyanoba/kexcel/sheet/CellValue;)Z
+	public abstract fun getFormatCode ()Ljava/lang/String;
+	public abstract fun read (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/CellValue;
+}
+
+public final class com/gyanoba/kexcel/number_format/NumFormat$Companion {
+	public final fun custom (Ljava/lang/String;)Lcom/gyanoba/kexcel/number_format/CustomNumFormat;
+	public final fun defaultFor (Lcom/gyanoba/kexcel/sheet/CellValue;)Lcom/gyanoba/kexcel/number_format/BaseNumFormat;
+	public final fun getDefaultBool ()Lcom/gyanoba/kexcel/number_format/BaseNumFormat;
+	public final fun getDefaultDate ()Lcom/gyanoba/kexcel/number_format/BaseNumFormat;
+	public final fun getDefaultDateTime ()Lcom/gyanoba/kexcel/number_format/BaseNumFormat;
+	public final fun getDefaultFloat ()Lcom/gyanoba/kexcel/number_format/BaseNumFormat;
+	public final fun getDefaultNumeric ()Lcom/gyanoba/kexcel/number_format/BaseNumFormat;
+	public final fun getDefaultTime ()Lcom/gyanoba/kexcel/number_format/BaseNumFormat;
+	public final fun getStandard_0 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_1 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_10 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_11 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_12 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_13 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_14 ()Lcom/gyanoba/kexcel/number_format/StandardDateTimeNumFormat;
+	public final fun getStandard_15 ()Lcom/gyanoba/kexcel/number_format/StandardDateTimeNumFormat;
+	public final fun getStandard_16 ()Lcom/gyanoba/kexcel/number_format/StandardDateTimeNumFormat;
+	public final fun getStandard_17 ()Lcom/gyanoba/kexcel/number_format/StandardDateTimeNumFormat;
+	public final fun getStandard_18 ()Lcom/gyanoba/kexcel/number_format/StandardTimeNumFormat;
+	public final fun getStandard_19 ()Lcom/gyanoba/kexcel/number_format/StandardTimeNumFormat;
+	public final fun getStandard_2 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_20 ()Lcom/gyanoba/kexcel/number_format/StandardTimeNumFormat;
+	public final fun getStandard_21 ()Lcom/gyanoba/kexcel/number_format/StandardTimeNumFormat;
+	public final fun getStandard_22 ()Lcom/gyanoba/kexcel/number_format/StandardDateTimeNumFormat;
+	public final fun getStandard_3 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_37 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_38 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_39 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_4 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_40 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_45 ()Lcom/gyanoba/kexcel/number_format/StandardTimeNumFormat;
+	public final fun getStandard_46 ()Lcom/gyanoba/kexcel/number_format/StandardTimeNumFormat;
+	public final fun getStandard_47 ()Lcom/gyanoba/kexcel/number_format/StandardTimeNumFormat;
+	public final fun getStandard_48 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_49 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+	public final fun getStandard_9 ()Lcom/gyanoba/kexcel/number_format/StandardNumericNumFormat;
+}
+
+public final class com/gyanoba/kexcel/number_format/NumFormatMaintainer {
+	public fun <init> ()V
+	public final fun add (ILcom/gyanoba/kexcel/number_format/CustomNumFormat;)V
+	public final fun clear ()V
+	public final fun findOrAdd (Lcom/gyanoba/kexcel/number_format/CustomNumFormat;)I
+	public final fun getByNumFmtId (I)Lcom/gyanoba/kexcel/number_format/NumFormat;
+}
+
+public abstract class com/gyanoba/kexcel/number_format/NumericNumFormat : com/gyanoba/kexcel/number_format/BaseNumFormat {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun read (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/CellValue;
+	public final fun writeDouble (Lcom/gyanoba/kexcel/sheet/DoubleCellValue;)Ljava/lang/String;
+	public final fun writeInt (Lcom/gyanoba/kexcel/sheet/IntCellValue;)Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/number_format/StandardDateTimeNumFormat : com/gyanoba/kexcel/number_format/DateTimeNumFormat, com/gyanoba/kexcel/number_format/StandardNumFormat {
+	public fun <init> (ILjava/lang/String;)V
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun getNumFmtId ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/gyanoba/kexcel/number_format/StandardNumFormat : com/gyanoba/kexcel/number_format/NumFormat {
+	public abstract fun getNumFmtId ()I
+}
+
+public final class com/gyanoba/kexcel/number_format/StandardNumericNumFormat : com/gyanoba/kexcel/number_format/NumericNumFormat, com/gyanoba/kexcel/number_format/StandardNumFormat {
+	public fun <init> (ILjava/lang/String;)V
+	public fun accepts (Lcom/gyanoba/kexcel/sheet/CellValue;)Z
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun getNumFmtId ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/number_format/StandardTimeNumFormat : com/gyanoba/kexcel/number_format/TimeNumFormat, com/gyanoba/kexcel/number_format/StandardNumFormat {
+	public fun <init> (ILjava/lang/String;)V
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun getNumFmtId ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/gyanoba/kexcel/number_format/TimeNumFormat : com/gyanoba/kexcel/number_format/BaseNumFormat {
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun accepts (Lcom/gyanoba/kexcel/sheet/CellValue;)Z
+	public fun getFormatCode ()Ljava/lang/String;
+	public fun read (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/CellValue;
+	public final fun writeTime (Lcom/gyanoba/kexcel/sheet/TimeCellValue;)Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/parser/Parser {
+}
+
+public final class com/gyanoba/kexcel/save/Save {
+}
+
+public final class com/gyanoba/kexcel/shared_strings/SharedString {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getStringValue ()Ljava/lang/String;
+	public final fun getTextSpan ()Lcom/gyanoba/kexcel/shared_strings/TextSpan;
+	public fun hashCode ()I
+	public final fun matches (Ljava/lang/String;)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/shared_strings/TextSpan {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;Ljava/util/List;Lcom/gyanoba/kexcel/sheet/CellStyle;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;Lcom/gyanoba/kexcel/sheet/CellStyle;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()Lcom/gyanoba/kexcel/sheet/CellStyle;
+	public final fun copy (Ljava/lang/String;Ljava/util/List;Lcom/gyanoba/kexcel/sheet/CellStyle;)Lcom/gyanoba/kexcel/shared_strings/TextSpan;
+	public static synthetic fun copy$default (Lcom/gyanoba/kexcel/shared_strings/TextSpan;Ljava/lang/String;Ljava/util/List;Lcom/gyanoba/kexcel/sheet/CellStyle;ILjava/lang/Object;)Lcom/gyanoba/kexcel/shared_strings/TextSpan;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChildren ()Ljava/util/List;
+	public final fun getStyle ()Lcom/gyanoba/kexcel/sheet/CellStyle;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/BoolCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public fun <init> (Z)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getValue ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/Border {
+	public fun <init> ()V
+	public fun <init> (Lcom/gyanoba/kexcel/sheet/BorderStyle;Lcom/gyanoba/kexcel/utils/ExcelColor;)V
+	public synthetic fun <init> (Lcom/gyanoba/kexcel/sheet/BorderStyle;Lcom/gyanoba/kexcel/utils/ExcelColor;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBorderColorHex ()Ljava/lang/String;
+	public final fun getBorderStyle ()Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/BorderStyle : java/lang/Enum {
+	public static final field DashDot Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field DashDotDot Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field Dashed Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field Dotted Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field Double Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field Hair Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field Medium Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field MediumDashDot Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field MediumDashDotDot Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field MediumDashed Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field None Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field SlantDashDot Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field Thick Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static final field Thin Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getStyle ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/BorderStyle;
+	public static fun values ()[Lcom/gyanoba/kexcel/sheet/BorderStyle;
+}
+
+public final class com/gyanoba/kexcel/sheet/BorderStyleKt {
+	public static final fun getBorderStyleByName (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/BorderStyle;
+}
+
+public final class com/gyanoba/kexcel/sheet/CellIndex {
+	public static final field Companion Lcom/gyanoba/kexcel/sheet/CellIndex$Companion;
+	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCellId ()Ljava/lang/String;
+	public final fun getColumnIndex ()I
+	public final fun getRowIndex ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/CellIndex$Companion {
+	public final fun indexByColumnRow (II)Lcom/gyanoba/kexcel/sheet/CellIndex;
+	public final fun indexByString (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/CellIndex;
+}
+
+public final class com/gyanoba/kexcel/sheet/CellStyle {
+	public fun <init> ()V
+	public fun <init> (Lcom/gyanoba/kexcel/utils/ExcelColor;Lcom/gyanoba/kexcel/utils/ExcelColor;Ljava/lang/Integer;Ljava/lang/String;Lcom/gyanoba/kexcel/utils/FontScheme;Lcom/gyanoba/kexcel/utils/HorizontalAlign;Lcom/gyanoba/kexcel/utils/VerticalAlign;Lcom/gyanoba/kexcel/utils/TextWrapping;ZZLcom/gyanoba/kexcel/utils/Underline;ILcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;ZZLcom/gyanoba/kexcel/number_format/NumFormat;)V
+	public synthetic fun <init> (Lcom/gyanoba/kexcel/utils/ExcelColor;Lcom/gyanoba/kexcel/utils/ExcelColor;Ljava/lang/Integer;Ljava/lang/String;Lcom/gyanoba/kexcel/utils/FontScheme;Lcom/gyanoba/kexcel/utils/HorizontalAlign;Lcom/gyanoba/kexcel/utils/VerticalAlign;Lcom/gyanoba/kexcel/utils/TextWrapping;ZZLcom/gyanoba/kexcel/utils/Underline;ILcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;ZZLcom/gyanoba/kexcel/number_format/NumFormat;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun copyWith (Lcom/gyanoba/kexcel/utils/ExcelColor;Lcom/gyanoba/kexcel/utils/ExcelColor;Ljava/lang/String;Lcom/gyanoba/kexcel/utils/FontScheme;Lcom/gyanoba/kexcel/utils/HorizontalAlign;Lcom/gyanoba/kexcel/utils/VerticalAlign;Lcom/gyanoba/kexcel/utils/TextWrapping;Ljava/lang/Boolean;Ljava/lang/Boolean;Lcom/gyanoba/kexcel/utils/Underline;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Ljava/lang/Boolean;Ljava/lang/Boolean;Lcom/gyanoba/kexcel/number_format/NumFormat;)Lcom/gyanoba/kexcel/sheet/CellStyle;
+	public static synthetic fun copyWith$default (Lcom/gyanoba/kexcel/sheet/CellStyle;Lcom/gyanoba/kexcel/utils/ExcelColor;Lcom/gyanoba/kexcel/utils/ExcelColor;Ljava/lang/String;Lcom/gyanoba/kexcel/utils/FontScheme;Lcom/gyanoba/kexcel/utils/HorizontalAlign;Lcom/gyanoba/kexcel/utils/VerticalAlign;Lcom/gyanoba/kexcel/utils/TextWrapping;Ljava/lang/Boolean;Ljava/lang/Boolean;Lcom/gyanoba/kexcel/utils/Underline;Ljava/lang/Integer;Ljava/lang/Integer;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Lcom/gyanoba/kexcel/sheet/Border;Ljava/lang/Boolean;Ljava/lang/Boolean;Lcom/gyanoba/kexcel/number_format/NumFormat;ILjava/lang/Object;)Lcom/gyanoba/kexcel/sheet/CellStyle;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackgroundColor ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBottomBorder ()Lcom/gyanoba/kexcel/sheet/Border;
+	public final fun getDiagonalBorder ()Lcom/gyanoba/kexcel/sheet/Border;
+	public final fun getDiagonalBorderDown ()Z
+	public final fun getDiagonalBorderUp ()Z
+	public final fun getFontColor ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getFontFamily ()Ljava/lang/String;
+	public final fun getFontScheme ()Lcom/gyanoba/kexcel/utils/FontScheme;
+	public final fun getFontSize ()Ljava/lang/Integer;
+	public final fun getHorizontalAlignment ()Lcom/gyanoba/kexcel/utils/HorizontalAlign;
+	public final fun getLeftBorder ()Lcom/gyanoba/kexcel/sheet/Border;
+	public final fun getNumberFormat ()Lcom/gyanoba/kexcel/number_format/NumFormat;
+	public final fun getRightBorder ()Lcom/gyanoba/kexcel/sheet/Border;
+	public final fun getRotation ()I
+	public final fun getTopBorder ()Lcom/gyanoba/kexcel/sheet/Border;
+	public final fun getUnderline ()Lcom/gyanoba/kexcel/utils/Underline;
+	public final fun getVerticalAlignment ()Lcom/gyanoba/kexcel/utils/VerticalAlign;
+	public final fun getWrap ()Lcom/gyanoba/kexcel/utils/TextWrapping;
+	public fun hashCode ()I
+	public final fun isBold ()Z
+	public final fun isItalic ()Z
+	public final fun setBackgroundColor (Lcom/gyanoba/kexcel/utils/ExcelColor;)V
+	public final fun setBold (Z)V
+	public final fun setBottomBorder (Lcom/gyanoba/kexcel/sheet/Border;)V
+	public final fun setDiagonalBorder (Lcom/gyanoba/kexcel/sheet/Border;)V
+	public final fun setDiagonalBorderDown (Z)V
+	public final fun setDiagonalBorderUp (Z)V
+	public final fun setFontColor (Lcom/gyanoba/kexcel/utils/ExcelColor;)V
+	public final fun setFontFamily (Ljava/lang/String;)V
+	public final fun setFontScheme (Lcom/gyanoba/kexcel/utils/FontScheme;)V
+	public final fun setFontSize (Ljava/lang/Integer;)V
+	public final fun setHorizontalAlignment (Lcom/gyanoba/kexcel/utils/HorizontalAlign;)V
+	public final fun setItalic (Z)V
+	public final fun setLeftBorder (Lcom/gyanoba/kexcel/sheet/Border;)V
+	public final fun setNumberFormat (Lcom/gyanoba/kexcel/number_format/NumFormat;)V
+	public final fun setRightBorder (Lcom/gyanoba/kexcel/sheet/Border;)V
+	public final fun setRotation (I)V
+	public final fun setTopBorder (Lcom/gyanoba/kexcel/sheet/Border;)V
+	public final fun setUnderline (Lcom/gyanoba/kexcel/utils/Underline;)V
+	public final fun setVerticalAlignment (Lcom/gyanoba/kexcel/utils/VerticalAlign;)V
+	public final fun setWrap (Lcom/gyanoba/kexcel/utils/TextWrapping;)V
+}
+
+public abstract class com/gyanoba/kexcel/sheet/CellValue {
+}
+
+public final class com/gyanoba/kexcel/sheet/Data {
+	public static final field Companion Lcom/gyanoba/kexcel/sheet/Data$Companion;
+	public synthetic fun <init> (Lcom/gyanoba/kexcel/sheet/Sheet;IILcom/gyanoba/kexcel/sheet/CellValue;Lcom/gyanoba/kexcel/sheet/CellStyle;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCellIndex ()Lcom/gyanoba/kexcel/sheet/CellIndex;
+	public final fun getCellStyle ()Lcom/gyanoba/kexcel/sheet/CellStyle;
+	public final fun getColumnIndex ()I
+	public final fun getRowIndex ()I
+	public final fun getSheetName ()Ljava/lang/String;
+	public final fun getValue ()Lcom/gyanoba/kexcel/sheet/CellValue;
+	public fun hashCode ()I
+	public final fun setCellStyle (Lcom/gyanoba/kexcel/sheet/CellStyle;)V
+	public final fun setFormula (Ljava/lang/String;)V
+	public final fun setValue (Lcom/gyanoba/kexcel/sheet/CellValue;)V
+}
+
+public final class com/gyanoba/kexcel/sheet/Data$Companion {
+	public final fun newData (Lcom/gyanoba/kexcel/sheet/Sheet;II)Lcom/gyanoba/kexcel/sheet/Data;
+}
+
+public final class com/gyanoba/kexcel/sheet/DateCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public static final field Companion Lcom/gyanoba/kexcel/sheet/DateCellValue$Companion;
+	public fun <init> (III)V
+	public final fun asDateTimeUtc ()Lkotlinx/datetime/LocalDateTime;
+	public final fun asLocalDate ()Lkotlinx/datetime/LocalDate;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDay ()I
+	public final fun getMonth ()I
+	public final fun getYear ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/DateCellValue$Companion {
+	public final fun fromLocalDate (Lkotlinx/datetime/LocalDate;)Lcom/gyanoba/kexcel/sheet/DateCellValue;
+	public final fun fromLocalDateTime (Lkotlinx/datetime/LocalDateTime;)Lcom/gyanoba/kexcel/sheet/DateCellValue;
+}
+
+public final class com/gyanoba/kexcel/sheet/DateTimeCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public static final field Companion Lcom/gyanoba/kexcel/sheet/DateTimeCellValue$Companion;
+	public fun <init> (IIIIIIII)V
+	public synthetic fun <init> (IIIIIIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun asDateTimeLocal ()Lkotlinx/datetime/LocalDateTime;
+	public final fun asDateTimeUtc ()Lkotlinx/datetime/LocalDateTime;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDay ()I
+	public final fun getHour ()I
+	public final fun getMicrosecond ()I
+	public final fun getMillisecond ()I
+	public final fun getMinute ()I
+	public final fun getMonth ()I
+	public final fun getSecond ()I
+	public final fun getYear ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/DateTimeCellValue$Companion {
+	public final fun fromLocalDateTime (Lkotlinx/datetime/LocalDateTime;)Lcom/gyanoba/kexcel/sheet/DateTimeCellValue;
+}
+
+public final class com/gyanoba/kexcel/sheet/DoubleCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public fun <init> (D)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getValue ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/FontFamily : java/lang/Enum {
+	public static final field Abadi_MT_Condensed_Extra_Bold Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Abadi_MT_Condensed_Light Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Al_Bayan_Plain Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Al_Nile Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Al_Tarikh_Regular Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field American_Typewriter Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Andale_Mono Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Angsana_New Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Apple_Braille_Outline_8_Dot Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Apple_Chancery Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Apple_Color_Emoji Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Apple_Symbols Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Arial Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Arial_Hebrew Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Arial_Hebrew_Scholar Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Arial_Narrow Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Arial_Rounded_MT_Bold Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Arial_Unicode_MS Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Athelas_Regular Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Avenir_Book Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Avenir_Next_Condensed_Regular Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Avenir_Next_Regular Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Ayuthaya Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Baghdad Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bangla_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bangla_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Baskerville Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Baskerville_Old_Face Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bauhaus_93 Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Beirut Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bell_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bernard_MT_Condensed Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Big_Caslon Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bodoni_72 Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bodoni_72_Oldstyle Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bodoni_72_Smallcaps Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bodoni_Ornaments Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Book_Antiqua Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bookman_Old_Style Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bookshelf_Symbol_7 Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Bradley_Hand Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Braggadocio Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Britannic_Bold Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Brush_Script_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Calibri Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Calisto_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Cambria Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Cambria_Math Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Candara Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Century Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Century_Gothic Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Century_Schoolbook Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Chalkboard Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Chalkboard_SE Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Chalkduster Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Charter Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Cochin Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Colonna_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Comic_Sans_MS Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Consolas Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Constantia Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Cooper_Black Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Copperplate Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Copperplate_Gothic_Bold Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Corbel Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field CordiaUPC Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Cordia_New Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Corsiva_Hebrew Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Courier Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Courier_New Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Curlz_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field DIN_Alternate Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field DIN_Condensed Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Damascus Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field David Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field DecoType_Naskh Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Desdemona Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Devanagari_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Devanagari_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Didot Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Diwan_Kufi Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Diwan_Thuluth Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Dubai Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Edwardian_Script_ITC Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Engravers_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Euphemia_UCAS Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Eurostile Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Farah Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Farisi Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Footlight_MT_Light Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Franklin_Gothic_Book Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Franklin_Gothic_Demi Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Franklin_Gothic_Demi_Cond Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Franklin_Gothic_Heavy Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Franklin_Gothic_Medium Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Franklin_Gothic_Medium_Cond Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Futura Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gabriola Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Galvji Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Garamond Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gautami Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Geeza_Pro Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Geneva Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Georgia Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gill_Sans Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gill_Sans_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gill_Sans_MT_Condensed Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gill_Sans_MT_Ext_Condensed_Bold Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gill_Sans_Ultra_Bold Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gloucester_MT_Extra_Condensed Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Goudy_Old_Style Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gujarati_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gujarati_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gurmukhi_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gurmukhi_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Gurmukhi_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Haettenschweiler Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Harrington Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Helvetica Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Helvetica_Neue Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Herculanum Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Hoefler_Text Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field ITF_Devanagari Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field ITF_Devanagari_Marathi Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Impact Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Imprint_MT_Shadow Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field InaiMathi Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Iowan_Old_Style Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kailasa Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kannada_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kannada_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kartika Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kefa Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Khmer_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Khmer_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kino_MT Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kohinoor_Bangla Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kohinoor_Devanagari Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kohinoor_Gujarati Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kohinoor_Telugu Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Kokonor Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lao_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lao_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Latha Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Blackletter Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Bright Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Calligraphy Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Console Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Fax Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Grande Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Handwriting Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Sans Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Sans_Typewriter Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Lucida_Sans_Unicode Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Luminari Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field MS_Reference_Sans_Serif Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field MS_Reference_Specialty Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field MT_Extra Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Malayalam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Malayalam_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Mangal Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Marion Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Marker_Felt Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Marlett Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Matura_MT_Script_Capitals Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Menlo Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Microsoft_New_Tai_Lue Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Microsoft_Sans_Serif Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Microsoft_Tai_Le Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Microsoft_Yi_Baiti Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Mishafi Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Mishafi_Gold Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Mistral Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Monaco Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Monotype_Corsiva Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Monotype_Sorts Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Mshtakan Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Mukta_Mahee Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Muna Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Myanmar_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Myanmar_Sangam_MN Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static final field Myanmar_Text Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public final fun displayName ()Ljava/lang/String;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/sheet/FontFamily;
+	public static fun values ()[Lcom/gyanoba/kexcel/sheet/FontFamily;
+}
+
+public final class com/gyanoba/kexcel/sheet/FormulaCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public fun <init> (Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFormula ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/HeaderFooter {
+	public fun <init> (Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getAlignWithMargins ()Ljava/lang/Boolean;
+	public final fun getDifferentFirst ()Ljava/lang/Boolean;
+	public final fun getDifferentOddEven ()Ljava/lang/Boolean;
+	public final fun getEvenFooter ()Ljava/lang/String;
+	public final fun getEvenHeader ()Ljava/lang/String;
+	public final fun getFirstFooter ()Ljava/lang/String;
+	public final fun getFirstHeader ()Ljava/lang/String;
+	public final fun getOddFooter ()Ljava/lang/String;
+	public final fun getOddHeader ()Ljava/lang/String;
+	public final fun getScaleWithDoc ()Ljava/lang/Boolean;
+	public final fun setAlignWithMargins (Ljava/lang/Boolean;)V
+	public final fun setDifferentFirst (Ljava/lang/Boolean;)V
+	public final fun setDifferentOddEven (Ljava/lang/Boolean;)V
+	public final fun setEvenFooter (Ljava/lang/String;)V
+	public final fun setEvenHeader (Ljava/lang/String;)V
+	public final fun setFirstFooter (Ljava/lang/String;)V
+	public final fun setFirstHeader (Ljava/lang/String;)V
+	public final fun setOddFooter (Ljava/lang/String;)V
+	public final fun setOddHeader (Ljava/lang/String;)V
+	public final fun setScaleWithDoc (Ljava/lang/Boolean;)V
+}
+
+public final class com/gyanoba/kexcel/sheet/IntCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public fun <init> (I)V
+	public fun <init> (J)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getValue ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/Sheet {
+	public final fun appendRow (Ljava/util/List;)V
+	public final fun cell (Lcom/gyanoba/kexcel/sheet/CellIndex;)Lcom/gyanoba/kexcel/sheet/Data;
+	public final fun clearRow (I)Z
+	public final fun findAndReplace (Lkotlin/text/Regex;Ljava/lang/String;IIIII)I
+	public static synthetic fun findAndReplace$default (Lcom/gyanoba/kexcel/sheet/Sheet;Lkotlin/text/Regex;Ljava/lang/String;IIIIIILjava/lang/Object;)I
+	public final fun getColumnAutoFit (I)Z
+	public final fun getColumnWidth (I)D
+	public final fun getDefaultColumnWidth ()Ljava/lang/Double;
+	public final fun getDefaultRowHeight ()Ljava/lang/Double;
+	public final fun getGetColumnAutoFits ()Ljava/util/Map;
+	public final fun getGetColumnWidths ()Ljava/util/Map;
+	public final fun getGetRowHeights ()Ljava/util/Map;
+	public final fun getHeaderFooter ()Lcom/gyanoba/kexcel/sheet/HeaderFooter;
+	public final fun getMaxColumns ()I
+	public final fun getMaxRows ()I
+	public final fun getRowHeight (I)D
+	public final fun getRows ()Ljava/util/List;
+	public final fun getSheetName ()Ljava/lang/String;
+	public final fun getSpannedItems ()Ljava/util/List;
+	public final fun insertColumn (I)V
+	public final fun insertRow (I)V
+	public final fun insertRowIterables (Ljava/util/List;IIZ)V
+	public static synthetic fun insertRowIterables$default (Lcom/gyanoba/kexcel/sheet/Sheet;Ljava/util/List;IIZILjava/lang/Object;)V
+	public final fun isRTL ()Z
+	public final fun merge (Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;)V
+	public static synthetic fun merge$default (Lcom/gyanoba/kexcel/sheet/Sheet;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;ILjava/lang/Object;)V
+	public final fun removeColumn (I)V
+	public final fun removeRow (I)V
+	public final fun row (I)Ljava/util/List;
+	public final fun selectRange (Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;)Ljava/util/List;
+	public static synthetic fun selectRange$default (Lcom/gyanoba/kexcel/sheet/Sheet;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;ILjava/lang/Object;)Ljava/util/List;
+	public final fun selectRangeValues (Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;)Ljava/util/List;
+	public static synthetic fun selectRangeValues$default (Lcom/gyanoba/kexcel/sheet/Sheet;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellIndex;ILjava/lang/Object;)Ljava/util/List;
+	public final fun selectRangeValuesWithString (Ljava/lang/String;)Ljava/util/List;
+	public final fun selectRangeWithString (Ljava/lang/String;)Ljava/util/List;
+	public final fun setColumnAutoFit (I)V
+	public final fun setColumnWidth (ID)V
+	public final fun setDefaultColumnWidth (D)V
+	public static synthetic fun setDefaultColumnWidth$default (Lcom/gyanoba/kexcel/sheet/Sheet;DILjava/lang/Object;)V
+	public final fun setDefaultRowHeight (D)V
+	public static synthetic fun setDefaultRowHeight$default (Lcom/gyanoba/kexcel/sheet/Sheet;DILjava/lang/Object;)V
+	public final fun setHeaderFooter (Lcom/gyanoba/kexcel/sheet/HeaderFooter;)V
+	public final fun setMergedCellStyle (Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellStyle;)V
+	public final fun setRTL (Z)V
+	public final fun setRowHeight (ID)V
+	public final fun unMerge (Ljava/lang/String;)V
+	public final fun updateCell (Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;Lcom/gyanoba/kexcel/sheet/CellStyle;)V
+	public static synthetic fun updateCell$default (Lcom/gyanoba/kexcel/sheet/Sheet;Lcom/gyanoba/kexcel/sheet/CellIndex;Lcom/gyanoba/kexcel/sheet/CellValue;Lcom/gyanoba/kexcel/sheet/CellStyle;ILjava/lang/Object;)V
+}
+
+public final class com/gyanoba/kexcel/sheet/TextCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public static final field Companion Lcom/gyanoba/kexcel/sheet/TextCellValue$Companion;
+	public synthetic fun <init> (Lcom/gyanoba/kexcel/shared_strings/TextSpan;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getValue ()Lcom/gyanoba/kexcel/shared_strings/TextSpan;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/TextCellValue$Companion {
+	public final fun span (Lcom/gyanoba/kexcel/shared_strings/TextSpan;)Lcom/gyanoba/kexcel/sheet/TextCellValue;
+}
+
+public final class com/gyanoba/kexcel/sheet/TimeCellValue : com/gyanoba/kexcel/sheet/CellValue {
+	public static final field Companion Lcom/gyanoba/kexcel/sheet/TimeCellValue$Companion;
+	public fun <init> ()V
+	public fun <init> (IIIII)V
+	public synthetic fun <init> (IIIIIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun asDuration-UwyO8pc ()J
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getHour ()I
+	public final fun getMicrosecond ()I
+	public final fun getMillisecond ()I
+	public final fun getMinute ()I
+	public final fun getSecond ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/sheet/TimeCellValue$Companion {
+	public final fun fromDuration-LRDsOJo (J)Lcom/gyanoba/kexcel/sheet/TimeCellValue;
+	public final fun fromFractionOfDay (D)Lcom/gyanoba/kexcel/sheet/TimeCellValue;
+	public final fun fromLocalDateTime (Lkotlinx/datetime/LocalDateTime;)Lcom/gyanoba/kexcel/sheet/TimeCellValue;
+}
+
+public final class com/gyanoba/kexcel/utils/ColorType : java/lang/Enum {
+	public static final field Color Lcom/gyanoba/kexcel/utils/ColorType;
+	public static final field Material Lcom/gyanoba/kexcel/utils/ColorType;
+	public static final field MaterialAccent Lcom/gyanoba/kexcel/utils/ColorType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/utils/ColorType;
+	public static fun values ()[Lcom/gyanoba/kexcel/utils/ColorType;
+}
+
+public final class com/gyanoba/kexcel/utils/ExcelColor {
+	public static final field Companion Lcom/gyanoba/kexcel/utils/ExcelColor$Companion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getColorHex ()Ljava/lang/String;
+	public final fun getColorInt ()I
+	public final fun getName ()Ljava/lang/String;
+	public final fun getType ()Lcom/gyanoba/kexcel/utils/ColorType;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/gyanoba/kexcel/utils/ExcelColor$Companion {
+	public final fun fromHexString (Ljava/lang/String;)Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun fromInt (I)Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmber900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmberAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmberAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmberAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getAmberAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlack ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlack12 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlack26 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlack38 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlack45 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlack54 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlack87 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlue900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBlueGrey900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getBrown900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyan900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyanAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyanAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyanAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getCyanAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrange900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrangeAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrangeAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrangeAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepOrangeAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurple900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurpleAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurpleAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurpleAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getDeepPurpleAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreen900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreenAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreenAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreenAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGreenAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey350 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey850 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getGrey900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigo900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigoAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigoAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigoAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getIndigoAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlue900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlueAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlueAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlueAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightBlueAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreen900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreenAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreenAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreenAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLightGreenAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLime900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLimeAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLimeAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLimeAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getLimeAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getNone ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrange900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrangeAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrangeAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrangeAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getOrangeAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPink900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPinkAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPinkAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPinkAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPinkAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurple900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurpleAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurpleAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurpleAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getPurpleAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRed900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRedAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRedAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRedAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getRedAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTeal900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTealAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTealAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTealAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getTealAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getValues ()Ljava/util/List;
+	public final fun getWhite ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite10 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite12 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite24 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite30 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite38 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite54 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite60 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getWhite70 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow200 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow300 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow50 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow600 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow800 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellow900 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellowAccent ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellowAccent100 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellowAccent400 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+	public final fun getYellowAccent700 ()Lcom/gyanoba/kexcel/utils/ExcelColor;
+}
+
+public final class com/gyanoba/kexcel/utils/FastList {
+	public fun <init> ()V
+	public fun <init> (Lcom/gyanoba/kexcel/utils/FastList;)V
+	public final fun add (Ljava/lang/Object;)V
+	public final fun clear ()V
+	public final fun contains (Ljava/lang/Object;)Z
+	public final fun getKeys ()Ljava/util/List;
+	public final fun isNotEmpty ()Z
+	public final fun remove (Ljava/lang/Object;)V
+}
+
+public final class com/gyanoba/kexcel/utils/FontScheme : java/lang/Enum {
+	public static final field Major Lcom/gyanoba/kexcel/utils/FontScheme;
+	public static final field Minor Lcom/gyanoba/kexcel/utils/FontScheme;
+	public static final field Unset Lcom/gyanoba/kexcel/utils/FontScheme;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/utils/FontScheme;
+	public static fun values ()[Lcom/gyanoba/kexcel/utils/FontScheme;
+}
+
+public final class com/gyanoba/kexcel/utils/HorizontalAlign : java/lang/Enum {
+	public static final field Center Lcom/gyanoba/kexcel/utils/HorizontalAlign;
+	public static final field Left Lcom/gyanoba/kexcel/utils/HorizontalAlign;
+	public static final field Right Lcom/gyanoba/kexcel/utils/HorizontalAlign;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/utils/HorizontalAlign;
+	public static fun values ()[Lcom/gyanoba/kexcel/utils/HorizontalAlign;
+}
+
+public final class com/gyanoba/kexcel/utils/TextWrapping : java/lang/Enum {
+	public static final field Clip Lcom/gyanoba/kexcel/utils/TextWrapping;
+	public static final field WrapText Lcom/gyanoba/kexcel/utils/TextWrapping;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/utils/TextWrapping;
+	public static fun values ()[Lcom/gyanoba/kexcel/utils/TextWrapping;
+}
+
+public final class com/gyanoba/kexcel/utils/Underline : java/lang/Enum {
+	public static final field Double Lcom/gyanoba/kexcel/utils/Underline;
+	public static final field None Lcom/gyanoba/kexcel/utils/Underline;
+	public static final field Single Lcom/gyanoba/kexcel/utils/Underline;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/utils/Underline;
+	public static fun values ()[Lcom/gyanoba/kexcel/utils/Underline;
+}
+
+public final class com/gyanoba/kexcel/utils/UtilityKt {
+	public static final fun getCellId (II)Ljava/lang/String;
+	public static final fun getColumnAlphabet (I)Ljava/lang/String;
+	public static final fun getColumnIndex (Ljava/lang/String;)I
+	public static final fun getSpanCellId (IIII)Ljava/lang/String;
+	public static final fun lettersToNumeric (Ljava/lang/String;)I
+}
+
+public final class com/gyanoba/kexcel/utils/VerticalAlign : java/lang/Enum {
+	public static final field Bottom Lcom/gyanoba/kexcel/utils/VerticalAlign;
+	public static final field Center Lcom/gyanoba/kexcel/utils/VerticalAlign;
+	public static final field Top Lcom/gyanoba/kexcel/utils/VerticalAlign;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/gyanoba/kexcel/utils/VerticalAlign;
+	public static fun values ()[Lcom/gyanoba/kexcel/utils/VerticalAlign;
+}
+

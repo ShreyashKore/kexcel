@@ -12,6 +12,13 @@ kotlin {
     // This is a library: require explicit visibility & return types on public API.
     explicitApi()
 
+    // Keep a checked-in ABI baseline for the public library API. CI compares
+    // changes against it so published binaries remain compatible for consumers.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation {
+        enabled.set(true)
+    }
+
     androidTarget {
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
     }
