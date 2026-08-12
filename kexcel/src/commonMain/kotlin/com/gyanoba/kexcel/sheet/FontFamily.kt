@@ -189,9 +189,3 @@ public enum class FontFamily {
     /** Returns the human-readable font family name (e.g. "Arial Narrow"). */
     public fun displayName(): String = name.replace('_', ' ')
 }
-
-/**
- * Returns the human-readable font family name for the given [FontFamily].
- * e.g. `FontFamily.Arial_Narrow` → `"Arial Narrow"`
- */
-public fun getFontFamily(fontFamily: FontFamily): String = fontFamily.displayName()
