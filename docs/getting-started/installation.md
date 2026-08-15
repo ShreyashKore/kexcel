@@ -21,7 +21,7 @@ Kexcel is published to **Maven Central** under the coordinates
     kotlin {
         sourceSets {
             commonMain.dependencies {
-                implementation("com.gyanoba.kexcel:kexcel:0.0.2")
+                implementation("com.gyanoba.kexcel:kexcel:0.1.0")
             }
         }
     }
@@ -31,7 +31,7 @@ Kexcel is published to **Maven Central** under the coordinates
 
     ```kotlin title="build.gradle.kts"
     dependencies {
-        implementation("com.gyanoba.kexcel:kexcel:0.0.2")
+        implementation("com.gyanoba.kexcel:kexcel:0.1.0")
     }
     ```
 
@@ -39,7 +39,7 @@ Kexcel is published to **Maven Central** under the coordinates
 
     ```groovy title="build.gradle"
     dependencies {
-        implementation 'com.gyanoba.kexcel:kexcel:0.0.2'
+        implementation 'com.gyanoba.kexcel:kexcel:0.1.0'
     }
     ```
 
@@ -47,7 +47,7 @@ Kexcel is published to **Maven Central** under the coordinates
 
     ```toml title="gradle/libs.versions.toml"
     [versions]
-    kexcel = "0.0.2"
+    kexcel = "0.1.0"
 
     [libraries]
     kexcel = { module = "com.gyanoba.kexcel:kexcel", version.ref = "kexcel" }

@@ -78,6 +78,12 @@ mkdir -p docs/api && cp -r kexcel/build/dokka/html/. docs/api/
 
 ## Publishing
 
+The published version lives in exactly one place: `VERSION_NAME` in
+`gradle.properties`. The build reads it for the Maven coordinates, and the
+install snippets in `README.md` and the [installation guide](getting-started/installation.md)
+are regenerated from it — bump `VERSION_NAME`, then run `./gradlew syncDocsVersion`.
+CI runs `./gradlew checkDocsVersion` before a release and fails on drift.
+
 - Local Maven (`~/.m2`): `./gradlew :kexcel:publishToMavenLocal`
 - Maven Central: `./gradlew :kexcel:publishAndReleaseToMavenCentral --no-configuration-cache`
   (requires GPG signing keys and Sonatype credentials).

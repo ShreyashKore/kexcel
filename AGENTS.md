@@ -32,6 +32,7 @@ All commands use the Gradle wrapper (`./gradlew`).
 | Single test method | `./gradlew :kexcel:jvmTest --tests "…ExcelFileTest.<method>"` |
 | Run desktop sample | `./gradlew :sample:desktopApp:run` |
 | Publish to local Maven | `./gradlew :kexcel:publishToMavenLocal` |
+| Sync docs to `VERSION_NAME` | `./gradlew syncDocsVersion` |
 | Generate API reference (Dokka) | `./gradlew :kexcel:dokkaGenerate` |
 | Preview docs guides | `pip install -r requirements.txt && mkdocs serve` |
 

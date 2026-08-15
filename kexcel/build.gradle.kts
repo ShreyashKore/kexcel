@@ -66,12 +66,13 @@ android {
     }
 }
 
-// Publishing to Maven Central. Coordinates are set here; the POM metadata
-// (name, description, url, license, developer, scm) comes from the POM_* keys
-// in gradle.properties, read automatically by the maven-publish plugin.
+// Publishing to Maven Central. The group and artifact are set here; the version
+// (VERSION_NAME) and the POM metadata (name, description, url, license,
+// developer, scm — the POM_* keys) come from gradle.properties, read
+// automatically by the maven-publish plugin.
 mavenPublishing {
     publishToMavenCentral()
-    coordinates("com.gyanoba.kexcel", "kexcel", "0.0.2")
+    coordinates(groupId = "com.gyanoba.kexcel", artifactId = "kexcel")
     // Maven Central rejects unsigned releases. Sign whenever credentials are
     // present: `signing.keyId` for a local GPG keyring (see README) or
     // `signingInMemoryKey` from the ORG_GRADLE_PROJECT_* env vars used in CI.

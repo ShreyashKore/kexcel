@@ -33,6 +33,7 @@ Note `commonTest` (`ExcelInMemoryTest`) runs on every target; `jvmTest` (`ExcelF
 - iOS: open `sample/iosApp/iosApp.xcodeproj` in Xcode and run
 
 **Publish:**
+- The published version is single-sourced from `VERSION_NAME` in `gradle.properties`. The maven-publish plugin reads it for the coordinates (so `coordinates()` in `kexcel/build.gradle.kts` passes only group/artifact); the version quoted in `README.md` and `docs/getting-started/installation.md` is regenerated from it by `./gradlew syncDocsVersion`. `./gradlew checkDocsVersion` fails on drift and runs in the publish workflow. To release: bump `VERSION_NAME`, run `syncDocsVersion`, commit.
 - Local Maven (`~/.m2`): `./gradlew :kexcel:publishToMavenLocal`
 - Maven Central: `./gradlew :kexcel:publishAndReleaseToMavenCentral --no-configuration-cache` (requires GPG signing keys and Sonatype credentials in `gradle.properties`; see README)
 

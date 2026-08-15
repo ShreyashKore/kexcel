@@ -74,6 +74,9 @@ jobs:
       - name: Check Kotlin binary compatibility
         run: ./gradlew :kexcel:checkKotlinAbi
 
+      - name: Check docs quote the published version
+        run: ./gradlew checkDocsVersion
+
   instrumentation-tests:
     name: Instrumentation tests
     if: false

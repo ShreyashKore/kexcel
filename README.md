@@ -50,7 +50,7 @@ Add Kexcel to your project.
 
 ```kotlin
 dependencies {
-    implementation("com.gyanoba.kexcel:kexcel:0.0.2")
+    implementation("com.gyanoba.kexcel:kexcel:0.1.0")
 }
 ```
 
@@ -58,7 +58,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'com.gyanoba.kexcel:kexcel:0.0.2'
+    implementation 'com.gyanoba.kexcel:kexcel:0.1.0'
 }
 ```
 
