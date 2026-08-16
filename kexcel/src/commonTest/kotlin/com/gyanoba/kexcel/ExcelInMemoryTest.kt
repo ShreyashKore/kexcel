@@ -210,4 +210,72 @@ class ExcelInMemoryTest {
             }
         }
     }
+
+    // Regression: https://github.com/ShreyashKore/kexcel/issues/3
+    // Encoding a workbook with a sheet created on the fly used to fail, because the
+    // <sheet>/<Relationship>/<Override> nodes never made it into the XML documents.
+    @Test
+    fun encodeWorkbookWithNewlyCreatedSheets() {
+        val excel = Excel.createExcel()
+
+        listOf("Players", "Teams").forEach { name ->
+            val sheet = excel[name]
+            sheet.updateCell(CellIndex.indexByColumnRow(0, 0), TextCellValue("Lastname-$name"))
+            sheet.updateCell(CellIndex.indexByColumnRow(1, 0), TextCellValue("Firstname-$name"))
+        }
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val reread = Excel.decodeBytes(bytes)
+        assertEquals(listOf("Sheet1", "Players", "Teams"), reread.getSheets().keys.toList())
+
+        listOf("Players", "Teams").forEach { name ->
+            val sheet = reread[name]
+            assertEquals(
+                TextCellValue("Lastname-$name"),
+                sheet.cell(CellIndex.indexByColumnRow(0, 0)).value,
+            )
+            assertEquals(
+                TextCellValue("Firstname-$name"),
+                sheet.cell(CellIndex.indexByColumnRow(1, 0)).value,
+            )
+        }
+    }
+
+    // Regression: https://github.com/ShreyashKore/kexcel/issues/3
+    @Test
+    fun encodeAfterDeletingTheDefaultSheet() {
+        val excel = Excel.createExcel()
+        excel["Players"].updateCell(CellIndex.indexByString("A1"), TextCellValue("Lastname"))
+        excel.delete("Sheet1")
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val reread = Excel.decodeBytes(bytes)
+        assertEquals(listOf("Players"), reread.getSheets().keys.toList())
+        assertEquals(
+            TextCellValue("Lastname"),
+            reread["Players"].cell(CellIndex.indexByString("A1")).value,
+        )
+    }
+
+    // Regression: https://github.com/ShreyashKore/kexcel/issues/3
+    @Test
+    fun encodeAfterRenamingTheDefaultSheet() {
+        val excel = Excel.createExcel()
+        excel.rename("Sheet1", "Players")
+        excel["Players"].updateCell(CellIndex.indexByString("A1"), TextCellValue("Lastname"))
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val reread = Excel.decodeBytes(bytes)
+        assertEquals(listOf("Players"), reread.getSheets().keys.toList())
+        assertEquals(
+            TextCellValue("Lastname"),
+            reread["Players"].cell(CellIndex.indexByString("A1")).value,
+        )
+    }
 }

@@ -519,9 +519,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
         if (sheetObject.getColumnWidths.isEmpty() && sheetObject.getColumnAutoFits.isEmpty()) {
             if (columnElements.isEmpty()) return
-            val worksheet = xmlFile.getElementsByTag("worksheet").first()
-                ?: damagedExcel("Missing <worksheet> element in sheet XML")
-            worksheet.children().remove(columnElements.first())
+            columnElements.first().remove()
             return
         }
 
@@ -533,7 +531,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
         val columns = xmlFile.getElementsByTag("cols").first()
             ?: damagedExcel("Missing <cols> element in sheet XML")
-        columns.children().clear()
+        columns.empty()
 
         val autoFits = sheetObject.getColumnAutoFits
         val customWidths = sheetObject.getColumnWidths
@@ -644,7 +642,7 @@ public class Save internal constructor(private val excel: Excel, private val par
                 countAttr.value(spannedItems.size.toString())
             }
 
-            mergeElement.children().clear()
+            mergeElement.empty()
             spannedItems.forEach { ref ->
                 mergeElement.appendChild(
                     Element("mergeCell", listOf(Attribute("ref", ref)))
@@ -670,7 +668,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
             if (sheetViewsIter.isNotEmpty()) {
                 val sheetViewsEl = sheetViewsIter.first()
-                sheetViewsEl.children().clear()
+                sheetViewsEl.empty()
                 sheetViewsEl.appendChild(sheetViewEl)
             } else {
                 val worksheetEl = xmlDoc.getElementsByTag("worksheet").first()
@@ -689,7 +687,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         val shareString = excel.xmlFiles["xl/${excel.sharedStringsTarget}"]!!
             .getElementsByTag("sst").first()
 
-        shareString?.children()?.clear()
+        shareString?.empty()
 
         excel.sharedStrings.map.forEach { (sharedString, indexingHolder) ->
             uniqueCount++
@@ -712,9 +710,7 @@ public class Save internal constructor(private val excel: Excel, private val par
                 parser.createSheet(sheetName)
             }
 
-            if (excel.sheets[sheetName]?.children()?.isNotEmpty() == true) {
-                excel.sheets[sheetName]!!.children().clear()
-            }
+            excel.sheets[sheetName]?.empty()
 
             val xmlFile = excel.xmlFiles[excel.xmlSheetId[sheetName]] ?: return@forEach
 
@@ -722,12 +718,13 @@ public class Save internal constructor(private val excel: Excel, private val par
             val defaultColumnWidth = sheetObject.defaultColumnWidth
 
             val worksheetEl = xmlFile.getElementsByTag("worksheet").first()
-            var sheetFormatPrEl = worksheetEl?.find { it.nodeName() == "sheetFormatPr" }?.firstOrNull()
+            var sheetFormatPrEl = worksheetEl?.children()
+                ?.firstOrNull { it.nodeName() == "sheetFormatPr" }
 
             if (sheetFormatPrEl != null) {
                 sheetFormatPrEl.clearAttributes()
                 if (defaultRowHeight == null && defaultColumnWidth == null) {
-                    worksheetEl?.children()?.remove(sheetFormatPrEl)
+                    sheetFormatPrEl.remove()
                     sheetFormatPrEl = null
                 }
             } else if (defaultRowHeight != null || defaultColumnWidth != null) {
