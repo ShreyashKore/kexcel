@@ -604,8 +604,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         val worksheetEl = xmlFile.getElementsByTag("worksheet").first()
             ?: damagedExcel("Missing <worksheet> element in sheet XML")
 
-        val existing = worksheetEl.getElementsByTag("headerFooter").toList()
-        if (existing.isNotEmpty()) worksheetEl.children().remove(existing.first())
+        worksheetEl.getElementsByTag("headerFooter").toList().forEach { it.remove() }
 
         sheet.headerFooter?.let { worksheetEl.appendChild(it.toXmlElement()) }
     }
@@ -635,12 +634,10 @@ public class Save internal constructor(private val excel: Excel, private val par
 
             val spannedItems = sheetObj.spannedItems.toList()
 
-            val countAttr = mergeElement.getElementsByAttribute("count").first()
-            if (countAttr == null) {
-                mergeElement.attributes().add("count", spannedItems.size.toString())
-            } else {
-                countAttr.value(spannedItems.size.toString())
-            }
+            mergeElement.attr("count", spannedItems.size.toString())
+            // Older versions of this library wrote a bogus `value` attribute here (the count was
+            // set through `Element.value()`, which sets `value`); drop it so the part validates.
+            mergeElement.removeAttr("value")
 
             mergeElement.empty()
             spannedItems.forEach { ref ->

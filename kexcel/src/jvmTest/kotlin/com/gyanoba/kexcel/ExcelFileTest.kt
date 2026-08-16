@@ -22,6 +22,8 @@ import java.util.zip.ZipInputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -316,9 +318,50 @@ class ExcelFileTest {
         assertEquals(testSheet.headerFooter!!.oddFooter!!, "Bar")
     }
 
-    // Dart: 'Remove header/footer from Workbook' — the Dart test body is empty.
     @Test
-    fun removeHeaderFooterFromWorkbook() = Unit
+    fun removeHeaderFooterFromWorkbook() {
+        val bytes = fixture("headerFooter.xlsx")
+        val excel = Excel.decodeBytes(bytes)
+        val sheet = excel.tables["Sheet1"]!!
+        assertNotNull(sheet.headerFooter)
+
+        sheet.headerFooter = null
+        val encoded = excel.encode()!!
+
+        // Verify XML node was removed and not retained in the worksheet part
+        val xml = readZipEntry(encoded, "xl/worksheets/sheet1.xml").decodeToString()
+        val doc = Ksoup.parseXml(xml)
+        assertEquals(0, doc.getElementsByTag("headerFooter").size, "Expected <headerFooter> to be removed from XML")
+
+        // Verify roundtrip read
+        val reread = Excel.decodeBytes(encoded)
+        assertNull(reread.tables["Sheet1"]!!.headerFooter)
+    }
+
+    @Test
+    fun updateHeaderFooterRoundTrip() {
+        val bytes = fixture("headerFooter.xlsx")
+        val excel = Excel.decodeBytes(bytes)
+        val sheet = excel.tables["Sheet1"]!!
+
+        sheet.headerFooter!!.oddHeader = "NewOddHeader"
+        sheet.headerFooter!!.oddFooter = "NewOddFooter"
+        val encoded = excel.encode()!!
+
+        // Verify XML has exactly one <headerFooter> tag, not duplicated
+        val xml = readZipEntry(encoded, "xl/worksheets/sheet1.xml").decodeToString()
+        val doc = Ksoup.parseXml(xml)
+        val hfTags = doc.getElementsByTag("headerFooter")
+        assertEquals(1, hfTags.size, "Expected exactly one <headerFooter> element in XML")
+        assertEquals("NewOddHeader", hfTags.first()?.getElementsByTag("oddHeader")?.first()?.text())
+
+        // Verify reread values
+        val reread = Excel.decodeBytes(encoded)
+        val rereadSheet = reread.tables["Sheet1"]!!
+        assertNotNull(rereadSheet.headerFooter)
+        assertEquals("NewOddHeader", rereadSheet.headerFooter!!.oddHeader)
+        assertEquals("NewOddFooter", rereadSheet.headerFooter!!.oddFooter)
+    }
 
     // Dart: 'Reader headerFooter attributes'
     @Test
@@ -592,5 +635,31 @@ class ExcelFileTest {
     fun decodeCustomNumFmtIdBelow164() {
         // Must not throw (Dart: returnsNormally).
         Excel.decodeBytes(fixture("customNumFmtIdBelow164.xlsx"))
+    }
+
+    // The <mergeCells count="..."> attribute must track the number of <mergeCell> children,
+    // and no bogus `value` attribute may be emitted alongside it.
+    @Test
+    fun mergeCellsCountAttribute() {
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+        sheet.merge(CellIndex.indexByString("A1"), CellIndex.indexByString("C3"))
+
+        val firstPass = excel.encode()!!
+        assertMergeCellsCount(firstPass, 1)
+
+        // A second round trip goes through the "<mergeCells> already exists" branch.
+        val reopened = Excel.decodeBytes(firstPass)
+        reopened["Sheet1"].merge(CellIndex.indexByString("E1"), CellIndex.indexByString("F2"))
+        assertMergeCellsCount(reopened.encode()!!, 2)
+    }
+
+    private fun assertMergeCellsCount(bytes: ByteArray, expected: Int) {
+        val xml = readZipEntry(bytes, "xl/worksheets/sheet1.xml").decodeToString()
+        val mergeCells = Ksoup.parseXml(xml).getElementsByTag("mergeCells").first()
+            ?: error("no <mergeCells> element in xl/worksheets/sheet1.xml")
+        assertEquals(expected.toString(), mergeCells.attr("count"))
+        assertEquals(expected, mergeCells.getElementsByTag("mergeCell").size)
+        assertFalse(mergeCells.hasAttr("value"), "unexpected `value` attribute on <mergeCells>")
     }
 }
