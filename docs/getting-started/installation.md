@@ -81,7 +81,7 @@ dependencyResolutionManagement {
 
 | Requirement | Value |
 | --- | --- |
-| Kotlin | 2.0+ (the library is built with 2.4.10) |
+| Kotlin | 2.4.10+ (the version the multiplatform artifacts are built with) |
 | JVM / Android | Java 17 bytecode; Android `minSdk` 23 |
 | iOS | `iosArm64`, `iosSimulatorArm64` |
 

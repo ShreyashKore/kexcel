@@ -662,4 +662,58 @@ class ExcelFileTest {
         assertEquals(expected, mergeCells.getElementsByTag("mergeCell").size)
         assertFalse(mergeCells.hasAttr("value"), "unexpected `value` attribute on <mergeCells>")
     }
+
+    // Unmerging the last merged range must drop <mergeCells>, otherwise the stale refs
+    // resurrect the merge on the next read.
+    @Test
+    fun unMergingEveryRangeRemovesMergeCells() {
+        val excel = Excel.createExcel()
+        excel["Sheet1"].merge(CellIndex.indexByString("A1"), CellIndex.indexByString("C3"))
+        excel["Sheet1"].merge(CellIndex.indexByString("E1"), CellIndex.indexByString("F2"))
+
+        val reopened = Excel.decodeBytes(excel.encode()!!)
+        assertEquals(listOf("A1:C3", "E1:F2"), reopened.getMergedCells("Sheet1"))
+
+        reopened["Sheet1"].unMerge("A1:C3")
+        val partial = reopened.encode()!!
+        assertMergeCellsCount(partial, 1)
+        assertEquals(listOf("E1:F2"), Excel.decodeBytes(partial).getMergedCells("Sheet1"))
+
+        val last = Excel.decodeBytes(partial)
+        last["Sheet1"].unMerge("E1:F2")
+        val cleared = last.encode()!!
+
+        val xml = readZipEntry(cleared, "xl/worksheets/sheet1.xml").decodeToString()
+        assertTrue(
+            Ksoup.parseXml(xml).getElementsByTag("mergeCells").isEmpty(),
+            "<mergeCells> should be gone once nothing is merged",
+        )
+        assertEquals(emptyList(), Excel.decodeBytes(cleared).getMergedCells("Sheet1"))
+    }
+
+    // <sheetFormatPr> carries attributes the model does not know about (baseColWidth,
+    // outlineLevelRow, zeroHeight, …); a round trip must not drop them.
+    @Test
+    fun sheetFormatPrKeepsUnmodelledAttributes() {
+        val original = fixture("example.xlsx")
+        val before = Ksoup.parseXml(readZipEntry(original, "xl/worksheets/sheet1.xml").decodeToString())
+            .getElementsByTag("sheetFormatPr").first()
+            ?: error("fixture has no <sheetFormatPr> to preserve")
+        val unmodelled = before.attributes()
+            .map { it.key }
+            .filter { it != "defaultRowHeight" && it != "defaultColWidth" }
+        assertTrue(unmodelled.isNotEmpty(), "fixture should carry unmodelled attributes")
+
+        val saved = Excel.decodeBytes(original).encode()!!
+        val after = Ksoup.parseXml(readZipEntry(saved, "xl/worksheets/sheet1.xml").decodeToString())
+            .getElementsByTag("sheetFormatPr").first()
+            ?: error("<sheetFormatPr> was dropped on save")
+
+        unmodelled.forEach { key ->
+            assertEquals(before.attr(key), after.attr(key), "attribute `$key` was not preserved")
+        }
+        // The two attributes the model does own are still written, exactly once each.
+        assertEquals(1, after.attributes().count { it.key == "defaultRowHeight" })
+        assertEquals(1, after.attributes().count { it.key == "defaultColWidth" })
+    }
 }
