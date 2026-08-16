@@ -9,6 +9,7 @@ import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.DateCellValue
 import com.gyanoba.kexcel.sheet.DateTimeCellValue
 import com.gyanoba.kexcel.sheet.DoubleCellValue
+import com.gyanoba.kexcel.sheet.HeaderFooter
 import com.gyanoba.kexcel.sheet.IntCellValue
 import com.gyanoba.kexcel.sheet.TextCellValue
 import com.gyanoba.kexcel.utils.ColorType
@@ -209,5 +210,116 @@ class ExcelInMemoryTest {
                 }
             }
         }
+    }
+
+    // Regression: https://github.com/ShreyashKore/kexcel/issues/3
+    // Encoding a workbook with a sheet created on the fly used to fail, because the
+    // <sheet>/<Relationship>/<Override> nodes never made it into the XML documents.
+    @Test
+    fun encodeWorkbookWithNewlyCreatedSheets() {
+        val excel = Excel.createExcel()
+
+        listOf("Players", "Teams").forEach { name ->
+            val sheet = excel[name]
+            sheet.updateCell(CellIndex.indexByColumnRow(0, 0), TextCellValue("Lastname-$name"))
+            sheet.updateCell(CellIndex.indexByColumnRow(1, 0), TextCellValue("Firstname-$name"))
+        }
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val reread = Excel.decodeBytes(bytes)
+        assertEquals(listOf("Sheet1", "Players", "Teams"), reread.getSheets().keys.toList())
+
+        listOf("Players", "Teams").forEach { name ->
+            val sheet = reread[name]
+            assertEquals(
+                TextCellValue("Lastname-$name"),
+                sheet.cell(CellIndex.indexByColumnRow(0, 0)).value,
+            )
+            assertEquals(
+                TextCellValue("Firstname-$name"),
+                sheet.cell(CellIndex.indexByColumnRow(1, 0)).value,
+            )
+        }
+    }
+
+    // Regression: https://github.com/ShreyashKore/kexcel/issues/3
+    @Test
+    fun encodeAfterDeletingTheDefaultSheet() {
+        val excel = Excel.createExcel()
+        excel["Players"].updateCell(CellIndex.indexByString("A1"), TextCellValue("Lastname"))
+        excel.delete("Sheet1")
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val reread = Excel.decodeBytes(bytes)
+        assertEquals(listOf("Players"), reread.getSheets().keys.toList())
+        assertEquals(
+            TextCellValue("Lastname"),
+            reread["Players"].cell(CellIndex.indexByString("A1")).value,
+        )
+    }
+
+    // Regression: https://github.com/ShreyashKore/kexcel/issues/3
+    @Test
+    fun encodeAfterRenamingTheDefaultSheet() {
+        val excel = Excel.createExcel()
+        excel.rename("Sheet1", "Players")
+        excel["Players"].updateCell(CellIndex.indexByString("A1"), TextCellValue("Lastname"))
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val reread = Excel.decodeBytes(bytes)
+        assertEquals(listOf("Players"), reread.getSheets().keys.toList())
+        assertEquals(
+            TextCellValue("Lastname"),
+            reread["Players"].cell(CellIndex.indexByString("A1")).value,
+        )
+    }
+
+    @Test
+    fun setAndRemoveHeaderFooterInMemory() {
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+        sheet.headerFooter = HeaderFooter(
+            alignWithMargins = true,
+            differentFirst = false,
+            differentOddEven = true,
+            scaleWithDoc = false,
+            evenFooter = "EvenFooter",
+            evenHeader = "EvenHeader",
+            firstFooter = "FirstFooter",
+            firstHeader = "FirstHeader",
+            oddFooter = "OddFooter",
+            oddHeader = "OddHeader",
+        )
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val reread = Excel.decodeBytes(bytes)
+        val rereadSheet = reread["Sheet1"]
+        assertNotNull(rereadSheet.headerFooter)
+        assertEquals(true, rereadSheet.headerFooter!!.alignWithMargins)
+        assertEquals(false, rereadSheet.headerFooter!!.differentFirst)
+        assertEquals(true, rereadSheet.headerFooter!!.differentOddEven)
+        assertEquals(false, rereadSheet.headerFooter!!.scaleWithDoc)
+        assertEquals("EvenFooter", rereadSheet.headerFooter!!.evenFooter)
+        assertEquals("EvenHeader", rereadSheet.headerFooter!!.evenHeader)
+        assertEquals("FirstFooter", rereadSheet.headerFooter!!.firstFooter)
+        assertEquals("FirstHeader", rereadSheet.headerFooter!!.firstHeader)
+        assertEquals("OddFooter", rereadSheet.headerFooter!!.oddFooter)
+        assertEquals("OddHeader", rereadSheet.headerFooter!!.oddHeader)
+
+        // Remove headerFooter and roundtrip again
+        rereadSheet.headerFooter = null
+        val bytesWithoutHf = reread.encode()
+        assertNotNull(bytesWithoutHf)
+
+        val finalExcel = Excel.decodeBytes(bytesWithoutHf)
+        assertNull(finalExcel["Sheet1"].headerFooter)
     }
 }

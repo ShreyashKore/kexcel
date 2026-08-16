@@ -21,7 +21,7 @@ Kexcel is published to **Maven Central** under the coordinates
     kotlin {
         sourceSets {
             commonMain.dependencies {
-                implementation("com.gyanoba.kexcel:kexcel:0.1.0")
+                implementation("com.gyanoba.kexcel:kexcel:0.1.1")
             }
         }
     }
@@ -31,7 +31,7 @@ Kexcel is published to **Maven Central** under the coordinates
 
     ```kotlin title="build.gradle.kts"
     dependencies {
-        implementation("com.gyanoba.kexcel:kexcel:0.1.0")
+        implementation("com.gyanoba.kexcel:kexcel:0.1.1")
     }
     ```
 
@@ -39,7 +39,7 @@ Kexcel is published to **Maven Central** under the coordinates
 
     ```groovy title="build.gradle"
     dependencies {
-        implementation 'com.gyanoba.kexcel:kexcel:0.1.0'
+        implementation 'com.gyanoba.kexcel:kexcel:0.1.1'
     }
     ```
 
@@ -47,7 +47,7 @@ Kexcel is published to **Maven Central** under the coordinates
 
     ```toml title="gradle/libs.versions.toml"
     [versions]
-    kexcel = "0.1.0"
+    kexcel = "0.1.1"
 
     [libraries]
     kexcel = { module = "com.gyanoba.kexcel:kexcel", version.ref = "kexcel" }
@@ -81,7 +81,7 @@ dependencyResolutionManagement {
 
 | Requirement | Value |
 | --- | --- |
-| Kotlin | 2.0+ (the library is built with 2.3.x) |
+| Kotlin | 2.4.10+ (the version the multiplatform artifacts are built with) |
 | JVM / Android | Java 17 bytecode; Android `minSdk` 23 |
 | iOS | `iosArm64`, `iosSimulatorArm64` |
 

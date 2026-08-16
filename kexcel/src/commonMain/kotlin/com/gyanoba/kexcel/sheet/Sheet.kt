@@ -683,6 +683,8 @@ public class Sheet internal constructor(
                 }
             }
             _spannedItems.remove(unmergeCells)
+            // Like merge(), the save path only rewrites <mergeCells> when this flag is set.
+            excel.mergeChanges = true
             excel.addMergeChangeLookup(sheetName)
         }
     }

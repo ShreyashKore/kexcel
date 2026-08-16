@@ -658,11 +658,12 @@ public class Parser internal constructor(private val excel: Excel) {
         val sheetNumber = sheetId
         val ridNumber = getAvailableRid()
 
+        // NOTE: `Element.children()` returns a detached copy of the child list — appending to it
+        // does not touch the document. Always use `appendChild` to actually modify the DOM.
         excel.xmlFiles["xl/_rels/workbook.xml.rels"]
             ?.getElementsByTag("Relationships")
             ?.firstOrNull()
-            ?.children()
-            ?.add(
+            ?.appendChild(
                 Element(
                     "Relationship",
                     listOf(
@@ -677,21 +678,22 @@ public class Parser internal constructor(private val excel: Excel) {
             rId.add("rId$ridNumber")
         }
 
-        excel.xmlFiles["xl/workbook.xml"]
+        val sheetNode = Element(
+            "sheet",
+            listOf(
+                Attribute("state", "visible"),
+                Attribute("name", newSheet),
+                Attribute("sheetId", "$sheetNumber"),
+                Attribute("r:id", "rId$ridNumber")
+            )
+        )
+
+        val sheetsNode = excel.xmlFiles["xl/workbook.xml"]
             ?.getElementsByTag("sheets")
             ?.firstOrNull()
-            ?.children()
-            ?.add(
-                Element(
-                    "sheet",
-                    listOf(
-                        Attribute("state", "visible"),
-                        Attribute("name", newSheet),
-                        Attribute("sheetId", "$sheetNumber"),
-                        Attribute("r:id", "rId$ridNumber")
-                    )
-                )
-            )
+            ?: damagedExcel(text = "Missing <sheets> node in workbook.xml")
+
+        sheetsNode.appendChild(sheetNode)
 
         worksheetTargets["rId$ridNumber"] = "worksheets/sheet$sheetNumber.xml"
 
@@ -728,8 +730,7 @@ public class Parser internal constructor(private val excel: Excel) {
         excel.xmlFiles["[Content_Types].xml"]
             ?.getElementsByTag("Types")
             ?.firstOrNull()
-            ?.children()
-            ?.add(
+            ?.appendChild(
                 Element(
                     "Override",
                     listOf(
@@ -742,9 +743,7 @@ public class Parser internal constructor(private val excel: Excel) {
                 )
             )
 
-        excel.xmlFiles["xl/workbook.xml"]?.let { workbook ->
-            parseTable(workbook.getElementsByTag("sheet").last())
-        }
+        parseTable(sheetNode)
     }
 
     private fun parseHeaderFooter(worksheet: Element?, sheetObject: Sheet) {

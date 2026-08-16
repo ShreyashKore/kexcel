@@ -519,9 +519,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
         if (sheetObject.getColumnWidths.isEmpty() && sheetObject.getColumnAutoFits.isEmpty()) {
             if (columnElements.isEmpty()) return
-            val worksheet = xmlFile.getElementsByTag("worksheet").first()
-                ?: damagedExcel("Missing <worksheet> element in sheet XML")
-            worksheet.children().remove(columnElements.first())
+            columnElements.first().remove()
             return
         }
 
@@ -533,7 +531,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
         val columns = xmlFile.getElementsByTag("cols").first()
             ?: damagedExcel("Missing <cols> element in sheet XML")
-        columns.children().clear()
+        columns.empty()
 
         val autoFits = sheetObject.getColumnAutoFits
         val customWidths = sheetObject.getColumnWidths
@@ -606,8 +604,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         val worksheetEl = xmlFile.getElementsByTag("worksheet").first()
             ?: damagedExcel("Missing <worksheet> element in sheet XML")
 
-        val existing = worksheetEl.getElementsByTag("headerFooter").toList()
-        if (existing.isNotEmpty()) worksheetEl.children().remove(existing.first())
+        worksheetEl.getElementsByTag("headerFooter").toList().forEach { it.remove() }
 
         sheet.headerFooter?.let { worksheetEl.appendChild(it.toXmlElement()) }
     }
@@ -616,11 +613,19 @@ public class Save internal constructor(private val excel: Excel, private val par
         selfCorrectSpanMap(excel)
         excel.mergeChangeLook.forEach { s ->
             val sheetObj = excel.sheetMap[s] ?: return@forEach
-            if (sheetObj.spanList.isEmpty()) return@forEach
             val xmlSheetPath = excel.xmlSheetId[s] ?: return@forEach
             val xmlDoc = excel.xmlFiles[xmlSheetPath] ?: return@forEach
 
+            val spannedItems = sheetObj.spannedItems.toList()
             val iterMerge = xmlDoc.getElementsByTag("mergeCells").toList()
+
+            if (spannedItems.isEmpty()) {
+                // The last merge was removed: drop the part entirely rather than leaving the
+                // stale refs behind, which would resurrect the merges on the next read.
+                iterMerge.forEach { it.remove() }
+                return@forEach
+            }
+
             val mergeElement: Element = if (iterMerge.isNotEmpty()) {
                 iterMerge.first()
             } else {
@@ -635,16 +640,12 @@ public class Save internal constructor(private val excel: Excel, private val par
                 newMerge
             }
 
-            val spannedItems = sheetObj.spannedItems.toList()
+            mergeElement.attr("count", spannedItems.size.toString())
+            // Older versions of this library wrote a bogus `value` attribute here (the count was
+            // set through `Element.value()`, which sets `value`); drop it so the part validates.
+            mergeElement.removeAttr("value")
 
-            val countAttr = mergeElement.getElementsByAttribute("count").first()
-            if (countAttr == null) {
-                mergeElement.attributes().add("count", spannedItems.size.toString())
-            } else {
-                countAttr.value(spannedItems.size.toString())
-            }
-
-            mergeElement.children().clear()
+            mergeElement.empty()
             spannedItems.forEach { ref ->
                 mergeElement.appendChild(
                     Element("mergeCell", listOf(Attribute("ref", ref)))
@@ -670,7 +671,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
             if (sheetViewsIter.isNotEmpty()) {
                 val sheetViewsEl = sheetViewsIter.first()
-                sheetViewsEl.children().clear()
+                sheetViewsEl.empty()
                 sheetViewsEl.appendChild(sheetViewEl)
             } else {
                 val worksheetEl = xmlDoc.getElementsByTag("worksheet").first()
@@ -689,7 +690,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         val shareString = excel.xmlFiles["xl/${excel.sharedStringsTarget}"]!!
             .getElementsByTag("sst").first()
 
-        shareString?.children()?.clear()
+        shareString?.empty()
 
         excel.sharedStrings.map.forEach { (sharedString, indexingHolder) ->
             uniqueCount++
@@ -712,9 +713,7 @@ public class Save internal constructor(private val excel: Excel, private val par
                 parser.createSheet(sheetName)
             }
 
-            if (excel.sheets[sheetName]?.children()?.isNotEmpty() == true) {
-                excel.sheets[sheetName]!!.children().clear()
-            }
+            excel.sheets[sheetName]?.empty()
 
             val xmlFile = excel.xmlFiles[excel.xmlSheetId[sheetName]] ?: return@forEach
 
@@ -722,24 +721,26 @@ public class Save internal constructor(private val excel: Excel, private val par
             val defaultColumnWidth = sheetObject.defaultColumnWidth
 
             val worksheetEl = xmlFile.getElementsByTag("worksheet").first()
-            var sheetFormatPrEl = worksheetEl?.find { it.nodeName() == "sheetFormatPr" }?.firstOrNull()
+            var sheetFormatPrEl = worksheetEl?.children()
+                ?.firstOrNull { it.nodeName() == "sheetFormatPr" }
 
-            if (sheetFormatPrEl != null) {
-                sheetFormatPrEl.clearAttributes()
-                if (defaultRowHeight == null && defaultColumnWidth == null) {
-                    worksheetEl?.children()?.remove(sheetFormatPrEl)
-                    sheetFormatPrEl = null
-                }
-            } else if (defaultRowHeight != null || defaultColumnWidth != null) {
+            if (sheetFormatPrEl == null && (defaultRowHeight != null || defaultColumnWidth != null)) {
                 sheetFormatPrEl = Element("sheetFormatPr")
                 worksheetEl?.prependChildren(listOf(sheetFormatPrEl))
             }
 
-            defaultRowHeight?.let {
-                sheetFormatPrEl!!.attributes().add("defaultRowHeight", it.toFixed2())
-            }
-            defaultColumnWidth?.let {
-                sheetFormatPrEl!!.attributes().add("defaultColWidth", it.toFixed2())
+            // Only the two attributes the model owns are rewritten here. Everything else the
+            // producing application put on <sheetFormatPr> (baseColWidth, outlineLevelRow,
+            // zeroHeight, x14ac:dyDescent, …) is unmodelled and must survive a round trip.
+            sheetFormatPrEl?.let { el ->
+                if (defaultRowHeight != null) el.attr("defaultRowHeight", defaultRowHeight.toFixed2())
+                else el.removeAttr("defaultRowHeight")
+
+                if (defaultColumnWidth != null) el.attr("defaultColWidth", defaultColumnWidth.toFixed2())
+                else el.removeAttr("defaultColWidth")
+
+                // Nothing left to say — an attribute-less <sheetFormatPr> carries no information.
+                if (el.attributesSize() == 0) el.remove()
             }
 
             setColumns(sheetObject, xmlFile)
