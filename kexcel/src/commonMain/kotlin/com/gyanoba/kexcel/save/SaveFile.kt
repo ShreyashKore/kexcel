@@ -92,13 +92,8 @@ public class Save internal constructor(private val excel: Excel, private val par
     ): Element {
         var sharedString: SharedString? = null
         if (value is TextCellValue) {
-            val existing = excel.sharedStrings.tryFind(value.toString())
-            sharedString = if (existing != null) {
-                excel.sharedStrings.add(existing, value.toString())
-                existing
-            } else {
-                excel.sharedStrings.addFromString(value.toString())
-            }
+            // Pass the whole span, not its flattened text, so rich-text runs are kept.
+            sharedString = excel.sharedStrings.addFromSpan(value.value)
         }
 
         val rC = getCellId(columnIndex, rowIndex)

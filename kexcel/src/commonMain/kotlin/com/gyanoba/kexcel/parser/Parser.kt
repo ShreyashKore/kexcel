@@ -169,7 +169,9 @@ public class Parser internal constructor(private val excel: Excel) {
 
     private fun parseSharedString(node: Element) {
         val sharedString = SharedString(node = node)
-        excel.sharedStrings.add(sharedString, sharedString.stringValue)
+        // Keyed by the node itself, matching how the save path registers entries — plain
+        // text alone cannot tell two differently styled rich strings apart.
+        excel.sharedStrings.add(sharedString, node.toString())
     }
 
     private fun parseContent(run: Boolean = true) {

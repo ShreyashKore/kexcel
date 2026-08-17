@@ -527,6 +527,39 @@ class ExcelFileTest {
         assertEquals("Arial", cellA3.value.children!![1].style!!.fontFamily)
     }
 
+    // Saving must re-emit the <r>/<rPr> runs rather than flattening them to plain text.
+    @Test
+    fun savingXlsxWithRichText() {
+        val original = Excel.decodeBytes(fixture("richText.xlsx"))
+        val saved = original.encode()!!
+        val reread = Excel.decodeBytes(saved)
+
+        listOf("A1", "A2", "A3").forEach { id ->
+            val before = original.tables["Sheet1"]!!.cell(CellIndex.indexByString(id)).value as TextCellValue
+            val after = reread.tables["Sheet1"]!!.cell(CellIndex.indexByString(id)).value as TextCellValue
+            assertEquals(before.toString(), after.toString(), "text of $id")
+            assertEquals(
+                before.value.children?.map { it.text },
+                after.value.children?.map { it.text },
+                "runs of $id",
+            )
+            assertEquals(
+                before.value.children?.map { it.style },
+                after.value.children?.map { it.style },
+                "run styles of $id",
+            )
+        }
+
+        // The written part really does carry rich runs, not one flattened <t>.
+        val sst = Ksoup.parseXml(readZipEntry(saved, "xl/sharedStrings.xml").decodeToString())
+        val richItems = sst.getElementsByTag("si").filter { it.getElementsByTag("r").isNotEmpty() }
+        assertTrue(richItems.isNotEmpty(), "expected <si> entries containing <r> runs")
+        assertTrue(
+            richItems.all { it.getElementsByTag("rPr").isNotEmpty() },
+            "every rich run should carry its <rPr> properties",
+        )
+    }
+
     // region --- rPh tag group ---
 
     // Dart: 'Read Cell shared text without rPh elements'
