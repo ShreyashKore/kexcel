@@ -9,6 +9,8 @@ import com.gyanoba.kexcel.number_format.NumFormat
 import com.gyanoba.kexcel.number_format.NumFormatMaintainer
 import com.gyanoba.kexcel.number_format.StandardNumFormat
 import com.gyanoba.kexcel.sheet.BoolCellValue
+import com.gyanoba.kexcel.sheet.CellIndex
+import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.DateCellValue
 import com.gyanoba.kexcel.sheet.DateTimeCellValue
 import com.gyanoba.kexcel.sheet.DoubleCellValue
@@ -21,13 +23,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * Tests for the `number_format` package: how format codes are classified, which cell
  * values each format accepts, how serialized cell text is read back into a
- * [com.gyanoba.kexcel.sheet.CellValue], and the custom-format id registry.
+ * [com.gyanoba.kexcel.sheet.CellValue], the custom-format id registry, and how default
+ * and custom formats survive a save through a real workbook.
  */
 class NumberFormatTest {
 
@@ -267,6 +271,105 @@ class NumberFormatTest {
         assertEquals(NumFormat.standard_14, maintainer.getByNumFmtId(14))
         // Ids restart from the bottom of the custom range.
         assertEquals(164, maintainer.findOrAdd(CustomNumericNumFormat("brand-new")))
+    }
+
+    // endregion
+
+    // region --- Formats through a workbook ---
+
+    // Dart: 'Testing customNumFormats'
+    @Test
+    fun customNumFormats() {
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+
+        val format1 = CustomNumericNumFormat(formatCode = "0.00%")
+        val format2 = CustomNumericNumFormat(formatCode = "#,##0.00")
+
+        sheet.updateCell(
+            CellIndex.indexByString("A1"),
+            DoubleCellValue(0.15),
+            cellStyle = CellStyle(numberFormat = format1),
+        )
+        sheet.updateCell(
+            CellIndex.indexByString("B1"),
+            DoubleCellValue(123456.789),
+            cellStyle = CellStyle(numberFormat = format2),
+        )
+
+        val bytes = excel.encode()
+        assertNotNull(bytes)
+
+        val excel2 = Excel.decodeBytes(bytes)
+        val sheet2 = excel2["Sheet1"]
+        val a1 = sheet2.cell(CellIndex.indexByString("A1"))
+        val b1 = sheet2.cell(CellIndex.indexByString("B1"))
+
+        assertEquals(format1, a1.cellStyle?.numberFormat)
+        assertEquals(DoubleCellValue(0.15), a1.value)
+        assertEquals(format2, b1.cellStyle?.numberFormat)
+        assertEquals(DoubleCellValue(123456.789), b1.value)
+    }
+
+    // Dart: 'Saving XLSX File with appendRow'
+    @Test
+    fun savingXlsxWithAppendRow() {
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+
+        sheet.appendRow(
+            listOf(
+                IntCellValue(8),
+                DoubleCellValue(999.62221),
+                DateCellValue(year = 2023, month = 4, day = 20),
+                DateTimeCellValue(
+                    year = 2023, month = 4, day = 20,
+                    hour = 15, minute = 44, second = 13,
+                ),
+                TextCellValue("value"),
+            )
+        )
+
+        val fileBytes = excel.encode()
+        assertNotNull(fileBytes)
+
+        val newExcel = Excel.decodeBytes(fileBytes)
+        assertEquals(1, newExcel.tables.size)
+        val s = newExcel.tables["Sheet1"]!!
+        assertEquals(5, s.maxColumns)
+
+        assertEquals(IntCellValue(8), s.rows[0][0]!!.value)
+        assertEquals(
+            NumFormat.defaultNumeric.toString(),
+            s.rows[0][0]!!.cellStyle?.numberFormat.toString(),
+        )
+
+        assertEquals(DoubleCellValue(999.62221), s.rows[0][1]!!.value)
+        assertEquals(
+            NumFormat.defaultFloat.toString(),
+            s.rows[0][1]!!.cellStyle?.numberFormat.toString(),
+        )
+
+        assertEquals(DateCellValue(year = 2023, month = 4, day = 20), s.rows[0][2]!!.value)
+        assertEquals(
+            NumFormat.defaultDate.toString(),
+            s.rows[0][2]!!.cellStyle?.numberFormat.toString(),
+        )
+
+        assertEquals(
+            DateTimeCellValue(year = 2023, month = 4, day = 20, hour = 15, minute = 44, second = 13),
+            s.rows[0][3]!!.value,
+        )
+        assertEquals(
+            NumFormat.defaultDateTime.toString(),
+            s.rows[0][3]!!.cellStyle?.numberFormat.toString(),
+        )
+
+        assertEquals(TextCellValue("value"), s.rows[0][4]!!.value)
+        assertEquals(
+            NumFormat.standard_0.toString(),
+            s.rows[0][4]!!.cellStyle?.numberFormat.toString(),
+        )
     }
 
     // endregion
