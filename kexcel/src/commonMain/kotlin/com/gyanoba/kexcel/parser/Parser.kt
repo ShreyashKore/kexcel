@@ -372,14 +372,14 @@ public class Parser internal constructor(private val excel: Excel) {
                         isItalic = true
                     }
 
-                    val doubleUnderline = nodeChildren(font, "u", attribute = "val")
-                    if (doubleUnderline != null) {
-                        underline = Underline.Double
-                    }
-
-                    val singleUnderline = nodeChildren(font, "u")
-                    if (singleUnderline != null) {
-                        underline = Underline.Single
+                    // <u/> is a single underline, <u val="double"/> a double one. A missing
+                    // attribute reads back as "", so only an explicit "double" counts.
+                    if (nodeChildren(font, "u") != null) {
+                        underline = if (nodeChildren(font, "u", attribute = "val") == "double") {
+                            Underline.Double
+                        } else {
+                            Underline.Single
+                        }
                     }
 
                     val family = nodeChildren(font, "name", attribute = "val")
@@ -422,8 +422,13 @@ public class Parser internal constructor(private val excel: Excel) {
                             textWrapping = TextWrapping.Clip
                         }
 
-                        // Note: Dart reads alignment attributes from `node` (parent xf), not `child`
-                        val vertical = node.attr("vertical")
+                        // The attributes live on <alignment> itself; older Dart-written files
+                        // put them on the parent <xf>, so fall back to `node`.
+                        fun alignmentAttr(name: String): String? =
+                            child.attr(name)?.takeIf { it.isNotEmpty() }
+                                ?: node.attr(name)?.takeIf { it.isNotEmpty() }
+
+                        val vertical = alignmentAttr("vertical")
                         if (vertical != null) {
                             verticalAlign = when (vertical) {
                                 "top" -> VerticalAlign.Top
@@ -432,7 +437,7 @@ public class Parser internal constructor(private val excel: Excel) {
                             }
                         }
 
-                        val horizontal = node.attr("horizontal")
+                        val horizontal = alignmentAttr("horizontal")
                         if (horizontal != null) {
                             horizontalAlign = when (horizontal) {
                                 "center" -> HorizontalAlign.Center
@@ -441,7 +446,7 @@ public class Parser internal constructor(private val excel: Excel) {
                             }
                         }
 
-                        val rotationString = node.attr("textRotation")
+                        val rotationString = alignmentAttr("textRotation")
                         if (rotationString != null) {
                             rotation = rotationString.toDoubleOrNull()?.toInt() ?: 0
                         }
@@ -456,6 +461,7 @@ public class Parser internal constructor(private val excel: Excel) {
                 val cellStyle = CellStyle(
                     fontColorHex = fontColor.toExcelColor(),
                     fontFamily = fontFamily,
+                    fontScheme = fontScheme,
                     fontSize = fontSize,
                     bold = isBold,
                     italic = isItalic,
