@@ -534,8 +534,12 @@ public class Parser internal constructor(private val excel: Excel) {
 
         val sheet = worksheet?.getElementsByTag("sheetData")?.first()
 
+        // `r` is optional on both <row> and <c> (§18.3.1.73, §18.3.1.4). When it is absent
+        // the element's position is implied by document order, so the running index of the
+        // previous sibling is threaded through the parse.
+        var previousRowIndex = -1
         findRows(sheet).forEach { child ->
-            parseRow(child, sheetObject, name)
+            previousRowIndex = parseRow(child, sheetObject, name, previousRowIndex)
         }
 
         parseHeaderFooter(worksheet, sheetObject)
@@ -548,17 +552,27 @@ public class Parser internal constructor(private val excel: Excel) {
         normalizeTable(sheetObject)
     }
 
-    private fun parseRow(node: Element, sheetObject: Sheet, name: String) {
-        val rowIndex = (getRowNumber(node) ?: -1) - 1
-        if (rowIndex < 0) return
+    /** Parses one `<row>` and returns the row index it occupied. */
+    private fun parseRow(node: Element, sheetObject: Sheet, name: String, previousRowIndex: Int): Int {
+        val rowIndex = getRowNumber(node)?.minus(1) ?: (previousRowIndex + 1)
+        if (rowIndex < 0) return previousRowIndex
 
+        var previousColumnIndex = -1
         findCells(node).forEach { child ->
-            parseCell(child, sheetObject, rowIndex, name)
+            previousColumnIndex = parseCell(child, sheetObject, rowIndex, name, previousColumnIndex)
         }
+        return rowIndex
     }
 
-    private fun parseCell(node: Element, sheetObject: Sheet, rowIndex: Int, name: String) {
-        val columnIndex = getCellNumber(node) ?: return
+    /** Parses one `<c>` and returns the column index it occupied. */
+    private fun parseCell(
+        node: Element,
+        sheetObject: Sheet,
+        rowIndex: Int,
+        name: String,
+        previousColumnIndex: Int,
+    ): Int {
+        val columnIndex = getCellNumber(node) ?: (previousColumnIndex + 1)
 
         val s1 = node.attribute("s")?.value
         var s = 0
@@ -579,8 +593,13 @@ public class Parser internal constructor(private val excel: Excel) {
         value = when (type) {
             // shared string
             "s" -> {
-                val index = parseValue(node.getElementsByTag("v").first()).toInt()
-                val sharedString = excel.sharedStrings.value(index)!!
+                val raw = parseValue(node.getElementsByTag("v").firstOrNull()).trim()
+                val index = raw.toIntOrNull()
+                    ?: damagedExcel("Cell ${node.attr("r")} has a non-numeric shared string index: `$raw`")
+                val sharedString = excel.sharedStrings.value(index)
+                    ?: damagedExcel(
+                        "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
+                    )
                 TextCellValue.span(sharedString.textSpan)
             }
             // boolean
@@ -589,8 +608,16 @@ public class Parser internal constructor(private val excel: Excel) {
             "e",
                 // formula string
             "str" -> FormulaCellValue(parseValue(node.getElementsByTag("v").first()))
-            // inline string
-            "inlineStr" -> TextCellValue(parseValue(node.getElementsByTag("t").first()))
+            // inline string. <is> shares the CT_Rst content model with a shared string's
+            // <si>, so it is read with the same code — otherwise everything after the
+            // first run of a rich inline string would be dropped.
+            "inlineStr" -> {
+                val isEl = node.getElementsByTag("is").firstOrNull()
+                if (isEl == null) TextCellValue("")
+                else TextCellValue.span(
+                    SharedString(Element("si", emptyList(), isEl.childNodesCopy())).textSpan
+                )
+            }
             // number (default)
             else -> {
                 val formulaNode = node.getElementsByTag("f")
@@ -598,16 +625,18 @@ public class Parser internal constructor(private val excel: Excel) {
                     FormulaCellValue(parseValue(formulaNode.first()).toString())
                 } else {
                     val vNode = node.getElementsByTag("v").firstOrNull()
+                    // An empty <v/> carries no number. Producers emit it for a cell that
+                    // has a style but no value; feeding "" to a NumFormat would throw.
+                    val raw = vNode?.let { parseValue(it) }
                     when {
-                        vNode == null -> null
+                        raw.isNullOrBlank() -> null
                         s1 != null -> {
-                            val v = parseValue(vNode)
                             val numFmtId = excel.numFmtIds[s]
                             val numFormat = excel.numFormats.getByNumFmtId(numFmtId)
                                 ?: NumFormat.defaultNumeric
-                            numFormat.read(v)
+                            numFormat.read(raw)
                         }
-                        else -> NumFormat.defaultNumeric.read(parseValue(vNode))
+                        else -> NumFormat.defaultNumeric.read(raw)
                     }
                 }
             }
@@ -618,6 +647,7 @@ public class Parser internal constructor(private val excel: Excel) {
             value,
             cellStyle = excel.cellStyleList[s]
         )
+        return columnIndex
     }
 
 
@@ -764,12 +794,14 @@ public class Parser internal constructor(private val excel: Excel) {
         // Parse default column width and default row height
         // e.g. <sheetFormatPr defaultColWidth="26.33" defaultRowHeight="13" />
         worksheet?.getElementsByTag("sheetFormatPr")?.forEach { element ->
-            val defaultColWidth = element.attr("defaultColWidth").toDoubleOrNull()
-            val defaultRowHeight = element.attr("defaultRowHeight").toDoubleOrNull()
-            if (defaultColWidth != null && defaultRowHeight != null) {
-                sheetObject.setDefaultColumnWidth(defaultColWidth)
-                sheetObject.setDefaultRowHeight(defaultRowHeight)
-            }
+            // The two attributes are independent and either may be absent — Excel and POI
+            // routinely write `defaultRowHeight` alone. Requiring both meant a lone
+            // attribute was dropped on read, and the save path then deleted the whole
+            // (now attribute-less) <sheetFormatPr>.
+            element.attr("defaultColWidth").toDoubleOrNull()
+                ?.let { sheetObject.setDefaultColumnWidth(it) }
+            element.attr("defaultRowHeight").toDoubleOrNull()
+                ?.let { sheetObject.setDefaultRowHeight(it) }
         }
 
         // Parse custom column widths

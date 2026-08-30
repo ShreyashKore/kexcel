@@ -83,4 +83,56 @@ class WorksheetXmlTest {
         assertEquals(1, after.attributes().count { it.key == "defaultRowHeight" })
         assertEquals(1, after.attributes().count { it.key == "defaultColWidth" })
     }
+
+    // `rightToLeft` is the only thing the model owns inside <sheetView>. Everything else
+    // there — <pane>, <selection>, tabSelected, zoomScale, showGridLines — is unmodelled
+    // and must survive. The writer used to rebuild the element from scratch, and because
+    // the parser puts *every* sheet on the RTL change list, that ran on ordinary saves.
+    @Test
+    fun sheetViewKeepsUnmodelledStateAcrossASave() {
+        val sheetViewXml =
+            """<sheetViews><sheetView tabSelected="1" zoomScale="125" showGridLines="0" workbookViewId="0">""" +
+                """<pane xSplit="2" ySplit="1" topLeftCell="C2" activePane="bottomRight" state="frozen"/>""" +
+                """<selection pane="bottomRight" activeCell="C2" sqref="C2"/>""" +
+                """</sheetView></sheetViews>"""
+        val base = Excel.createExcel().encode()!!
+        val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">$sheetViewXml<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"""
+        val original = replaceZipEntry(base, "xl/worksheets/sheet1.xml", xml.encodeToByteArray())
+
+        val saved = Excel.decodeBytes(original).encode()!!
+        val view = Ksoup.parseXml(readZipEntry(saved, "xl/worksheets/sheet1.xml").decodeToString())
+            .getElementsByTag("sheetView").first()
+            ?: error("<sheetView> was dropped on save")
+
+        assertEquals("1", view.attr("tabSelected"))
+        assertEquals("125", view.attr("zoomScale"))
+        assertEquals("0", view.attr("showGridLines"))
+
+        val pane = view.getElementsByTag("pane").first() ?: error("<pane> was dropped on save")
+        assertEquals("2", pane.attr("xSplit"))
+        assertEquals("frozen", pane.attr("state"))
+        assertEquals("C2", view.getElementsByTag("selection").first()?.attr("activeCell"))
+    }
+
+    // Turning RTL on and back off must patch just the one attribute, not replace the element.
+    @Test
+    fun togglingRightToLeftLeavesTheRestOfTheSheetViewAlone() {
+        val base = Excel.createExcel().encode()!!
+        val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView zoomScale="90" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" state="frozen"/></sheetView></sheetViews><sheetData/></worksheet>"""
+        val original = replaceZipEntry(base, "xl/worksheets/sheet1.xml", xml.encodeToByteArray())
+
+        val on = Excel.decodeBytes(original).also { it["Sheet1"].isRTL = true }.encode()!!
+        assertEquals(true, Excel.decodeBytes(on)["Sheet1"].isRTL)
+
+        val off = Excel.decodeBytes(on).also { it["Sheet1"].isRTL = false }.encode()!!
+        assertEquals(false, Excel.decodeBytes(off)["Sheet1"].isRTL)
+
+        val view = Ksoup.parseXml(readZipEntry(off, "xl/worksheets/sheet1.xml").decodeToString())
+            .getElementsByTag("sheetView").first()!!
+        assertEquals("90", view.attr("zoomScale"), "unrelated view state was lost")
+        assertTrue(view.getElementsByTag("pane").isNotEmpty(), "<pane> was lost")
+        assertTrue(!view.hasAttr("rightToLeft"), "rightToLeft should be gone once unset")
+    }
 }

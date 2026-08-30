@@ -51,6 +51,14 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
         }
+
+        // Apache POI is a JVM test-only dependency. It is never part of the
+        // published artifact; it acts as an independent oracle so the JVM tests
+        // can assert that what Kexcel writes is readable by a mainstream OOXML
+        // implementation (and that what POI writes is readable by Kexcel).
+        jvmTest.dependencies {
+            implementation(libs.poi.ooxml)
+        }
     }
 }
 

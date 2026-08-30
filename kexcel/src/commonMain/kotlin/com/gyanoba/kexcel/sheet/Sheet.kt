@@ -1053,7 +1053,10 @@ public class Sheet internal constructor(
     }
 
     internal fun checkMaxColumn(columnIndex: Int) {
-        if (_maxColumns >= 16384 || columnIndex >= 16384) {
+        // Only the index is checked. `_maxColumns` is a *count*, so testing it against the
+        // same limit would reject the last legal column (XFD, index 16383) as soon as it had
+        // been written — writing it bumped the count to 16384, and every later read threw.
+        if (columnIndex >= 16384) {
             throw IllegalArgumentException("Reached Max (16384) or (XFD) columns value.")
         }
         if (columnIndex < 0) {
@@ -1062,7 +1065,8 @@ public class Sheet internal constructor(
     }
 
     internal fun checkMaxRow(rowIndex: Int) {
-        if (_maxRows >= 1048576 || rowIndex >= 1048576) {
+        // See [checkMaxColumn]: `_maxRows` is a count, not an index.
+        if (rowIndex >= 1048576) {
             throw IllegalArgumentException("Reached Max (1048576) rows value.")
         }
         if (rowIndex < 0) {

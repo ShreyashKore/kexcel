@@ -85,3 +85,49 @@ internal fun assertMergeCellsCount(bytes: ByteArray, expected: Int) {
     assertEquals(expected, mergeCells.getElementsByTag("mergeCell").size)
     assertFalse(mergeCells.hasAttr("value"), "unexpected `value` attribute on <mergeCells>")
 }
+/**
+ * Rewrites a single entry of an `.xlsx` archive, leaving every other entry byte-identical.
+ *
+ * Lets the reader tests hand Kexcel worksheet XML that Kexcel itself would never emit —
+ * the shapes other producers (Excel, LibreOffice, Google Sheets, POI, exporters) do emit.
+ */
+internal fun replaceZipEntry(bytes: ByteArray, entryName: String, content: ByteArray): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    java.util.zip.ZipOutputStream(out).use { zos ->
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                zos.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                if (entry.name == entryName) zos.write(content) else zos.write(zis.readBytes())
+                zos.closeEntry()
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+        }
+    }
+    return out.toByteArray()
+}
+
+/** Every entry name in an `.xlsx` archive. */
+internal fun zipEntryNames(bytes: ByteArray): List<String> = buildList {
+    ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+        var entry = zis.nextEntry
+        while (entry != null) {
+            add(entry.name)
+            zis.closeEntry()
+            entry = zis.nextEntry
+        }
+    }
+}
+
+/**
+ * Builds a workbook whose `xl/worksheets/sheet1.xml` is [sheetDataXml] wrapped in a
+ * minimal `<worksheet>`, then reads `Sheet1` back out of it.
+ */
+internal fun sheetFromRawXml(sheetDataXml: String, beforeSheetData: String = ""): Sheet {
+    val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">$beforeSheetData<sheetData>$sheetDataXml</sheetData></worksheet>"""
+    val base = Excel.createExcel().encode()!!
+    val patched = replaceZipEntry(base, "xl/worksheets/sheet1.xml", xml.encodeToByteArray())
+    return Excel.decodeBytes(patched)["Sheet1"]
+}
