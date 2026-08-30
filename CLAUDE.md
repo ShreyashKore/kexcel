@@ -25,7 +25,16 @@ All commands use the Gradle wrapper (`./gradlew`).
 - A single test class: `./gradlew :kexcel:jvmTest --tests "com.gyanoba.kexcel.ExcelFileTest"`
 - A single test method: `./gradlew :kexcel:jvmTest --tests "com.gyanoba.kexcel.ExcelFileTest.<methodName>"`
 
-Note `commonTest` (`ExcelInMemoryTest`) runs on every target; `jvmTest` (`ExcelFileTest`, reads/writes real files) runs only on the JVM.
+Note `commonTest` runs on every target; `jvmTest` runs only on the JVM (it reads `.xlsx` fixtures from disk and uses JVM-only libraries).
+
+The suite has four layers, and a change usually belongs in one of them:
+
+- **Model and round trip (`commonTest`)** — the API and its behaviour, plus `encode()` → `decodeBytes()` round trips. Runs on every target.
+- **Fixture tests (`jvmTest`)** — real `.xlsx` files under `src/commonTest/kotlin/com/gyanoba/kexcel/test_resources/`, read through `fixture(name)`. Most are ports of the Dart `excel` suite and carry a `// Dart: '...'` comment naming the original.
+- **Reader conformance (`ForeignWorksheetXmlTest`)** — hand-written worksheet XML that Kexcel would never emit but other producers do: omitted `r` references, `inlineStr`, error cells, cached formula results, empty `<v/>`. Built with `sheetFromRawXml(...)`. A round-trip test cannot catch a reader and writer that agree on a private dialect; this layer can.
+- **Package structure and interop (`OoxmlPackageTest`, `PoiInteropTest`)** — assertions about the bytes themselves (content types, relationships, `s`/`t="s"` index ranges, CT_Worksheet child order) and cross-validation against **Apache POI** as an independent oracle, in both directions. POI is a `jvmTest`-only dependency (`libs.poi.ooxml`) and is deliberately absent from the published POM — never move it to `commonTest` or `commonMain`.
+
+When adding a feature, the read and write paths must stay symmetric (see *Architecture*), so a feature normally needs a round-trip test **and** a reader-conformance test for the XML shapes other tools emit.
 
 **Run the sample apps:**
 - Desktop (Compose): `./gradlew :sample:desktopApp:run`

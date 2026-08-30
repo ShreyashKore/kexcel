@@ -2,10 +2,12 @@ package com.gyanoba.kexcel.shared_strings
 
 import com.fleeksoft.ksoup.nodes.Attribute
 import com.fleeksoft.ksoup.nodes.Element
+import com.fleeksoft.ksoup.nodes.Node
 import com.fleeksoft.ksoup.nodes.TextNode
 import com.gyanoba.kexcel.parser.Parser
 import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.Element
+import com.gyanoba.kexcel.utils.ExcelColor
 import com.gyanoba.kexcel.utils.Underline
 import com.gyanoba.kexcel.utils.toExcelColor
 
@@ -18,21 +20,27 @@ internal class SharedStringsMaintainer {
     private val list: MutableList<SharedString> = mutableListOf()
     private var index: Int = 0
 
-    fun tryFind(value: String): SharedString? = mapString[value]
+    fun addFromString(value: String): SharedString = addFromSpan(TextSpan(text = value))
 
-    fun addFromString(value: String): SharedString {
-        val newSharedString = SharedString(
-            node = Element(
-                "si",
-                Element(
-                    "t",
-                    listOf(Attribute("xml:space", "preserve")),
-                    listOf(TextNode(value)),
-                ),
-            )
-        )
+    /**
+     * Registers [span] and returns the shared string backing it, reusing an existing entry
+     * when an identical one was already written.
+     *
+     * Entries are keyed by their serialized `<si>` node rather than by plain text, so two
+     * spans that read the same but are styled differently stay distinct.
+     */
+    fun addFromSpan(span: TextSpan): SharedString {
+        val node = buildSharedStringItem(span)
+        val key = node.toString()
 
-        add(newSharedString, value)
+        val existing = mapString[key]
+        if (existing != null) {
+            add(existing, key)
+            return existing
+        }
+
+        val newSharedString = SharedString(node = node)
+        add(newSharedString, key)
         return newSharedString
     }
 
@@ -56,6 +64,67 @@ internal class SharedStringsMaintainer {
         map.clear()
         mapString.clear()
     }
+}
+
+// endregion
+
+// region --- TextSpan -> <si> serialization ---
+
+/**
+ * Builds the `<si>` (SharedStringItem) node for [span].
+ *
+ * This is the inverse of [SharedString.textSpan]: plain text becomes a single `<t>`, and
+ * every styled child becomes an `<r>` run with an `<rPr>` describing its style. Nested
+ * children are flattened, since OOXML rich runs are a flat list.
+ */
+internal fun buildSharedStringItem(span: TextSpan): Element {
+    val children = mutableListOf<Node>()
+    span.text?.let { children.add(textNode(it)) }
+    appendRuns(span.children, inheritedStyle = span.style, into = children)
+    // An <si> with no content at all is not valid; keep an empty <t> instead.
+    if (children.isEmpty()) children.add(textNode(""))
+    return Element("si", emptyList(), children)
+}
+
+private fun appendRuns(spans: List<TextSpan>?, inheritedStyle: CellStyle?, into: MutableList<Node>) {
+    spans?.forEach { child ->
+        val style = child.style ?: inheritedStyle
+        child.text?.let { text ->
+            val runChildren = mutableListOf<Node>()
+            runProperties(style)?.let { runChildren.add(it) }
+            runChildren.add(textNode(text))
+            into.add(Element("r", emptyList(), runChildren))
+        }
+        appendRuns(child.children, style, into)
+    }
+}
+
+/** `xml:space="preserve"` keeps leading/trailing spaces, which runs rely on. */
+private fun textNode(text: String): Element =
+    Element("t", listOf(Attribute("xml:space", "preserve")), listOf(TextNode(text)))
+
+/**
+ * Emits only the properties [SharedString.textSpan] reads back, and only when they differ
+ * from a default [CellStyle] — so a span with nothing set produces no `<rPr>` at all.
+ */
+private fun runProperties(style: CellStyle?): Element? {
+    if (style == null) return null
+
+    val properties = mutableListOf<Node>()
+    if (style.isBold) properties.add(Element("b", emptyList()))
+    if (style.isItalic) properties.add(Element("i", emptyList()))
+    when (style.underline) {
+        Underline.Single -> properties.add(Element("u", emptyList()))
+        Underline.Double -> properties.add(Element("u", listOf(Attribute("val", "double"))))
+        Underline.None -> Unit
+    }
+    style.fontSize?.let { properties.add(Element("sz", listOf(Attribute("val", it.toString())))) }
+    style.fontFamily?.let { properties.add(Element("rFont", listOf(Attribute("val", it)))) }
+    if (style.fontColor != ExcelColor.black) {
+        properties.add(Element("color", listOf(Attribute("rgb", style.fontColor.colorHex))))
+    }
+
+    return if (properties.isEmpty()) null else Element("rPr", emptyList(), properties)
 }
 
 // endregion

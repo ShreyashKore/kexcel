@@ -64,9 +64,16 @@ internal fun findCells(row: Element?): List<Element> {
     return row.getElementsByTag("c").toList()
 }
 
+/**
+ * The column index a `<c>` declares through its `r` reference, or `null` when `r` is
+ * absent or unparseable — the caller then falls back to the cell's position in the row,
+ * which is what the spec prescribes for a cell without a reference.
+ */
 internal fun getCellNumber(cell: Element): Int? {
-    val r = cell.attr("r") ?: return null
-    return cellCoordsFromCellId(r).second
+    val r = cell.attr("r")
+    if (r.isNullOrBlank()) return null
+    val column = runCatching { cellCoordsFromCellId(r).second }.getOrNull() ?: return null
+    return if (column < 0) null else column
 }
 
 internal fun getRowNumber(row: Element?): Int? {

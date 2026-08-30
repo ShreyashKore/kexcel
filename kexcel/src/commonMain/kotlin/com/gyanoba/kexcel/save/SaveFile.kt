@@ -92,13 +92,8 @@ public class Save internal constructor(private val excel: Excel, private val par
     ): Element {
         var sharedString: SharedString? = null
         if (value is TextCellValue) {
-            val existing = excel.sharedStrings.tryFind(value.toString())
-            sharedString = if (existing != null) {
-                excel.sharedStrings.add(existing, value.toString())
-                existing
-            } else {
-                excel.sharedStrings.addFromString(value.toString())
-            }
+            // Pass the whole span, not its flattened text, so rich-text runs are kept.
+            sharedString = excel.sharedStrings.addFromSpan(value.value)
         }
 
         val rC = getCellId(columnIndex, rowIndex)
@@ -606,7 +601,20 @@ public class Save internal constructor(private val excel: Excel, private val par
 
         worksheetEl.getElementsByTag("headerFooter").toList().forEach { it.remove() }
 
-        sheet.headerFooter?.let { worksheetEl.appendChild(it.toXmlElement()) }
+        val headerFooterEl = sheet.headerFooter?.toXmlElement() ?: return
+
+        // CT_Worksheet is a *sequence*: <headerFooter> has to precede <rowBreaks>,
+        // <colBreaks>, <drawing> and everything after them. Appending it at the end put it
+        // after <drawing> — which the template always carries — and Excel rejects a
+        // worksheet whose children are out of order.
+        val followers = setOf(
+            "rowBreaks", "colBreaks", "customProperties", "cellWatches", "ignoredErrors",
+            "smartTags", "drawing", "legacyDrawing", "legacyDrawingHF", "picture",
+            "oleObjects", "controls", "webPublishItems", "tableParts", "extLst",
+        )
+        val firstFollower = worksheetEl.children().firstOrNull { it.tagName() in followers }
+        if (firstFollower != null) firstFollower.before(headerFooterEl)
+        else worksheetEl.appendChild(headerFooterEl)
     }
 
     private fun setMerge() {
@@ -660,6 +668,22 @@ public class Save internal constructor(private val excel: Excel, private val par
             val xmlSheetPath = excel.xmlSheetId[s] ?: return@forEach
             val xmlDoc = excel.xmlFiles[xmlSheetPath] ?: return@forEach
 
+            // `rightToLeft` is the only thing the model owns here, so patch it onto the
+            // existing <sheetView> instead of replacing the element. Rebuilding it would
+            // discard everything unmodelled on every save: <pane> (frozen/split panes),
+            // <selection>, tabSelected, zoomScale, showGridLines, view="pageLayout", … .
+            // Every parsed sheet lands in `rtlChangeLook` (the parser always assigns
+            // `isRTL`), so this path runs for ordinary saves, not just RTL ones.
+            val existingSheetView = xmlDoc.getElementsByTag("sheetView").firstOrNull()
+            if (existingSheetView != null) {
+                if (sheetObject.isRTL) existingSheetView.attr("rightToLeft", "1")
+                else existingSheetView.removeAttr("rightToLeft")
+                if (!existingSheetView.hasAttr("workbookViewId")) {
+                    existingSheetView.attr("workbookViewId", "0")
+                }
+                return@forEach
+            }
+
             val sheetViewsIter = xmlDoc.getElementsByTag("sheetViews").toList()
             val sheetViewEl = Element(
                 "sheetView",
@@ -670,9 +694,7 @@ public class Save internal constructor(private val excel: Excel, private val par
             )
 
             if (sheetViewsIter.isNotEmpty()) {
-                val sheetViewsEl = sheetViewsIter.first()
-                sheetViewsEl.empty()
-                sheetViewsEl.appendChild(sheetViewEl)
+                sheetViewsIter.first().appendChild(sheetViewEl)
             } else {
                 val worksheetEl = xmlDoc.getElementsByTag("worksheet").first()
                     ?: damagedExcel("Missing <worksheet> element in sheet XML")
