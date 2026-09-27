@@ -248,7 +248,7 @@ public class Save internal constructor(private val excel: Excel, private val par
             }
         }
 
-        val stylesXml = excel.xmlFiles["xl/styles.xml"]!!
+        val stylesXml = excel.xmlFiles[excel.stylesPath]!!
 
         // --- fonts ---
         val fonts = stylesXml.getElementsByTag("fonts").first()
@@ -687,7 +687,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         var uniqueCount = 0
         var count = 0
 
-        val shareString = excel.xmlFiles["xl/${excel.sharedStringsTarget}"]!!
+        val shareString = excel.xmlFiles[excel.sharedStringsPath]!!
             .getElementsByTag("sst").first()
 
         shareString?.empty()

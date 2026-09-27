@@ -98,8 +98,7 @@ class AbsoluteRelationshipTargetsTest {
      * (`xl/`): a leading `/` is package-absolute, otherwise `.` and `..` segments are resolved.
      */
     private fun resolveAgainstXl(target: String): String {
-        if (target.startsWith("/")) return target.removePrefix("/")
-        val segments = mutableListOf("xl")
+        val segments = if (target.startsWith("/")) mutableListOf() else mutableListOf("xl")
         target.split('/').forEach { segment ->
             when (segment) {
                 "", "." -> Unit
@@ -190,6 +189,20 @@ class AbsoluteRelationshipTargetsTest {
     }
 
     @Test
+    fun dotSegmentTargetsDecodeLikeRelativeTargets() {
+        // `./worksheets/sheet1.xml`, `../xl/styles.xml`: unusual, but valid OPC relative references.
+        val forms = listOf<(String) -> String>({ "./$it" }, { "../xl/$it" }, { "/xl/./$it" })
+        for (name in FIXTURES) {
+            val original = fixture(name)
+            forms.forEachIndexed { i, form ->
+                val input = withWorkbookRelTargets(original, form)
+                assertSameWorkbook(Excel.decodeBytes(original), Excel.decodeBytes(input), "$name form #$i")
+                assertPackageIntegrity(Excel.decodeBytes(input).encode()!!, "$name form #$i")
+            }
+        }
+    }
+
+    @Test
     fun openpyxlFileDecodes() {
         // openpyxl 3.1.5: worksheets absolute (`/xl/worksheets/sheetN.xml`), styles relative,
         // no sharedStrings part at all (it writes inlineStr cells).
@@ -255,6 +268,16 @@ class AbsoluteRelationshipTargetsTest {
     @Test
     fun editAndSaveWithAbsoluteTargets() {
         assertEditSurvivesSave(withAbsoluteTargets(fixture("example.xlsx")), "absolute")
+    }
+
+    @Test
+    fun savePreservesAbsoluteTargets() {
+        // Saving writes each part back to the path it was read from, so the producer's absolute
+        // targets stay valid and are left alone rather than rewritten.
+        val input = withAbsoluteTargets(fixture("example.xlsx"))
+        val excel = Excel.decodeBytes(input)
+        excel.tables["Sheet1"]!!.updateCell(CellIndex.indexByString("A1"), TextCellValue("x"))
+        assertEquals(workbookRelTargets(input), workbookRelTargets(excel.encode()!!))
     }
 
     @Test

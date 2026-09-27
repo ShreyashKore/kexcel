@@ -39,12 +39,13 @@ import com.gyanoba.kexcel.utils.toExcelColor
 public class Parser internal constructor(private val excel: Excel) {
 
     private val rId: MutableList<String> = mutableListOf()
-    private val worksheetTargets: MutableMap<String, String> = mutableMapOf()
+    // rId -> archive entry name of the worksheet part, e.g. `xl/worksheets/sheet1.xml`.
+    private val worksheetPaths: MutableMap<String, String> = mutableMapOf()
 
     internal fun startParsing() {
         putContentXml()
         parseRelations()
-        parseStyles(excel.stylesTarget)
+        parseStyles(excel.stylesPath)
         parseSharedStrings()
         parseContent()
         parseMergedCells()
@@ -76,9 +77,10 @@ public class Parser internal constructor(private val excel: Excel) {
             val target = node.attr("Target")
             if (target != null) {
                 when (node.attr("Type")) {
-                    RELATIONSHIPS_STYLES -> excel.stylesTarget = target
-                    RELATIONSHIPS_WORKSHEET -> if (id != null) worksheetTargets[id] = target
-                    RELATIONSHIPS_SHARED_STRINGS -> excel.sharedStringsTarget = target
+                    RELATIONSHIPS_STYLES -> excel.stylesPath = resolveWorkbookRelTarget(target)
+                    RELATIONSHIPS_WORKSHEET ->
+                        if (id != null) worksheetPaths[id] = resolveWorkbookRelTarget(target)
+                    RELATIONSHIPS_SHARED_STRINGS -> excel.sharedStringsPath = resolveWorkbookRelTarget(target)
                 }
             }
             if (id != null && !rId.contains(id)) {
@@ -88,10 +90,10 @@ public class Parser internal constructor(private val excel: Excel) {
     }
 
     private fun parseSharedStrings() {
-        var sharedStrings = excel.archive.findFile(excel.absSharedStringsTarget)
+        var sharedStrings = excel.archive.findFile(excel.sharedStringsPath)
 
         if (sharedStrings == null) {
-            excel.sharedStringsTarget = "sharedStrings.xml"
+            excel.sharedStringsPath = "xl/sharedStrings.xml"
 
             // Running with run=false collects all rIds to find an available one
             // to assign to sharedStrings.xml
@@ -160,7 +162,7 @@ public class Parser internal constructor(private val excel: Excel) {
 
         sharedStrings!!.decompress()
         val document = Ksoup.parseXml(sharedStrings.content.decodeToString())
-        excel.xmlFiles["xl/${excel.sharedStringsTarget}"] = document
+        excel.xmlFiles[excel.sharedStringsPath] = document
 
         document.getElementsByTag("si").forEach { node ->
             parseSharedString(node)
@@ -254,13 +256,13 @@ public class Parser internal constructor(private val excel: Excel) {
     }
 
     // Reads the styles from the Excel file.
-    private fun parseStyles(stylesTarget: String) {
-        val styles = excel.archive.findFile("xl/$stylesTarget")
+    private fun parseStyles(stylesPath: String) {
+        val styles = excel.archive.findFile(stylesPath)
             ?: damagedExcel(text = "styles")
 
         styles.decompress()
         val document = Ksoup.parseXml(styles.content.decodeToString())
-        excel.xmlFiles["xl/$stylesTarget"] = document
+        excel.xmlFiles[stylesPath] = document
 
         excel.fontStyleList = mutableListOf()
         excel.patternFill = mutableListOf()
@@ -503,7 +505,7 @@ public class Parser internal constructor(private val excel: Excel) {
     internal fun parseTable(node: Element?) {
         node ?: damagedExcel(text = "Missing <sheet> node in workbook.xml")
         val name = node.attr("name")
-        val target = worksheetTargets[node.attr("r:id")]
+        val path = worksheetPaths[node.attr("r:id")]
 
         if (excel.sheetMap[name] == null) {
             excel.sheetMap[name] = Sheet(excel, name)
@@ -511,7 +513,8 @@ public class Parser internal constructor(private val excel: Excel) {
 
         val sheetObject = excel.sheetMap[name]!!
 
-        val file = excel.archive.findFile("xl/$target")!!
+        val file = path?.let { excel.archive.findFile(it) }
+            ?: damagedExcel(text = "Missing worksheet part for sheet '$name'")
         file.decompress()
 
         val content = Ksoup.parseXml(file.content.decodeToString())
@@ -534,8 +537,8 @@ public class Parser internal constructor(private val excel: Excel) {
         parseColWidthsRowHeights(worksheet, sheetObject)
 
         excel.sheets[name] = sheet!!
-        excel.xmlFiles["xl/$target"] = content
-        excel.xmlSheetId[name] = "xl/$target"
+        excel.xmlFiles[path] = content
+        excel.xmlSheetId[name] = path
 
         normalizeTable(sheetObject)
     }
@@ -695,7 +698,7 @@ public class Parser internal constructor(private val excel: Excel) {
 
         sheetsNode.appendChild(sheetNode)
 
-        worksheetTargets["rId$ridNumber"] = "worksheets/sheet$sheetNumber.xml"
+        worksheetPaths["rId$ridNumber"] = "xl/worksheets/sheet$sheetNumber.xml"
 
         val worksheetXml = """
             <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"

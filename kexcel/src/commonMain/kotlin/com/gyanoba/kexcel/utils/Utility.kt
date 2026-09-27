@@ -129,6 +129,29 @@ internal fun damagedExcel(text: String = ""): Nothing {
     throw IllegalArgumentException("\nDamaged Excel file: $text\n")
 }
 
+/**
+ * Resolves a relationship `Target` read from `xl/_rels/workbook.xml.rels` to the archive entry
+ * name of the part it points at: `worksheets/sheet1.xml` and `/xl/worksheets/sheet1.xml` both
+ * resolve to `xl/worksheets/sheet1.xml`.
+ *
+ * Per ECMA-376 Part 2 (Open Packaging Conventions) §9.3, a target starting with `/` is absolute
+ * from the package root (openpyxl, and so pandas, writes these), and any other target is
+ * relative to the folder of the source part, `xl/` (Excel writes these). `.` and `..` segments
+ * are resolved; `..` never climbs above the package root. Percent-encoded characters are not
+ * decoded.
+ */
+internal fun resolveWorkbookRelTarget(target: String): String {
+    val segments = if (target.startsWith('/')) mutableListOf() else mutableListOf("xl")
+    target.split('/').forEach { segment ->
+        when (segment) {
+            "", "." -> Unit
+            ".." -> segments.removeLastOrNull()
+            else -> segments += segment
+        }
+    }
+    return segments.joinToString("/")
+}
+
 /// return A2:B2
 public fun getSpanCellId(
     startColumn: Int,
