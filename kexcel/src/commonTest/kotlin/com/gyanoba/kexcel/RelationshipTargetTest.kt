@@ -63,6 +63,28 @@ class RelationshipTargetTest {
         return buf.toByteArray()
     }
 
+    @Test
+    fun absoluteAndRelativeTargetsSaveTheSameParts() {
+        val created = Excel.createExcel()
+        val sheetName = created.getDefaultSheet()!!
+        created[sheetName].updateCell(CellIndex.indexByString("A1"), TextCellValue("before"))
+        val relative = created.encode()!!
+        val absolute = withAbsoluteTargets(relative)
+
+        fun edit(input: ByteArray): List<Pair<String, String>> {
+            val excel = Excel.decodeBytes(input)
+            excel[sheetName].updateCell(CellIndex.indexByString("A1"), TextCellValue("after"))
+            excel[sheetName].updateCell(CellIndex.indexByString("B2"), IntCellValue(7))
+            excel["Added"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new"))
+            return readZipArchive(ByteArrayInputStream(excel.encode()!!)).files
+                .filter { it.name != "xl/_rels/workbook.xml.rels" }
+                .map { it.name to it.content.decodeToString() }
+        }
+
+        // Every part except the relationships themselves comes out byte-for-byte identical.
+        assertEquals(edit(relative), edit(absolute))
+    }
+
     private fun entry(bytes: ByteArray, name: String): String =
         readZipArchive(ByteArrayInputStream(bytes)).findFile(name)!!.content.decodeToString()
 

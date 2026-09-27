@@ -3,11 +3,13 @@ package com.gyanoba.kexcel
 import com.fleeksoft.ksoup.Ksoup
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.CellIndex
+import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.DateCellValue
 import com.gyanoba.kexcel.sheet.DateTimeCellValue
 import com.gyanoba.kexcel.sheet.DoubleCellValue
 import com.gyanoba.kexcel.sheet.IntCellValue
 import com.gyanoba.kexcel.sheet.TextCellValue
+import com.gyanoba.kexcel.utils.ExcelColor
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -15,7 +17,10 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -62,26 +67,47 @@ class AbsoluteRelationshipTargetsTest {
         zipEntries(bytes).firstOrNull { it.first == entryName }?.second?.decodeToString()
             ?: error("zip entry not found: $entryName")
 
-    /** Re-zips [bytes], passing every `Target` in `xl/_rels/workbook.xml.rels` through [transform]. */
-    private fun withWorkbookRelTargets(bytes: ByteArray, transform: (String) -> String): ByteArray {
-        val targetAttr = Regex("""Target="([^"]*)"""")
+    /** Re-zips [bytes] in the same entry order, passing each `(name, content)` through [transform]. */
+    private fun rewriteZip(bytes: ByteArray, transform: (String, ByteArray) -> Pair<String, ByteArray>): ByteArray {
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zos ->
             zipEntries(bytes).forEach { (name, content) ->
-                val rewritten = if (name == WORKBOOK_RELS) {
-                    targetAttr.replace(content.decodeToString()) { m ->
-                        "Target=\"${transform(m.groupValues[1])}\""
-                    }.encodeToByteArray()
-                } else {
-                    content
-                }
-                zos.putNextEntry(ZipEntry(name))
-                zos.write(rewritten)
+                val (newName, newContent) = transform(name, content)
+                zos.putNextEntry(ZipEntry(newName))
+                zos.write(newContent)
                 zos.closeEntry()
             }
         }
         return out.toByteArray()
     }
+
+    /** Re-zips [bytes], passing every `Target` in `xl/_rels/workbook.xml.rels` through [transform]. */
+    private fun withWorkbookRelTargets(bytes: ByteArray, transform: (String) -> String): ByteArray {
+        val targetAttr = Regex("""Target="([^"]*)"""")
+        return rewriteZip(bytes) { name, content ->
+            name to if (name == WORKBOOK_RELS) {
+                targetAttr.replace(content.decodeToString()) { m ->
+                    "Target=\"${transform(m.groupValues[1])}\""
+                }.encodeToByteArray()
+            } else {
+                content
+            }
+        }
+    }
+
+    private data class Rel(val id: String, val type: String, val target: String)
+
+    private fun workbookRels(bytes: ByteArray): List<Rel> = parseRels(readZipEntry(bytes, WORKBOOK_RELS))
+
+    private fun parseRels(xml: String): List<Rel> =
+        Ksoup.parseXml(xml)
+            .getElementsByTag("Relationship")
+            .map { Rel(it.attr("Id"), it.attr("Type"), it.attr("Target")) }
+
+    private fun contentTypeOverrides(bytes: ByteArray): List<String> =
+        Ksoup.parseXml(readZipEntry(bytes, "[Content_Types].xml"))
+            .getElementsByTag("Override")
+            .map { it.attr("PartName") }
 
     /** `worksheets/sheet1.xml` → `/xl/worksheets/sheet1.xml`, as openpyxl writes it. */
     private fun withAbsoluteTargets(bytes: ByteArray): ByteArray =
@@ -148,6 +174,12 @@ class AbsoluteRelationshipTargetsTest {
                     "${resolveAgainstXl(target)}; entries=$names",
             )
         }
+        contentTypeOverrides(bytes).forEach { partName ->
+            assertTrue(
+                partName.removePrefix("/") in names,
+                "$label: [Content_Types].xml overrides missing part $partName; entries=$names",
+            )
+        }
     }
 
     // endregion
@@ -189,15 +221,15 @@ class AbsoluteRelationshipTargetsTest {
     }
 
     @Test
-    fun dotSegmentTargetsDecodeLikeRelativeTargets() {
-        // `./worksheets/sheet1.xml`, `../xl/styles.xml`: unusual, but valid OPC relative references.
-        val forms = listOf<(String) -> String>({ "./$it" }, { "../xl/$it" }, { "/xl/./$it" })
+    fun everyTargetFormDecodesLikeRelativeTargets() {
+        // Dot segments (`./worksheets/sheet1.xml`, `../xl/styles.xml`) are unusual but valid OPC
+        // relative references; mixed forms are what openpyxl actually writes.
         for (name in FIXTURES) {
             val original = fixture(name)
-            forms.forEachIndexed { i, form ->
-                val input = withWorkbookRelTargets(original, form)
-                assertSameWorkbook(Excel.decodeBytes(original), Excel.decodeBytes(input), "$name form #$i")
-                assertPackageIntegrity(Excel.decodeBytes(input).encode()!!, "$name form #$i")
+            TARGET_FORMS.forEach { (form, transform) ->
+                val input = withWorkbookRelTargets(original, transform)
+                assertSameWorkbook(Excel.decodeBytes(original), Excel.decodeBytes(input), "$name [$form]")
+                assertPackageIntegrity(Excel.decodeBytes(input).encode()!!, "$name [$form]")
             }
         }
     }
@@ -271,13 +303,21 @@ class AbsoluteRelationshipTargetsTest {
     }
 
     @Test
-    fun savePreservesAbsoluteTargets() {
-        // Saving writes each part back to the path it was read from, so the producer's absolute
-        // targets stay valid and are left alone rather than rewritten.
-        val input = withAbsoluteTargets(fixture("example.xlsx"))
-        val excel = Excel.decodeBytes(input)
-        excel.tables["Sheet1"]!!.updateCell(CellIndex.indexByString("A1"), TextCellValue("x"))
-        assertEquals(workbookRelTargets(input), workbookRelTargets(excel.encode()!!))
+    fun saveKeepsEveryExistingTargetInItsOriginalForm() {
+        // Each part is written back to the path it was read from, so whatever form the producer
+        // used stays valid and is left alone: nothing is normalised to relative or absolute.
+        for (name in FIXTURES) {
+            for ((form, transform) in TARGET_FORMS + ("relative" to { target: String -> target })) {
+                val input = withWorkbookRelTargets(fixture(name), transform)
+                val inputRels = workbookRels(input).associateBy { it.id }
+                for ((op, operation) in OPERATIONS) {
+                    val saved = Excel.decodeBytes(input).also(operation).encode()!!
+                    workbookRels(saved).filter { it.id in inputRels }.forEach { rel ->
+                        assertEquals(inputRels.getValue(rel.id), rel, "$name [$form] after $op")
+                    }
+                }
+            }
+        }
     }
 
     @Test
@@ -328,6 +368,223 @@ class AbsoluteRelationshipTargetsTest {
 
     // endregion
 
+    // region --- SCHEME EQUIVALENCE ---
+
+    /**
+     * The strongest statement of the fix: for every fixture and every kind of edit, saving the
+     * absolute-target copy produces exactly the parts that saving the relative original does —
+     * same entries, same order, same bytes. The one permitted difference is the `Target` strings
+     * of relationships that were already in the input, which keep the form the producer wrote.
+     */
+    @Test
+    fun absoluteAndRelativeTargetsSaveIdenticalParts() {
+        for (name in FIXTURES) {
+            val relativeInput = fixture(name)
+            val absoluteInput = withAbsoluteTargets(relativeInput)
+            val inputIds = workbookRels(relativeInput).map { it.id }.toSet()
+
+            for ((op, operation) in OPERATIONS) {
+                val label = "$name after $op"
+                val fromRelative = zipEntries(Excel.decodeBytes(relativeInput).also(operation).encode()!!)
+                val fromAbsolute = zipEntries(Excel.decodeBytes(absoluteInput).also(operation).encode()!!)
+
+                assertEquals(fromRelative.map { it.first }, fromAbsolute.map { it.first }, "$label: entries")
+                fromRelative.zip(fromAbsolute).forEach { (rel, abs) ->
+                    if (rel.first != WORKBOOK_RELS) {
+                        assertTrue(rel.second.contentEquals(abs.second), "$label: ${rel.first} differs")
+                    }
+                }
+
+                val relRelsXml = fromRelative.first { it.first == WORKBOOK_RELS }.second.decodeToString()
+                val absRelsXml = fromAbsolute.first { it.first == WORKBOOK_RELS }.second.decodeToString()
+                val relRels = parseRels(relRelsXml)
+                val absRels = parseRels(absRelsXml)
+                assertEquals(relRels.map { it.id to it.type }, absRels.map { it.id to it.type }, "$label: rels")
+                relRels.zip(absRels).forEach { (r, a) ->
+                    assertEquals(resolveAgainstXl(r.target), resolveAgainstXl(a.target), "$label: ${r.id}")
+                    // Relationships Kexcel adds (a new sheet, a missing sharedStrings part) are
+                    // written the same way whichever form the file started with.
+                    if (r.id !in inputIds) assertEquals(r.target, a.target, "$label: new ${r.id}")
+                }
+                val withoutTargets = Regex("""Target="[^"]*"""")
+                assertEquals(
+                    withoutTargets.replace(relRelsXml, ""),
+                    withoutTargets.replace(absRelsXml, ""),
+                    "$label: rels differ in more than their targets",
+                )
+            }
+        }
+    }
+
+    // endregion
+
+    // region --- SHEET OPERATIONS ON A REAL OPENPYXL FILE ---
+
+    @Test
+    fun addSheetToOpenpyxlFile() {
+        val input = fixture("openpyxlAbsoluteTargets.xlsx")
+        val excel = Excel.decodeBytes(input)
+        excel["Added"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new sheet"))
+
+        val saved = excel.encode()!!
+        assertPackageIntegrity(saved, "add sheet")
+
+        val again = Excel.decodeBytes(saved)
+        assertEquals(listOf("Data", "Second", "Added"), again.tables.keys.toList())
+        assertEquals(TextCellValue("new sheet"), again.tables["Added"]!!.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(TextCellValue("Alice"), again.tables["Data"]!!.cell(CellIndex.indexByString("A2")).value)
+        assertEquals(DoubleCellValue(3.25), again.tables["Second"]!!.cell(CellIndex.indexByString("B2")).value)
+
+        // The new sheet gets a relative target next to openpyxl's absolute ones; OPC allows
+        // mixing, and the existing relationships are not touched.
+        val rels = workbookRels(saved)
+        val worksheetTargets = rels.filter { it.type.endsWith("/worksheet") }.map { it.target }
+        assertEquals(listOf("/xl/worksheets/sheet1.xml", "/xl/worksheets/sheet2.xml", "worksheets/sheet3.xml"), worksheetTargets)
+        assertContains(contentTypeOverrides(saved), "/xl/worksheets/sheet3.xml")
+    }
+
+    @Test
+    fun deleteSheetFromOpenpyxlFile() {
+        val excel = Excel.decodeBytes(fixture("openpyxlAbsoluteTargets.xlsx"))
+        excel.delete("Second")
+
+        val saved = excel.encode()!!
+        assertPackageIntegrity(saved, "delete sheet")
+        assertFalse(zipEntries(saved).any { it.first == "xl/worksheets/sheet2.xml" }, "part not removed")
+        assertFalse(
+            workbookRels(saved).any { it.target == "/xl/worksheets/sheet2.xml" },
+            "relationship to the deleted sheet not removed",
+        )
+        assertFalse("/xl/worksheets/sheet2.xml" in contentTypeOverrides(saved), "content type override not removed")
+        assertFalse("Second" in readZipEntry(saved, "xl/workbook.xml"), "<sheet> not removed from workbook.xml")
+
+        val again = Excel.decodeBytes(saved)
+        assertEquals(listOf("Data"), again.tables.keys.toList())
+        assertEquals(IntCellValue(42), again.tables["Data"]!!.cell(CellIndex.indexByString("B2")).value)
+    }
+
+    @Test
+    fun renameSheetInOpenpyxlFile() {
+        val excel = Excel.decodeBytes(fixture("openpyxlAbsoluteTargets.xlsx"))
+        excel.rename("Second", "Renamed")
+
+        val saved = excel.encode()!!
+        assertPackageIntegrity(saved, "rename sheet")
+        val again = Excel.decodeBytes(saved)
+        assertEquals(setOf("Data", "Renamed"), again.tables.keys)
+        assertEquals(TextCellValue("second sheet"), again.tables["Renamed"]!!.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(DoubleCellValue(3.25), again.tables["Renamed"]!!.cell(CellIndex.indexByString("B2")).value)
+    }
+
+    @Test
+    fun styleCellsInOpenpyxlFile() {
+        val excel = Excel.decodeBytes(fixture("openpyxlAbsoluteTargets.xlsx"))
+        excel.tables["Data"]!!.updateCell(
+            CellIndex.indexByString("A3"),
+            TextCellValue("Bob"),
+            cellStyle = CellStyle(bold = true, italic = true, backgroundColorHex = ExcelColor.yellowAccent),
+        )
+
+        val saved = excel.encode()!!
+        assertPackageIntegrity(saved, "style")
+        val a3 = Excel.decodeBytes(saved).tables["Data"]!!.cell(CellIndex.indexByString("A3"))
+        assertEquals(TextCellValue("Bob"), a3.value)
+        assertTrue(a3.cellStyle!!.isBold && a3.cellStyle!!.isItalic, "font style lost")
+        assertEquals(ExcelColor.yellowAccent.colorHex, a3.cellStyle!!.backgroundColor.colorHex)
+        // openpyxl's untouched header style must survive the styles rewrite.
+        assertTrue(Excel.decodeBytes(saved).tables["Data"]!!.cell(CellIndex.indexByString("A1")).cellStyle!!.isBold)
+    }
+
+    // endregion
+
+    // region --- PARTS AT NON-STANDARD PATHS ---
+
+    /**
+     * Moves the styles, shared strings and first worksheet parts away from their conventional
+     * names, updating the relationships and content types to match, so nothing lives where Kexcel
+     * might assume it does. The targets stay plainly relative on purpose: this isolates the
+     * save path, which ignored the styles relationship even for relative targets.
+     */
+    private fun withPartsMoved(bytes: ByteArray): ByteArray {
+        val moves = MOVED_PARTS
+        val targets = mapOf(
+            "Target=\"styles.xml\"" to "Target=\"custom/styles-v2.xml\"",
+            "Target=\"sharedStrings.xml\"" to "Target=\"strings/sst.xml\"",
+            "Target=\"worksheets/sheet1.xml\"" to "Target=\"data/first.xml\"",
+        )
+        return rewriteZip(bytes) { name, content ->
+            val text = when (name) {
+                WORKBOOK_RELS -> targets.entries.fold(content.decodeToString()) { s, (a, b) -> s.replace(a, b) }
+                "[Content_Types].xml" -> moves.entries.fold(content.decodeToString()) { s, (a, b) ->
+                    s.replace("\"/$a\"", "\"/$b\"")
+                }
+                else -> null
+            }
+            (moves[name] ?: name) to (text?.encodeToByteArray() ?: content)
+        }
+    }
+
+    @Test
+    fun partsAtNonStandardPathsAreReadFromThere() {
+        val original = fixture("example.xlsx")
+        val moved = withPartsMoved(original)
+        assertPackageIntegrity(moved, "fixture itself")
+        assertSameWorkbook(Excel.decodeBytes(original), Excel.decodeBytes(moved), "moved parts")
+    }
+
+    @Test
+    fun partsAtNonStandardPathsAreWrittenBackInPlace() {
+        // Before the fix the styles writer looked up a hardcoded `xl/styles.xml`, so any style
+        // change in a workbook whose styles part lives elsewhere crashed in encode().
+        fun editAndSave(input: ByteArray): ByteArray {
+            val excel = Excel.decodeBytes(input)
+            val sheet = excel.tables["Sheet1"]!!
+            sheet.updateCell(CellIndex.indexByString("B2"), TextCellValue("moved and edited"))
+            sheet.updateCell(CellIndex.indexByString("C6"), IntCellValue(99))
+            sheet.updateCell(CellIndex.indexByString("A4"), TextCellValue("ISRAEL"), cellStyle = CellStyle(bold = true))
+            return excel.encode()!!
+        }
+
+        val original = fixture("example.xlsx")
+        val fromOriginal = zipEntries(editAndSave(original)).toMap()
+        val saved = editAndSave(withPartsMoved(original))
+        assertPackageIntegrity(saved, "moved parts")
+
+        // Each part is saved where it was found, with exactly the content the same edits produce
+        // on the untouched fixture: nothing is recreated at its conventional path.
+        val fromMoved = zipEntries(saved).toMap()
+        MOVED_PARTS.forEach { (conventional, moved) ->
+            assertFalse(conventional in fromMoved, "$conventional was recreated at its conventional path")
+            assertEquals(
+                fromOriginal.getValue(conventional).decodeToString(),
+                fromMoved.getValue(moved).decodeToString(),
+                "$moved differs from what the same edits write to $conventional",
+            )
+        }
+        assertContains(fromMoved.getValue("xl/strings/sst.xml").decodeToString(), "moved and edited")
+        assertContains(fromMoved.getValue("xl/data/first.xml").decodeToString(), "<v>99</v>")
+        assertSameWorkbook(
+            Excel.decodeBytes(editAndSave(original)),
+            Excel.decodeBytes(saved),
+            "moved parts after edit",
+        )
+    }
+
+    // endregion
+
+    // region --- DAMAGED FILES ---
+
+    @Test
+    fun missingWorksheetPartIsReportedAsDamagedFile() {
+        val input = withWorkbookRelTargets(fixture("example.xlsx")) {
+            if (it == "worksheets/sheet1.xml") "/xl/worksheets/missing.xml" else it
+        }
+        val error = assertFailsWith<IllegalArgumentException> { Excel.decodeBytes(input) }
+        assertContains(error.message.orEmpty(), "Sheet1")
+    }
+
+    // endregion
+
     // region --- REGRESSION GUARD (relative targets) ---
 
     @Test
@@ -359,6 +616,55 @@ class AbsoluteRelationshipTargetsTest {
 
     private companion object {
         const val WORKBOOK_RELS = "xl/_rels/workbook.xml.rels"
+
+        /** Alternative spellings of each (relative) fixture target, all naming the same part. */
+        val TARGET_FORMS: List<Pair<String, (String) -> String>> = listOf(
+            "absolute" to { "/xl/$it" },
+            "dot" to { "./$it" },
+            "dot-dot" to { "../xl/$it" },
+            "absolute with dot" to { "/xl/./$it" },
+            // openpyxl's shape: worksheets absolute, everything else relative — and the inverse.
+            "worksheets absolute" to { if (it.startsWith("worksheets/")) "/xl/$it" else it },
+            "worksheets relative" to { if (it.startsWith("worksheets/")) it else "/xl/$it" },
+        )
+
+        /** Each kind of change, chosen so that Kexcel rewrites a different set of parts on save. */
+        val OPERATIONS: List<Pair<String, (Excel) -> Unit>> = listOf(
+            "no-op" to { },
+            "edit" to { e ->
+                val sheet = e.tables.values.first()
+                sheet.updateCell(CellIndex.indexByString("B2"), TextCellValue("edited"))
+                sheet.updateCell(CellIndex.indexByString("C3"), IntCellValue(12345))
+                sheet.updateCell(CellIndex.indexByString("D4"), DoubleCellValue(0.25))
+                sheet.updateCell(CellIndex.indexByString("E5"), BoolCellValue(true))
+                sheet.updateCell(CellIndex.indexByString("F6"), DateCellValue(year = 2026, month = 9, day = 27))
+            },
+            "style" to { e ->
+                e.tables.values.first().updateCell(
+                    CellIndex.indexByString("A1"),
+                    TextCellValue("styled"),
+                    cellStyle = CellStyle(bold = true, backgroundColorHex = ExcelColor.yellowAccent),
+                )
+            },
+            "merge" to { e ->
+                e.merge(
+                    e.tables.keys.first(),
+                    CellIndex.indexByString("A30"),
+                    CellIndex.indexByString("C31"),
+                    customValue = TextCellValue("merged"),
+                )
+            },
+            "add sheet" to { e -> e["Added"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new")) },
+            "delete sheet" to { e -> if (e.tables.size > 1) e.delete(e.tables.keys.last()) },
+            "rename sheet" to { e -> e.rename(e.tables.keys.first(), "Renamed") },
+        )
+
+        /** Conventional part name → where [withPartsMoved] puts it. */
+        val MOVED_PARTS = mapOf(
+            "xl/styles.xml" to "xl/custom/styles-v2.xml",
+            "xl/sharedStrings.xml" to "xl/strings/sst.xml",
+            "xl/worksheets/sheet1.xml" to "xl/data/first.xml",
+        )
 
         /** Relative-target fixtures covering one/many sheets, typed cells, styles and rich text. */
         val FIXTURES = listOf(
