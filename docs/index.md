@@ -117,8 +117,8 @@ Compose Multiplatform app.
 ### Which file formats are supported?
 
 `.xlsx` (Office Open XML) only — the format Excel 2007 and later, Google Sheets,
-Numbers and LibreOffice all write. The legacy binary `.xls` format is not
-supported.
+Numbers, LibreOffice and Python's openpyxl (and so pandas `to_excel`) all write.
+The legacy binary `.xls` format is not supported.
 
 ### Can it do styling, formulas and merged cells?
 

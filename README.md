@@ -342,7 +342,8 @@ them — including in a Compose Multiplatform app.
 ### Does it support `.xls`?
 
 No — only `.xlsx` (Office Open XML), the format written by Excel 2007 and later, Google Sheets,
-Numbers and LibreOffice. The legacy binary `.xls` format is out of scope.
+Numbers, LibreOffice and Python's openpyxl (and so pandas `to_excel`). The legacy binary `.xls`
+format is out of scope.
 
 ### Is it production-ready?
 

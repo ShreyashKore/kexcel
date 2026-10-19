@@ -19,6 +19,7 @@ import com.gyanoba.kexcel.utils.SPREADSHEET_XLSX
 import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.readZipArchive
+import com.gyanoba.kexcel.utils.resolveWorkbookRelTarget
 import no.synth.kmpzip.io.ByteArrayInputStream
 import no.synth.kmpzip.io.InputStream
 import kotlin.io.encoding.Base64
@@ -49,17 +50,9 @@ public class Excel internal constructor(internal var archive: Archive) {
 
     internal var sharedStrings: SharedStringsMaintainer = SharedStringsMaintainer()
 
-    internal var stylesTarget: String = ""
-    internal var sharedStringsTarget: String = ""
-
-    internal val absSharedStringsTarget: String
-        get() {
-            return if (sharedStringsTarget.isNotEmpty() && sharedStringsTarget[0] == '/') {
-                sharedStringsTarget.substring(1)
-            } else {
-                "xl/$sharedStringsTarget"
-            }
-        }
+    // Archive entry names (e.g. `xl/styles.xml`), resolved from the workbook relationships.
+    internal var stylesPath: String = ""
+    internal var sharedStringsPath: String = ""
 
     internal var defaultSheet: String? = null
     internal val parser: Parser = Parser(this)
@@ -195,17 +188,14 @@ public class Excel internal constructor(internal var archive: Archive) {
         rtlChangeLook.remove(sheet)
 
         xmlSheetId[sheet]?.let { sheetPath ->
-            val sheetId1 = "worksheets" + sheetPath.split("worksheets")[1]
-            val sheetId2 = sheetPath
-
             xmlFiles["xl/_rels/workbook.xml.rels"]
                 ?.getElementsByTag("Relationship")
-                ?.filter { child -> child.attr("Target") == sheetId1 }
+                ?.filter { child -> resolveWorkbookRelTarget(child.attr("Target")) == sheetPath }
                 ?.forEach { it.remove() }
 
             xmlFiles["[Content_Types].xml"]
                 ?.getElementsByTag("Override")
-                ?.filter { child -> child.attr("PartName") == "/$sheetId2" }
+                ?.filter { child -> child.attr("PartName") == "/$sheetPath" }
                 ?.forEach { it.remove() }
 
             xmlFiles.remove(xmlSheetId[sheet])
