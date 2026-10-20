@@ -637,7 +637,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         // worksheet whose children are out of order.
         val followers = setOf(
             "rowBreaks", "colBreaks", "customProperties", "cellWatches", "ignoredErrors",
-            "smartTags", "drawing", "legacyDrawing", "legacyDrawingHF", "picture",
+            "smartTags", "drawing", "legacyDrawing", "legacyDrawingHF", "drawingHF", "picture",
             "oleObjects", "controls", "webPublishItems", "tableParts", "extLst",
         )
         val firstFollower = worksheetEl.children().firstOrNull { it.tagName() in followers }
