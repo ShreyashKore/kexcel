@@ -8,6 +8,7 @@ import com.gyanoba.kexcel.Excel
 import com.gyanoba.kexcel.number_format.CustomNumFormat
 import com.gyanoba.kexcel.number_format.NumFormat
 import com.gyanoba.kexcel.shared_strings.SharedString
+import com.gyanoba.kexcel.shared_strings.itemKey
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.Border
 import com.gyanoba.kexcel.sheet.BorderSet
@@ -173,7 +174,7 @@ public class Parser internal constructor(private val excel: Excel) {
         val sharedString = SharedString(node = node)
         // Keyed by the node itself, matching how the save path registers entries — plain
         // text alone cannot tell two differently styled rich strings apart.
-        excel.sharedStrings.add(sharedString, node.toString())
+        excel.sharedStrings.add(sharedString, itemKey(node))
     }
 
     private fun parseContent(run: Boolean = true) {
@@ -603,7 +604,7 @@ public class Parser internal constructor(private val excel: Excel) {
                     ?: damagedExcel(
                         "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
                     )
-                TextCellValue.span(sharedString.textSpan)
+                TextCellValue.span(sharedString.textSpan).also { it.sourceItem = sharedString.node }
             }
             // boolean
             "b" -> BoolCellValue(parseValue(node.getElementsByTag("v").first()) == "1")
@@ -617,9 +618,10 @@ public class Parser internal constructor(private val excel: Excel) {
             "inlineStr" -> {
                 val isEl = node.getElementsByTag("is").firstOrNull()
                 if (isEl == null) TextCellValue("")
-                else TextCellValue.span(
-                    SharedString(Element("si", emptyList(), isEl.childNodesCopy())).textSpan
-                )
+                else {
+                    val item = SharedString(Element("si", emptyList(), isEl.childNodesCopy()))
+                    TextCellValue.span(item.textSpan).also { it.sourceItem = item.node }
+                }
             }
             // number (default)
             else -> {

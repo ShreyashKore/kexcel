@@ -29,9 +29,14 @@ internal class SharedStringsMaintainer {
      * Entries are keyed by their serialized `<si>` node rather than by plain text, so two
      * spans that read the same but are styled differently stay distinct.
      */
-    fun addFromSpan(span: TextSpan): SharedString {
-        val node = buildSharedStringItem(span)
-        val key = node.toString()
+    fun addFromSpan(span: TextSpan): SharedString = addFromItem(buildSharedStringItem(span))
+
+    /**
+     * Registers an existing `<si>` [node] as-is, reusing an identical entry if one was
+     * already written. Used for strings read from a file, so nothing unmodelled is lost.
+     */
+    fun addFromItem(node: Element): SharedString {
+        val key = itemKey(node)
 
         val existing = mapString[key]
         if (existing != null) {
@@ -65,6 +70,36 @@ internal class SharedStringsMaintainer {
         mapString.clear()
     }
 }
+
+// endregion
+
+// region --- Item keys ---
+
+/**
+ * A serialization of an `<si>` [node] that depends only on its content.
+ *
+ * `toString()` is not stable enough to key the pool on: ksoup formats a node with its owner
+ * document's output settings, so an item parsed from `sharedStrings.xml` (compact XML) and an
+ * identical one built in memory (no document, so pretty-printed) serialize differently. Mixing
+ * the two in one save then wrote the same string twice.
+ */
+internal fun itemKey(node: Element): String = StringBuilder().also { appendKey(node, it) }.toString()
+
+private fun appendKey(node: Node, out: StringBuilder) {
+    when (node) {
+        is TextNode -> out.append(node.getWholeText().escapeKey())
+        is Element -> {
+            out.append('<').append(node.tagName())
+            node.attributes().forEach { out.append(' ').append(it.key).append("=\"").append(it.value.escapeKey()).append('"') }
+            out.append('>')
+            node.childNodes().forEach { appendKey(it, out) }
+            out.append("</").append(node.tagName()).append('>')
+        }
+        else -> Unit // comments and the like carry no string content
+    }
+}
+
+private fun String.escapeKey(): String = replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;")
 
 // endregion
 
@@ -152,7 +187,7 @@ internal class IndexingHolder(val index: Int, count: Int = 1) {
 
 public class SharedString internal constructor(internal val node: Element) {
 
-    private val cachedHashCode: Int = node.toString().hashCode()
+    private val cachedHashCode: Int = itemKey(node).hashCode()
 
     public val textSpan: TextSpan
         get() {

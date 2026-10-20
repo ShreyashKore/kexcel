@@ -92,8 +92,13 @@ public class Save internal constructor(private val excel: Excel, private val par
     ): Element {
         var sharedString: SharedString? = null
         if (value is TextCellValue) {
-            // Pass the whole span, not its flattened text, so rich-text runs are kept.
-            sharedString = excel.sharedStrings.addFromSpan(value.value)
+            // A string read from a file goes back as the <si> it came from, which keeps run
+            // properties the model does not cover. The check catches a span whose styles
+            // were mutated in place after parsing; that one is rebuilt from the model.
+            val source = value.sourceItem?.takeIf { SharedString(it).textSpan == value.value }
+            // Otherwise pass the whole span, not its flattened text, so rich-text runs are kept.
+            sharedString = if (source != null) excel.sharedStrings.addFromItem(source)
+            else excel.sharedStrings.addFromSpan(value.value)
         }
 
         val rC = getCellId(columnIndex, rowIndex)
