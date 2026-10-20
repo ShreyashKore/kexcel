@@ -298,6 +298,30 @@ class PoiInteropTest {
     }
 
     @Test
+    fun formulasWithNonNumericResultsSurviveAKexcelRoundTrip() {
+        // Once evaluated, POI caches these as t="str" / t="b" / t="e" next to the <f>.
+        val bytes = poiWorkbook { wb ->
+            val row = wb.createSheet("F").createRow(0)
+            row.createCell(0).cellFormula = """CONCATENATE("a","b")"""
+            row.createCell(1).cellFormula = "1>0"
+            row.createCell(2).cellFormula = "1/0"
+            wb.creationHelper.createFormulaEvaluator().evaluateAll()
+        }
+
+        val excel = Excel.decodeBytes(bytes)
+        assertEquals(FormulaCellValue("""CONCATENATE("a","b")"""), excel["F"].rows[0][0]?.value)
+        assertEquals(FormulaCellValue("1>0"), excel["F"].rows[0][1]?.value)
+        assertEquals(FormulaCellValue("1/0"), excel["F"].rows[0][2]?.value)
+
+        readWithPoi(excel.encode()!!) { wb ->
+            val row = wb.getSheetAt(0).getRow(0)
+            assertEquals("""CONCATENATE("a","b")""", row.getCell(0).cellFormula)
+            assertEquals("1>0", row.getCell(1).cellFormula)
+            assertEquals("1/0", row.getCell(2).cellFormula)
+        }
+    }
+
+    @Test
     fun kexcelReadsAnErrorCellPoiWrote() {
         val bytes = poiWorkbook { wb ->
             wb.createSheet("E").createRow(0).createCell(0)

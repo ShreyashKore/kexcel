@@ -154,9 +154,29 @@ class ForeignWorksheetXmlTest {
 
     @Test
     fun aStringResultFormulaIsReadAsAFormula() {
+        // t="str" types the cached result, not the cell. Reading <v> as the formula lost
+        // the expression and wrote `ab` back as <f>, which Excel shows as #NAME?.
         val sheet = sheetFromRawXml("""<row r="1"><c r="A1" t="str"><f>CONCAT("a","b")</f><v>ab</v></c></row>""")
 
-        assertEquals(FormulaCellValue("ab"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(FormulaCellValue("""CONCAT("a","b")"""), sheet.cell(CellIndex.indexByString("A1")).value)
+    }
+
+    @Test
+    fun booleanAndErrorResultFormulasAreReadAsFormulas() {
+        val sheet = sheetFromRawXml(
+            """<row r="1"><c r="A1" t="b"><f>A2>0</f><v>1</v></c><c r="B1" t="e"><f>1/0</f><v>#DIV/0!</v></c></row>"""
+        )
+
+        assertEquals(FormulaCellValue("A2>0"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(FormulaCellValue("1/0"), sheet.cell(CellIndex.indexByString("B1")).value)
+    }
+
+    @Test
+    fun aStringResultWithoutItsFormulaIsReadAsText() {
+        // Only the cached text is left; keeping it as a formula would corrupt it on save.
+        val sheet = sheetFromRawXml("""<row r="1"><c r="A1" t="str"><v>ab</v></c></row>""")
+
+        assertEquals(TextCellValue("ab"), sheet.cell(CellIndex.indexByString("A1")).value)
     }
 
     @Test
