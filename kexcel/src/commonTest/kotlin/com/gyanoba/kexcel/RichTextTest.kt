@@ -157,6 +157,42 @@ class RichTextTest {
         assertEquals(true, back.value.children!!.single().style?.isBold)
     }
 
+    @Test
+    fun aStyleOnRootTextIsKept() {
+        // A bare <t> has nowhere to put formatting, so styled root text is written as a run.
+        val back = roundTrip(TextSpan(text = "headline", style = CellStyle(bold = true, fontSize = 14)))
+
+        assertEquals("headline", back.toString())
+        val run = back.value.children!!.single()
+        assertEquals("headline", run.text)
+        assertEquals(true, run.style?.isBold)
+        assertEquals(14, run.style?.fontSize)
+    }
+
+    @Test
+    fun styledRootTextComesBeforeItsChildrenAndSharesItsStyleWithThem() {
+        val back = roundTrip(
+            TextSpan(
+                text = "lead:",
+                style = CellStyle(italic = true),
+                children = listOf(TextSpan(text = "inherits"), TextSpan(text = "own", style = CellStyle(bold = true))),
+            ),
+        )
+
+        assertEquals("lead:inheritsown", back.toString())
+        val runs = back.value.children!!
+        assertEquals(listOf("lead:", "inherits", "own"), runs.map { it.text })
+        assertEquals(listOf(true, true, false), runs.map { it.style?.isItalic })
+        assertEquals(true, runs[2].style?.isBold)
+    }
+
+    @Test
+    fun rootTextWithADefaultStyleStaysPlain() {
+        val back = roundTrip(TextSpan(text = "plain", style = CellStyle()))
+        assertEquals("plain", back.value.text)
+        assertNull(back.value.children)
+    }
+
     // endregion
 
     // region --- Interaction with plain strings and the shared-string pool ---

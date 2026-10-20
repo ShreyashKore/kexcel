@@ -76,10 +76,17 @@ internal class SharedStringsMaintainer {
  * This is the inverse of [SharedString.textSpan]: plain text becomes a single `<t>`, and
  * every styled child becomes an `<r>` run with an `<rPr>` describing its style. Nested
  * children are flattened, since OOXML rich runs are a flat list.
+ *
+ * A bare `<t>` cannot carry formatting, so root text whose [TextSpan.style] sets anything
+ * is written as the first run instead. It reads back as a child run rather than as root
+ * text — the structure differs, but the rendered text and its styling are the same.
  */
 internal fun buildSharedStringItem(span: TextSpan): Element {
     val children = mutableListOf<Node>()
-    span.text?.let { children.add(textNode(it)) }
+    span.text?.let { text ->
+        val properties = runProperties(span.style)
+        children.add(if (properties == null) textNode(text) else run(properties, text))
+    }
     appendRuns(span.children, inheritedStyle = span.style, into = children)
     // An <si> with no content at all is not valid; keep an empty <t> instead.
     if (children.isEmpty()) children.add(textNode(""))
@@ -89,15 +96,14 @@ internal fun buildSharedStringItem(span: TextSpan): Element {
 private fun appendRuns(spans: List<TextSpan>?, inheritedStyle: CellStyle?, into: MutableList<Node>) {
     spans?.forEach { child ->
         val style = child.style ?: inheritedStyle
-        child.text?.let { text ->
-            val runChildren = mutableListOf<Node>()
-            runProperties(style)?.let { runChildren.add(it) }
-            runChildren.add(textNode(text))
-            into.add(Element("r", emptyList(), runChildren))
-        }
+        child.text?.let { text -> into.add(run(runProperties(style), text)) }
         appendRuns(child.children, style, into)
     }
 }
+
+/** An `<r>` run: optional `<rPr>` followed by its `<t>`. */
+private fun run(properties: Element?, text: String): Element =
+    Element("r", emptyList(), listOfNotNull(properties, textNode(text)))
 
 /** `xml:space="preserve"` keeps leading/trailing spaces, which runs rely on. */
 private fun textNode(text: String): Element =
