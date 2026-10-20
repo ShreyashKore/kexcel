@@ -60,6 +60,23 @@ internal class SharedStringsMaintainer {
         }
     }
 
+    /**
+     * Registers an item read from `sharedStrings.xml`. Cells refer to items by position, so
+     * every `<si>` takes its own index — including a duplicate of an earlier one, which some
+     * producers write. Merging duplicates (as [add] does) shifted every later index by one,
+     * and cells then showed the wrong strings.
+     */
+    fun addParsed(value: SharedString, key: String) {
+        if (map.containsKey(value)) {
+            map[value]!!.increaseCount()
+        } else {
+            mapString[key] = value
+            map[value] = IndexingHolder(list.size)
+        }
+        list.add(value)
+        index = list.size
+    }
+
     fun indexOf(value: SharedString): Int = map[value]?.index ?: -1
 
     fun value(i: Int): SharedString? = if (i < list.size) list[i] else null

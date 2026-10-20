@@ -153,6 +153,27 @@ class ForeignWorksheetXmlTest {
     }
 
     @Test
+    fun duplicateSharedStringItemsKeepTheirOwnIndex() {
+        // Some producers do not deduplicate sharedStrings.xml. Cells point at items by
+        // position, so a repeated <si> must still take a slot of its own.
+        val sst = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3" uniqueCount="3"><si><t>dup</t></si><si><t>dup</t></si><si><t>after</t></si></sst>"""
+        val sheetXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">""" +
+            """<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c></row></sheetData></worksheet>"""
+        var bytes = Excel.createExcel().apply { this["Sheet1"].updateCell(CellIndex.indexByString("A1"), TextCellValue("x")) }.encode()!!
+        bytes = replaceZipEntry(bytes, "xl/sharedStrings.xml", sst.encodeToByteArray())
+        bytes = replaceZipEntry(bytes, "xl/worksheets/sheet1.xml", sheetXml.encodeToByteArray())
+
+        val excel = Excel.decodeBytes(bytes)
+        val expected = listOf(TextCellValue("dup"), TextCellValue("dup"), TextCellValue("after"))
+        assertEquals(expected, excel["Sheet1"].rows[0].map { it?.value })
+
+        // The save path deduplicates again, so the re-saved file reads the same.
+        assertEquals(expected, Excel.decodeBytes(excel.encode()!!)["Sheet1"].rows[0].map { it?.value })
+    }
+
+    @Test
     fun aStringResultFormulaIsReadAsAFormula() {
         // t="str" types the cached result, not the cell. Reading <v> as the formula lost
         // the expression and wrote `ab` back as <f>, which Excel shows as #NAME?.
