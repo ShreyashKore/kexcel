@@ -9,6 +9,7 @@ import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.Element
 import com.gyanoba.kexcel.utils.ExcelColor
 import com.gyanoba.kexcel.utils.Underline
+import com.gyanoba.kexcel.utils.isOnOff
 import com.gyanoba.kexcel.utils.toExcelColor
 
 // region --- SharedStringsMaintainer ---
@@ -191,8 +192,7 @@ public class SharedString internal constructor(internal val node: Element) {
 
     public val textSpan: TextSpan
         get() {
-            fun getBool(element: Element): Boolean =
-                element.attr("val")?.toBooleanStrictOrNull() ?: true
+            fun getBool(element: Element): Boolean = isOnOff(element.attr("val"))
 
             fun getInt(element: Element): Int =
                 element.attr("val")!!.toDouble().toInt()

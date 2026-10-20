@@ -367,14 +367,13 @@ public class Parser internal constructor(private val excel: Excel) {
                         fontSize = size.toString().toDouble().toInt()
                     }
 
-                    val bold = nodeChildren(font, "b")
-                    if (bold != null && bold is Boolean && bold) {
-                        isBold = true
+                    // Presence alone is not enough: <b val="0"/> is an explicit "not bold".
+                    if (nodeChildren(font, "b") != null) {
+                        isBold = isOnOff(nodeChildren(font, "b", attribute = "val") as String?)
                     }
 
-                    val italic = nodeChildren(font, "i")
-                    if (italic != null && italic is Boolean && italic) {
-                        isItalic = true
+                    if (nodeChildren(font, "i") != null) {
+                        isItalic = isOnOff(nodeChildren(font, "i", attribute = "val") as String?)
                     }
 
                     // <u/> is a single underline, <u val="double"/> a double one. A missing

@@ -419,6 +419,26 @@ class PoiInteropTest {
     }
 
     @Test
+    fun aFontWithAnExplicitlyOffBoldIsNotReadAsBold() {
+        // <b val="false"/> is a valid "not bold"; only a bare <b/> or val="1"/"true" is on.
+        val bytes = poiWorkbook { wb ->
+            wb as XSSFWorkbook
+            val font = wb.createFont()
+            font.ctFont.addNewB().setVal(false)
+            font.ctFont.addNewI().setVal(true)
+            val style = wb.createCellStyle().apply { setFont(font) }
+            wb.createSheet("S").createRow(0).createCell(0).apply {
+                setCellValue("a")
+                cellStyle = style
+            }
+        }
+
+        val style = Excel.decodeBytes(bytes)["S"].cell(CellIndex.indexByString("A1")).cellStyle!!
+        assertEquals(false, style.isBold)
+        assertEquals(true, style.isItalic)
+    }
+
+    @Test
     fun aNewFontFamilyOnAPoiStyleIsNotOverriddenByTheThemeFont() {
         // POI's default font is <name val="Calibri"/><scheme val="minor"/>. Keeping the
         // scheme after renaming the family makes Excel keep rendering Calibri.

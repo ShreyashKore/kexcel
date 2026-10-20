@@ -121,4 +121,20 @@ class RichTextFileTest {
         assertEquals(true, a1.value.children!![0].style?.isItalic)
         assertEquals(TextCellValue("new"), reread.cell(CellIndex.indexByString("A2")).value)
     }
+
+    @Test
+    fun explicitlyOffBoldAndItalicRunsAreNotStyled() {
+        // ST_OnOff: a bare <b/> is on, but val="0"/"false" is an explicit off. Reading
+        // those as bold turned plain runs bold once rich text started surviving a save.
+        val excel = Excel.decodeBytes(
+            workbookWithSharedStrings(
+                """<si><r><rPr><b val="0"/><i val="1"/></rPr><t>a</t></r>""" +
+                    """<r><rPr><b val="false"/><i/></rPr><t>b</t></r><r><rPr><b/><i val="0"/></rPr><t>c</t></r></si>"""
+            )
+        )
+
+        val runs = (excel["Sheet1"].cell(CellIndex.indexByString("A1")).value as TextCellValue).value.children!!
+        assertEquals(listOf(false, false, true), runs.map { it.style?.isBold })
+        assertEquals(listOf(true, true, false), runs.map { it.style?.isItalic })
+    }
 }
