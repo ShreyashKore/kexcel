@@ -419,6 +419,32 @@ class PoiInteropTest {
     }
 
     @Test
+    fun changingTheDefaultSheetLeavesOnlyThatSheetSelected() {
+        // POI marks the first sheet tabSelected. <sheetView> is patched in place on save,
+        // so that flag survives; unless it is cleared, Excel opens the old and the new
+        // default sheet grouped together.
+        val bytes = poiWorkbook { wb ->
+            wb.createSheet("First").createRow(0).createCell(0).setCellValue("a")
+            wb.createSheet("Second").createRow(0).createCell(0).setCellValue("b")
+            wb.createSheet("Third").createRow(0).createCell(0).setCellValue("c")
+            wb.setActiveSheet(2)
+            wb.getSheetAt(0).isSelected = true
+            wb.getSheetAt(2).isSelected = true
+        }
+
+        val excel = Excel.decodeBytes(bytes)
+        excel.setDefaultSheet("Second")
+
+        readWithPoi(excel.encode()!!) { wb ->
+            assertEquals("Second", wb.getSheetName(wb.activeSheetIndex))
+            val selected = (0 until wb.numberOfSheets)
+                .filter { wb.getSheetAt(it).isSelected }
+                .map { wb.getSheetName(it) }
+            assertEquals(listOf("Second"), selected)
+        }
+    }
+
+    @Test
     fun aKexcelEditedPoiWorkbookIsStillAValidPackage() {
         val bytes = poiWorkbook { wb ->
             val s = wb.createSheet("S")

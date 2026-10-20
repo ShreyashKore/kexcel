@@ -584,6 +584,8 @@ public class Save internal constructor(private val excel: Excel, private val par
         }
 
         if (position == -1 || elementFound == null) return false
+
+        selectOnly(sheetName)
         if (position == 0) return true
 
         val sheets = excel.xmlFiles["xl/workbook.xml"]!!.getElementsByTag("sheets").first()
@@ -591,6 +593,27 @@ public class Save internal constructor(private val excel: Excel, private val par
         sheets?.prependChildren(listOf(elementFound))
 
         return excel.getDefaultSheetInternal() == sheetName
+    }
+
+    /**
+     * Makes [sheetName] the only selected sheet once it has been moved to the front.
+     *
+     * `<sheetView>` is patched in place rather than rebuilt (see [setRTL]), so the
+     * `tabSelected` of whichever sheet was selected in the source file survives. Left
+     * alone, Excel opens with that sheet *and* the new default grouped, and every edit
+     * lands on both. `activeTab` is reset for the same reason: it is a position, and the
+     * default sheet is now at position 0.
+     */
+    private fun selectOnly(sheetName: String) {
+        excel.xmlFiles["xl/workbook.xml"]!!.getElementsByTag("workbookView").forEach {
+            it.removeAttr("activeTab")
+        }
+        excel.sheetMap.keys.forEach { name ->
+            val sheetView = excel.xmlFiles[excel.xmlSheetId[name]]
+                ?.getElementsByTag("sheetView")?.firstOrNull() ?: return@forEach
+            if (name == sheetName) sheetView.attr("tabSelected", "1")
+            else sheetView.removeAttr("tabSelected")
+        }
     }
 
     private fun setHeaderFooter(sheetName: String) {
