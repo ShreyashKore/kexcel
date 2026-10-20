@@ -10,6 +10,7 @@ import com.gyanoba.kexcel.sheet.Element
 import com.gyanoba.kexcel.utils.ExcelColor
 import com.gyanoba.kexcel.utils.Underline
 import com.gyanoba.kexcel.utils.isOnOff
+import com.gyanoba.kexcel.utils.normalizeNewLine
 import com.gyanoba.kexcel.utils.toExcelColor
 
 // region --- SharedStringsMaintainer ---
@@ -227,7 +228,9 @@ public class SharedString internal constructor(internal val node: Element) {
                     "t" -> {
                         // wholeText() preserves significant whitespace (xml:space="preserve");
                         // text() would collapse/trim it and drop spaces between runs.
-                        text = (text ?: "") + child.wholeText()
+                        // ksoup does not do XML's end-of-line handling (§2.11), so a literal
+                        // CRLF is folded to LF here, as Parser.parseValue does for other text.
+                        text = (text ?: "") + normalizeNewLine(child.wholeText())
                     }
 
                     // 18.4.4 r (Rich Text Run)
@@ -258,7 +261,7 @@ public class SharedString internal constructor(internal val node: Element) {
                                 // 18.4.12 t (Text)
                                 "t" -> {
                                     if (children == null) children = mutableListOf()
-                                    children!!.add(TextSpan(text = runChild.wholeText(), style = style))
+                                    children!!.add(TextSpan(text = normalizeNewLine(runChild.wholeText()), style = style))
                                 }
                             }
                         }

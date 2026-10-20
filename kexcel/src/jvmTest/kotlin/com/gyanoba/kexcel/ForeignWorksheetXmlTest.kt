@@ -152,6 +152,32 @@ class ForeignWorksheetXmlTest {
         assertEquals(FormulaCellValue("1+1"), sheet.cell(CellIndex.indexByString("A1")).value)
     }
 
+    /** A workbook with a hand-written `sharedStrings.xml` and `sheet1.xml`. */
+    private fun workbookWithStrings(sstXml: String, sheetXml: String): ByteArray {
+        var bytes = Excel.createExcel()
+            .apply { this["Sheet1"].updateCell(CellIndex.indexByString("A1"), TextCellValue("x")) }
+            .encode()!!
+        bytes = replaceZipEntry(bytes, "xl/sharedStrings.xml", sstXml.encodeToByteArray())
+        return replaceZipEntry(bytes, "xl/worksheets/sheet1.xml", sheetXml.encodeToByteArray())
+    }
+
+    @Test
+    fun aLiteralCrlfInStringTextReadsAsALineFeed() {
+        // XML end-of-line handling (§2.11) folds CRLF to LF; ksoup leaves it, so the reader has to.
+        val crlf = "\r\n"
+        val sst = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2">""" +
+            "<si><t>shared${crlf}line</t></si><si><r><rPr><b/></rPr><t>run${crlf}line</t></r></si></sst>"
+        val sheetXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">""" +
+            """<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c>""" +
+            "<c r=\"C1\" t=\"inlineStr\"><is><t>inline${crlf}line</t></is></c></row></sheetData></worksheet>"
+
+        val row = Excel.decodeBytes(workbookWithStrings(sst, sheetXml))["Sheet1"].rows[0]
+
+        assertEquals(listOf("shared\nline", "run\nline", "inline\nline"), row.map { it?.value.toString() })
+    }
+
     @Test
     fun duplicateSharedStringItemsKeepTheirOwnIndex() {
         // Some producers do not deduplicate sharedStrings.xml. Cells point at items by
@@ -161,11 +187,7 @@ class ForeignWorksheetXmlTest {
         val sheetXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">""" +
             """<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c></row></sheetData></worksheet>"""
-        var bytes = Excel.createExcel().apply { this["Sheet1"].updateCell(CellIndex.indexByString("A1"), TextCellValue("x")) }.encode()!!
-        bytes = replaceZipEntry(bytes, "xl/sharedStrings.xml", sst.encodeToByteArray())
-        bytes = replaceZipEntry(bytes, "xl/worksheets/sheet1.xml", sheetXml.encodeToByteArray())
-
-        val excel = Excel.decodeBytes(bytes)
+        val excel = Excel.decodeBytes(workbookWithStrings(sst, sheetXml))
         val expected = listOf(TextCellValue("dup"), TextCellValue("dup"), TextCellValue("after"))
         assertEquals(expected, excel["Sheet1"].rows[0].map { it?.value })
 
