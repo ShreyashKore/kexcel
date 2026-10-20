@@ -8,6 +8,7 @@ import com.gyanoba.kexcel.Excel
 import com.gyanoba.kexcel.number_format.CustomNumFormat
 import com.gyanoba.kexcel.number_format.NumFormat
 import com.gyanoba.kexcel.shared_strings.SharedString
+import com.gyanoba.kexcel.shared_strings.itemKey
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.Border
 import com.gyanoba.kexcel.sheet.BorderSet
@@ -173,7 +174,7 @@ public class Parser internal constructor(private val excel: Excel) {
         val sharedString = SharedString(node = node)
         // Keyed by the node itself, matching how the save path registers entries — plain
         // text alone cannot tell two differently styled rich strings apart.
-        excel.sharedStrings.add(sharedString, node.toString())
+        excel.sharedStrings.addParsed(sharedString, itemKey(node))
     }
 
     private fun parseContent(run: Boolean = true) {
@@ -366,14 +367,13 @@ public class Parser internal constructor(private val excel: Excel) {
                         fontSize = size.toString().toDouble().toInt()
                     }
 
-                    val bold = nodeChildren(font, "b")
-                    if (bold != null && bold is Boolean && bold) {
-                        isBold = true
+                    // Presence alone is not enough: <b val="0"/> is an explicit "not bold".
+                    if (nodeChildren(font, "b") != null) {
+                        isBold = isOnOff(nodeChildren(font, "b", attribute = "val") as String?)
                     }
 
-                    val italic = nodeChildren(font, "i")
-                    if (italic != null && italic is Boolean && italic) {
-                        isItalic = true
+                    if (nodeChildren(font, "i") != null) {
+                        isItalic = isOnOff(nodeChildren(font, "i", attribute = "val") as String?)
                     }
 
                     // <u/> is a single underline, <u val="double"/> a double one. A missing
@@ -593,7 +593,14 @@ public class Parser internal constructor(private val excel: Excel) {
         val value: CellValue?
         val type = node.attr("t")
 
-        value = when (type) {
+        // `t` describes the cached result in <v>, not the cell: a boolean-, error- or
+        // string-typed cell can still be a formula. The expression is what Kexcel models
+        // (and writes back as <f>), so it wins over the cache whatever the type. Shared and
+        // inline strings cannot carry a formula.
+        val formulaNode = if (type == "s" || type == "inlineStr") null
+        else node.getElementsByTag("f").firstOrNull()
+
+        value = if (formulaNode != null) FormulaCellValue(parseValue(formulaNode)) else when (type) {
             // shared string
             "s" -> {
                 val raw = parseValue(node.getElementsByTag("v").firstOrNull()).trim()
@@ -603,44 +610,42 @@ public class Parser internal constructor(private val excel: Excel) {
                     ?: damagedExcel(
                         "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
                     )
-                TextCellValue.span(sharedString.textSpan)
+                TextCellValue.span(sharedString.textSpan).also { it.sourceItem = sharedString.node }
             }
             // boolean
             "b" -> BoolCellValue(parseValue(node.getElementsByTag("v").first()) == "1")
-            // error
-            "e",
-                // formula string
-            "str" -> FormulaCellValue(parseValue(node.getElementsByTag("v").first()))
+            // error. No dedicated error type exists, so the literal is kept as a formula
+            // that evaluates to the same error.
+            "e" -> FormulaCellValue(parseValue(node.getElementsByTag("v").first()))
+            // A formula's string result without its <f>: all that is left is the text. As a
+            // formula it would be written back as <f>text</f>, which Excel shows as #NAME?.
+            "str" -> TextCellValue(parseValue(node.getElementsByTag("v").first()))
             // inline string. <is> shares the CT_Rst content model with a shared string's
             // <si>, so it is read with the same code — otherwise everything after the
             // first run of a rich inline string would be dropped.
             "inlineStr" -> {
                 val isEl = node.getElementsByTag("is").firstOrNull()
                 if (isEl == null) TextCellValue("")
-                else TextCellValue.span(
-                    SharedString(Element("si", emptyList(), isEl.childNodesCopy())).textSpan
-                )
+                else {
+                    val item = SharedString(Element("si", emptyList(), isEl.childNodesCopy()))
+                    TextCellValue.span(item.textSpan).also { it.sourceItem = item.node }
+                }
             }
             // number (default)
             else -> {
-                val formulaNode = node.getElementsByTag("f")
-                if (formulaNode.isNotEmpty()) {
-                    FormulaCellValue(parseValue(formulaNode.first()).toString())
-                } else {
-                    val vNode = node.getElementsByTag("v").firstOrNull()
-                    // An empty <v/> carries no number. Producers emit it for a cell that
-                    // has a style but no value; feeding "" to a NumFormat would throw.
-                    val raw = vNode?.let { parseValue(it) }
-                    when {
-                        raw.isNullOrBlank() -> null
-                        s1 != null -> {
-                            val numFmtId = excel.numFmtIds[s]
-                            val numFormat = excel.numFormats.getByNumFmtId(numFmtId)
-                                ?: NumFormat.defaultNumeric
-                            numFormat.read(raw)
-                        }
-                        else -> NumFormat.defaultNumeric.read(raw)
+                val vNode = node.getElementsByTag("v").firstOrNull()
+                // An empty <v/> carries no number. Producers emit it for a cell that
+                // has a style but no value; feeding "" to a NumFormat would throw.
+                val raw = vNode?.let { parseValue(it) }
+                when {
+                    raw.isNullOrBlank() -> null
+                    s1 != null -> {
+                        val numFmtId = excel.numFmtIds[s]
+                        val numFormat = excel.numFormats.getByNumFmtId(numFmtId)
+                            ?: NumFormat.defaultNumeric
+                        numFormat.read(raw)
                     }
+                    else -> NumFormat.defaultNumeric.read(raw)
                 }
             }
         }

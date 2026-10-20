@@ -9,6 +9,8 @@ import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.Element
 import com.gyanoba.kexcel.utils.ExcelColor
 import com.gyanoba.kexcel.utils.Underline
+import com.gyanoba.kexcel.utils.isOnOff
+import com.gyanoba.kexcel.utils.normalizeNewLine
 import com.gyanoba.kexcel.utils.toExcelColor
 
 // region --- SharedStringsMaintainer ---
@@ -29,9 +31,14 @@ internal class SharedStringsMaintainer {
      * Entries are keyed by their serialized `<si>` node rather than by plain text, so two
      * spans that read the same but are styled differently stay distinct.
      */
-    fun addFromSpan(span: TextSpan): SharedString {
-        val node = buildSharedStringItem(span)
-        val key = node.toString()
+    fun addFromSpan(span: TextSpan): SharedString = addFromItem(buildSharedStringItem(span))
+
+    /**
+     * Registers an existing `<si>` [node] as-is, reusing an identical entry if one was
+     * already written. Used for strings read from a file, so nothing unmodelled is lost.
+     */
+    fun addFromItem(node: Element): SharedString {
+        val key = itemKey(node)
 
         val existing = mapString[key]
         if (existing != null) {
@@ -54,6 +61,23 @@ internal class SharedStringsMaintainer {
         }
     }
 
+    /**
+     * Registers an item read from `sharedStrings.xml`. Cells refer to items by position, so
+     * every `<si>` takes its own index — including a duplicate of an earlier one, which some
+     * producers write. Merging duplicates (as [add] does) shifted every later index by one,
+     * and cells then showed the wrong strings.
+     */
+    fun addParsed(value: SharedString, key: String) {
+        if (map.containsKey(value)) {
+            map[value]!!.increaseCount()
+        } else {
+            mapString[key] = value
+            map[value] = IndexingHolder(list.size)
+        }
+        list.add(value)
+        index = list.size
+    }
+
     fun indexOf(value: SharedString): Int = map[value]?.index ?: -1
 
     fun value(i: Int): SharedString? = if (i < list.size) list[i] else null
@@ -68,6 +92,36 @@ internal class SharedStringsMaintainer {
 
 // endregion
 
+// region --- Item keys ---
+
+/**
+ * A serialization of an `<si>` [node] that depends only on its content.
+ *
+ * `toString()` is not stable enough to key the pool on: ksoup formats a node with its owner
+ * document's output settings, so an item parsed from `sharedStrings.xml` (compact XML) and an
+ * identical one built in memory (no document, so pretty-printed) serialize differently. Mixing
+ * the two in one save then wrote the same string twice.
+ */
+internal fun itemKey(node: Element): String = StringBuilder().also { appendKey(node, it) }.toString()
+
+private fun appendKey(node: Node, out: StringBuilder) {
+    when (node) {
+        is TextNode -> out.append(node.getWholeText().escapeKey())
+        is Element -> {
+            out.append('<').append(node.tagName())
+            node.attributes().forEach { out.append(' ').append(it.key).append("=\"").append(it.value.escapeKey()).append('"') }
+            out.append('>')
+            node.childNodes().forEach { appendKey(it, out) }
+            out.append("</").append(node.tagName()).append('>')
+        }
+        else -> Unit // comments and the like carry no string content
+    }
+}
+
+private fun String.escapeKey(): String = replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;")
+
+// endregion
+
 // region --- TextSpan -> <si> serialization ---
 
 /**
@@ -76,10 +130,17 @@ internal class SharedStringsMaintainer {
  * This is the inverse of [SharedString.textSpan]: plain text becomes a single `<t>`, and
  * every styled child becomes an `<r>` run with an `<rPr>` describing its style. Nested
  * children are flattened, since OOXML rich runs are a flat list.
+ *
+ * A bare `<t>` cannot carry formatting, so root text whose [TextSpan.style] sets anything
+ * is written as the first run instead. It reads back as a child run rather than as root
+ * text — the structure differs, but the rendered text and its styling are the same.
  */
 internal fun buildSharedStringItem(span: TextSpan): Element {
     val children = mutableListOf<Node>()
-    span.text?.let { children.add(textNode(it)) }
+    span.text?.let { text ->
+        val properties = runProperties(span.style)
+        children.add(if (properties == null) textNode(text) else run(properties, text))
+    }
     appendRuns(span.children, inheritedStyle = span.style, into = children)
     // An <si> with no content at all is not valid; keep an empty <t> instead.
     if (children.isEmpty()) children.add(textNode(""))
@@ -89,15 +150,14 @@ internal fun buildSharedStringItem(span: TextSpan): Element {
 private fun appendRuns(spans: List<TextSpan>?, inheritedStyle: CellStyle?, into: MutableList<Node>) {
     spans?.forEach { child ->
         val style = child.style ?: inheritedStyle
-        child.text?.let { text ->
-            val runChildren = mutableListOf<Node>()
-            runProperties(style)?.let { runChildren.add(it) }
-            runChildren.add(textNode(text))
-            into.add(Element("r", emptyList(), runChildren))
-        }
+        child.text?.let { text -> into.add(run(runProperties(style), text)) }
         appendRuns(child.children, style, into)
     }
 }
+
+/** An `<r>` run: optional `<rPr>` followed by its `<t>`. */
+private fun run(properties: Element?, text: String): Element =
+    Element("r", emptyList(), listOfNotNull(properties, textNode(text)))
 
 /** `xml:space="preserve"` keeps leading/trailing spaces, which runs rely on. */
 private fun textNode(text: String): Element =
@@ -146,12 +206,11 @@ internal class IndexingHolder(val index: Int, count: Int = 1) {
 
 public class SharedString internal constructor(internal val node: Element) {
 
-    private val cachedHashCode: Int = node.toString().hashCode()
+    private val cachedHashCode: Int = itemKey(node).hashCode()
 
     public val textSpan: TextSpan
         get() {
-            fun getBool(element: Element): Boolean =
-                element.attr("val")?.toBooleanStrictOrNull() ?: true
+            fun getBool(element: Element): Boolean = isOnOff(element.attr("val"))
 
             fun getInt(element: Element): Int =
                 element.attr("val")!!.toDouble().toInt()
@@ -169,7 +228,9 @@ public class SharedString internal constructor(internal val node: Element) {
                     "t" -> {
                         // wholeText() preserves significant whitespace (xml:space="preserve");
                         // text() would collapse/trim it and drop spaces between runs.
-                        text = (text ?: "") + child.wholeText()
+                        // ksoup does not do XML's end-of-line handling (§2.11), so a literal
+                        // CRLF is folded to LF here, as Parser.parseValue does for other text.
+                        text = (text ?: "") + normalizeNewLine(child.wholeText())
                     }
 
                     // 18.4.4 r (Rich Text Run)
@@ -200,7 +261,7 @@ public class SharedString internal constructor(internal val node: Element) {
                                 // 18.4.12 t (Text)
                                 "t" -> {
                                     if (children == null) children = mutableListOf()
-                                    children!!.add(TextSpan(text = runChild.wholeText(), style = style))
+                                    children!!.add(TextSpan(text = normalizeNewLine(runChild.wholeText()), style = style))
                                 }
                             }
                         }

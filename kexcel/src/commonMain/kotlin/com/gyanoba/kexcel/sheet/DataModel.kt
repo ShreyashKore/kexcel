@@ -1,5 +1,6 @@
 package com.gyanoba.kexcel.sheet
 
+import com.fleeksoft.ksoup.nodes.Element
 import com.gyanoba.kexcel.shared_strings.TextSpan
 import com.gyanoba.kexcel.utils.twoDigits
 import kotlinx.datetime.LocalDate
@@ -137,6 +138,14 @@ public class BoolCellValue(public val value: Boolean) : CellValue() {
 
 public class TextCellValue private constructor(public val value: TextSpan) : CellValue() {
     public constructor(text: String) : this(TextSpan(text = text))
+
+    /**
+     * The `<si>` this value was read from, when it came from a file. The save path writes
+     * it back verbatim while it still reads as [value], so run properties the model does
+     * not cover (theme and indexed colours, strike-through, phonetic runs, …) survive.
+     * Not part of equality.
+     */
+    internal var sourceItem: Element? = null
 
     public companion object {
         public fun span(value: TextSpan): TextCellValue = TextCellValue(value)

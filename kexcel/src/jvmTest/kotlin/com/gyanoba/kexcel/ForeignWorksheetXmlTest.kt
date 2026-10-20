@@ -152,11 +152,74 @@ class ForeignWorksheetXmlTest {
         assertEquals(FormulaCellValue("1+1"), sheet.cell(CellIndex.indexByString("A1")).value)
     }
 
+    /** A workbook with a hand-written `sharedStrings.xml` and `sheet1.xml`. */
+    private fun workbookWithStrings(sstXml: String, sheetXml: String): ByteArray {
+        var bytes = Excel.createExcel()
+            .apply { this["Sheet1"].updateCell(CellIndex.indexByString("A1"), TextCellValue("x")) }
+            .encode()!!
+        bytes = replaceZipEntry(bytes, "xl/sharedStrings.xml", sstXml.encodeToByteArray())
+        return replaceZipEntry(bytes, "xl/worksheets/sheet1.xml", sheetXml.encodeToByteArray())
+    }
+
+    @Test
+    fun aLiteralCrlfInStringTextReadsAsALineFeed() {
+        // XML end-of-line handling (§2.11) folds CRLF to LF; ksoup leaves it, so the reader has to.
+        val crlf = "\r\n"
+        val sst = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2">""" +
+            "<si><t>shared${crlf}line</t></si><si><r><rPr><b/></rPr><t>run${crlf}line</t></r></si></sst>"
+        val sheetXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">""" +
+            """<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c>""" +
+            "<c r=\"C1\" t=\"inlineStr\"><is><t>inline${crlf}line</t></is></c></row></sheetData></worksheet>"
+
+        val row = Excel.decodeBytes(workbookWithStrings(sst, sheetXml))["Sheet1"].rows[0]
+
+        assertEquals(listOf("shared\nline", "run\nline", "inline\nline"), row.map { it?.value.toString() })
+    }
+
+    @Test
+    fun duplicateSharedStringItemsKeepTheirOwnIndex() {
+        // Some producers do not deduplicate sharedStrings.xml. Cells point at items by
+        // position, so a repeated <si> must still take a slot of its own.
+        val sst = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3" uniqueCount="3"><si><t>dup</t></si><si><t>dup</t></si><si><t>after</t></si></sst>"""
+        val sheetXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">""" +
+            """<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c></row></sheetData></worksheet>"""
+        val excel = Excel.decodeBytes(workbookWithStrings(sst, sheetXml))
+        val expected = listOf(TextCellValue("dup"), TextCellValue("dup"), TextCellValue("after"))
+        assertEquals(expected, excel["Sheet1"].rows[0].map { it?.value })
+
+        // The save path deduplicates again, so the re-saved file reads the same.
+        assertEquals(expected, Excel.decodeBytes(excel.encode()!!)["Sheet1"].rows[0].map { it?.value })
+    }
+
     @Test
     fun aStringResultFormulaIsReadAsAFormula() {
+        // t="str" types the cached result, not the cell. Reading <v> as the formula lost
+        // the expression and wrote `ab` back as <f>, which Excel shows as #NAME?.
         val sheet = sheetFromRawXml("""<row r="1"><c r="A1" t="str"><f>CONCAT("a","b")</f><v>ab</v></c></row>""")
 
-        assertEquals(FormulaCellValue("ab"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(FormulaCellValue("""CONCAT("a","b")"""), sheet.cell(CellIndex.indexByString("A1")).value)
+    }
+
+    @Test
+    fun booleanAndErrorResultFormulasAreReadAsFormulas() {
+        val sheet = sheetFromRawXml(
+            """<row r="1"><c r="A1" t="b"><f>A2>0</f><v>1</v></c><c r="B1" t="e"><f>1/0</f><v>#DIV/0!</v></c></row>"""
+        )
+
+        assertEquals(FormulaCellValue("A2>0"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(FormulaCellValue("1/0"), sheet.cell(CellIndex.indexByString("B1")).value)
+    }
+
+    @Test
+    fun aStringResultWithoutItsFormulaIsReadAsText() {
+        // Only the cached text is left; keeping it as a formula would corrupt it on save.
+        val sheet = sheetFromRawXml("""<row r="1"><c r="A1" t="str"><v>ab</v></c></row>""")
+
+        assertEquals(TextCellValue("ab"), sheet.cell(CellIndex.indexByString("A1")).value)
     }
 
     @Test

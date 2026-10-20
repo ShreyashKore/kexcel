@@ -89,7 +89,7 @@ public class CellStyle(
         fontColorHex = fontColorHexVal ?: _fontColorHex.toExcelColor(),
         backgroundColorHex = backgroundColorHexVal ?: _backgroundColorHex.toExcelColor(),
         fontFamily = fontFamilyVal ?: _fontFamily,
-        fontScheme = fontSchemeVal ?: _fontScheme,
+        fontScheme = fontSchemeVal ?: schemeAfterFamilyChange(fontFamilyVal),
         horizontalAlign = horizontalAlignVal ?: _horizontalAlign,
         verticalAlign = verticalAlignVal ?: _verticalAlign,
         textWrapping = textWrappingVal ?: _textWrapping,
@@ -153,10 +153,26 @@ public class CellStyle(
 
     // region --- Font family / scheme / size ---
 
-    /** Get/set font family. */
+    /**
+     * Get/set font family.
+     *
+     * Setting a different family also resets [fontScheme] to [FontScheme.Unset]: while a
+     * scheme is set, Excel renders the theme's font and ignores the family name.
+     */
     public var fontFamily: String?
         get() = _fontFamily
-        set(value) { _fontFamily = value }
+        set(value) {
+            _fontScheme = schemeAfterFamilyChange(value)
+            _fontFamily = value
+        }
+
+    /**
+     * The scheme to keep when the family becomes [newFamily]. A style read from a file is
+     * usually tied to the theme's minor font; naming a different family has to break that
+     * tie, or the new name never shows.
+     */
+    private fun schemeAfterFamilyChange(newFamily: String?): FontScheme =
+        if (newFamily != null && newFamily != _fontFamily) FontScheme.Unset else _fontScheme
 
     /** Get/set font scheme. */
     public var fontScheme: FontScheme
