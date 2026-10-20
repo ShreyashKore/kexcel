@@ -9,9 +9,7 @@
 [![Kotlin Multiplatform](https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/docs/multiplatform.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-<br clear="left" />
-
-![Platforms: JVM | Android | iOS](https://img.shields.io/badge/Platforms-JVM%20%7C%20Android%20%7C%20iOS-blue)
+![Platforms: JVM | Android | iOS | wasmJs | macosArm64](https://img.shields.io/badge/Platforms-JVM%20%7C%20Android%20%7C%20iOS-blue)
 
 > ⚠️ **Experimental** — Kexcel is under active development. The API is unstable and may change without notice.
 

@@ -8,6 +8,7 @@ maven-publish = "0.34.0"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.10.0"
 kotlinx-datetime = "0.7.1"
+poi = "5.4.1"
 compose-multiplatform = "1.10.3"
 dokka = "2.0.0"
 androidx-activityCompose = "1.12.0"
@@ -27,6 +28,8 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-mu
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
 androidx-activityCompose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
 ksoup = { module = "com.fleeksoft.ksoup:ksoup", version.ref = "ksoup" }
+# --- JVM test-only cross-validation oracle (never shipped)
+poi-ooxml = { module = "org.apache.poi:poi-ooxml", version.ref = "poi" }
 # --- Sample App
 filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekitCore" }
 filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs", version.ref = "filekitCore" }

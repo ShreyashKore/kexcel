@@ -201,11 +201,12 @@ public class Sheet internal constructor(
             return selectedRange
         }
 
-        for (i in startRow..(endRow ?: maxRows)) {
+        // maxRows/maxColumns are counts, so an unbounded range ends one before them.
+        for (i in startRow..(endRow ?: (maxRows - 1))) {
             val mapData = sheetData[i]
             if (mapData != null) {
                 val row = mutableListOf<Data?>()
-                for (j in startColumn..(endColumn ?: maxColumns)) {
+                for (j in startColumn..(endColumn ?: (maxColumns - 1))) {
                     row.add(mapData[j])
                 }
                 selectedRange.add(row)
@@ -330,7 +331,8 @@ public class Sheet internal constructor(
             sheetData = data
         }
 
-        if (_maxColumns - 1 <= columnIndex) {
+        // The guard above already rejected out-of-range indices, so a column always went away.
+        if (_maxColumns > 0) {
             _maxColumns -= 1
         }
     }
@@ -407,7 +409,9 @@ public class Sheet internal constructor(
             sheetData = mutableMapOf()
             sheetData[0] = mutableMapOf(columnIndex to Data.newData(this, 0, columnIndex))
         }
-        if (_maxColumns - 1 <= columnIndex) {
+        // Inserting inside the used range shifts every trailing column one to the right;
+        // inserting past the end simply extends the sheet up to the new column.
+        if (columnIndex <= _maxColumns - 1) {
             _maxColumns += 1
         } else {
             _maxColumns = columnIndex + 1
@@ -480,7 +484,8 @@ public class Sheet internal constructor(
             _maxColumns = 0
         }
 
-        if (_maxRows - 1 <= rowIndex) {
+        // The guard above already rejected out-of-range indices, so a row always went away.
+        if (_maxRows > 0) {
             _maxRows -= 1
         }
     }
@@ -542,6 +547,10 @@ public class Sheet internal constructor(
                         }
                     }
                 }
+            } else {
+                // Inserting past the last used row shifts nothing, but `data` still
+                // replaces sheetData below — so carry the existing rows over.
+                data.putAll(sheetData)
             }
         }
         data[rowIndex] = mutableMapOf(0 to Data.newData(this, rowIndex, 0))
@@ -987,7 +996,9 @@ public class Sheet internal constructor(
                 val result = source.replace(sourceData.value.toString()) { match ->
                     if (first == -1 || first != replaceCount) {
                         replaceCount++
-                        match.value.replaceRange(match.range.first, match.range.last + 1, target)
+                        // The lambda returns the replacement for this match only, so the
+                        // surrounding text must not be spliced back in here.
+                        target
                     } else {
                         match.value
                     }
@@ -1042,7 +1053,10 @@ public class Sheet internal constructor(
     }
 
     internal fun checkMaxColumn(columnIndex: Int) {
-        if (_maxColumns >= 16384 || columnIndex >= 16384) {
+        // Only the index is checked. `_maxColumns` is a *count*, so testing it against the
+        // same limit would reject the last legal column (XFD, index 16383) as soon as it had
+        // been written — writing it bumped the count to 16384, and every later read threw.
+        if (columnIndex >= 16384) {
             throw IllegalArgumentException("Reached Max (16384) or (XFD) columns value.")
         }
         if (columnIndex < 0) {
@@ -1051,7 +1065,8 @@ public class Sheet internal constructor(
     }
 
     internal fun checkMaxRow(rowIndex: Int) {
-        if (_maxRows >= 1048576 || rowIndex >= 1048576) {
+        // See [checkMaxColumn]: `_maxRows` is a count, not an index.
+        if (rowIndex >= 1048576) {
             throw IllegalArgumentException("Reached Max (1048576) rows value.")
         }
         if (rowIndex < 0) {
