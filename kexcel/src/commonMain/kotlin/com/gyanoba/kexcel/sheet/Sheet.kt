@@ -1006,7 +1006,8 @@ public class Sheet internal constructor(
                 if (sourceData !is TextCellValue) {
                     continue
                 }
-                val result = source.replace(sourceData.value.toString()) { match ->
+                val original = sourceData.value.toString()
+                val result = source.replace(original) { match ->
                     if (first == -1 || first != replaceCount) {
                         replaceCount++
                         // The lambda returns the replacement for this match only, so the
@@ -1016,7 +1017,12 @@ public class Sheet internal constructor(
                         match.value
                     }
                 }
-                sheetData[i]!![j]!!.value = TextCellValue(result)
+                // Rewriting is only needed when the text changed. A rewrite stores plain
+                // text, so doing it unconditionally stripped the rich-text runs of every
+                // cell in the range, matched or not.
+                if (result != original) {
+                    sheetData[i]!![j]!!.value = TextCellValue(result)
+                }
             }
         }
 

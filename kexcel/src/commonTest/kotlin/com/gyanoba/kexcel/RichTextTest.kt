@@ -271,6 +271,23 @@ class RichTextTest {
     }
 
     @Test
+    fun findAndReplaceLeavesCellsWithoutAMatchUntouched() {
+        val excel = Excel.createExcel()
+        val rich = TextCellValue.span(
+            TextSpan(children = listOf(TextSpan(text = "keep me", style = CellStyle(bold = true)))),
+        )
+        excel["Sheet1"].updateCell(CellIndex.indexByString("A1"), rich)
+        excel["Sheet1"].updateCell(CellIndex.indexByString("A2"), TextCellValue("target"))
+
+        assertEquals(1, excel.findAndReplace("Sheet1", Regex("target"), "replaced"))
+
+        val reread = Excel.decodeBytes(excel.encode()!!)["Sheet1"]
+        assertEquals(rich, reread.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(true, (reread.cell(CellIndex.indexByString("A1")).value as TextCellValue).value.children!!.single().style?.isBold)
+        assertEquals(TextCellValue("replaced"), reread.cell(CellIndex.indexByString("A2")).value)
+    }
+
+    @Test
     fun findAndReplaceOnRichTextCollapsesItToPlainText() {
         val excel = Excel.createExcel()
         excel["Sheet1"].updateCell(
