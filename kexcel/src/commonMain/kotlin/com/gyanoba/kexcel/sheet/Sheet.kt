@@ -342,6 +342,13 @@ public class Sheet internal constructor(
             return
         }
         checkMaxColumn(columnIndex)
+        // Inserting inside the used range shifts the last column right. Once that column is
+        // XFD there is nowhere to shift it to, and it would be written as an invalid `XFE`.
+        if (columnIndex < _maxColumns && _maxColumns >= 16384) {
+            throw IllegalArgumentException(
+                "Cannot insert a column: the sheet already uses the last column (XFD), which would be pushed past Max (16384)."
+            )
+        }
 
         var updateSpanCell = false
 
@@ -496,6 +503,12 @@ public class Sheet internal constructor(
         }
 
         checkMaxRow(rowIndex)
+        // See [insertColumn]: the last row cannot be shifted past row 1048576.
+        if (rowIndex < _maxRows && _maxRows >= 1048576) {
+            throw IllegalArgumentException(
+                "Cannot insert a row: the sheet already uses the last row, which would be pushed past Max (1048576)."
+            )
+        }
 
         var updateSpanCell = false
 

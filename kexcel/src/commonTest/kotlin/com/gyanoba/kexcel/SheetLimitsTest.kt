@@ -112,6 +112,43 @@ class SheetLimitsTest {
     }
 
     @Test
+    fun insertingAColumnThatWouldPushXfdPastTheEdgeIsRefused() {
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+        sheet.updateCell(CellIndex.indexByColumnRow(lastColumnIndex, 0), TextCellValue("last"))
+
+        assertFailsWith<IllegalArgumentException> { sheet.insertColumn(0) }
+        assertFailsWith<IllegalArgumentException> { sheet.insertColumn(lastColumnIndex) }
+
+        // Nothing moved, so the sheet still saves with the cell where it was.
+        assertEquals(16384, sheet.maxColumns)
+        val reread = Excel.decodeBytes(excel.encode()!!)["Sheet1"]
+        assertEquals(TextCellValue("last"), reread.cell(CellIndex.indexByColumnRow(lastColumnIndex, 0)).value)
+    }
+
+    @Test
+    fun insertingARowThatWouldPushTheLastRowPastTheEdgeIsRefused() {
+        val sheet = Excel.createExcel()["Sheet1"]
+        sheet.updateCell(CellIndex.indexByColumnRow(0, lastRowIndex), TextCellValue("last"))
+
+        assertFailsWith<IllegalArgumentException> { sheet.insertRow(0) }
+
+        assertEquals(1048576, sheet.maxRows)
+        assertEquals(TextCellValue("last"), sheet.cell(CellIndex.indexByColumnRow(0, lastRowIndex)).value)
+    }
+
+    @Test
+    fun insertingNextToTheEdgeStillWorksWhileThereIsRoom() {
+        val sheet = Excel.createExcel()["Sheet1"]
+        sheet.updateCell(CellIndex.indexByColumnRow(lastColumnIndex - 1, 0), TextCellValue("moves"))
+
+        sheet.insertColumn(0)
+
+        assertEquals(TextCellValue("moves"), sheet.cell(CellIndex.indexByColumnRow(lastColumnIndex, 0)).value)
+        assertEquals(16384, sheet.maxColumns)
+    }
+
+    @Test
     fun readingPastTheEdgeIsRefusedToo() {
         val sheet = Excel.createExcel()["Sheet1"]
 
