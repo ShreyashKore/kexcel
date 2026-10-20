@@ -419,6 +419,24 @@ class PoiInteropTest {
     }
 
     @Test
+    fun aNewFontFamilyOnAPoiStyleIsNotOverriddenByTheThemeFont() {
+        // POI's default font is <name val="Calibri"/><scheme val="minor"/>. Keeping the
+        // scheme after renaming the family makes Excel keep rendering Calibri.
+        val bytes = poiWorkbook { wb -> wb.createSheet("S").createRow(0).createCell(0).setCellValue("a") }
+
+        val excel = Excel.decodeBytes(bytes)
+        val cell = excel["S"].cell(CellIndex.indexByString("A1"))
+        cell.cellStyle = cell.cellStyle!!.copyWith(fontFamilyVal = "Arial")
+
+        readWithPoi(excel.encode()!!) { wb ->
+            wb as XSSFWorkbook
+            val font = wb.getFontAt(wb.getSheetAt(0).getRow(0).getCell(0).cellStyle.fontIndex)
+            assertEquals("Arial", font.fontName)
+            assertEquals(null, font.ctFont.schemeList.firstOrNull())
+        }
+    }
+
+    @Test
     fun changingTheDefaultSheetLeavesOnlyThatSheetSelected() {
         // POI marks the first sheet tabSelected. <sheetView> is patched in place on save,
         // so that flag survives; unless it is cleared, Excel opens the old and the new
