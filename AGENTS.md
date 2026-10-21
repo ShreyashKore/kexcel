@@ -53,6 +53,25 @@ Android Studio; iOS from `sample/iosApp/iosApp.xcodeproj` in Xcode.
 - Never commit `deploy.sh` — it is git-ignored and contains Maven Central signing
   secrets.
 
+## Reference libraries (read-only)
+
+`reference/` holds two git submodules, fetched with `scripts/reference.sh init`.
+Neither is part of the build.
+
+- `reference/poi` — Apache POI at the tag matching `poi` in
+  `gradle/libs.versions.toml`, the same version `PoiInteropTest` runs against.
+  It also has real `.xlsx` files under `test-data/spreadsheet/`.
+- `reference/dart-excel` — the upstream Dart `excel` library Kexcel ports.
+
+Before deciding what Kexcel should read or write, check POI's
+`poi-ooxml/src/main/java/org/apache/poi/xssf/` and the spec, and cite what you
+used in the test comment. **Never modify `reference/`, `.gitmodules`,
+`scripts/reference.sh` or `.claude/`.** Only humans bump references, and they
+commit the new pointer. Never build or depend on reference sources; the oracle is
+the Maven `poi-ooxml` jar. Change an existing test's expected value only when the
+spec, POI or Excel backs it, and name that evidence. If Kexcel disagrees with
+POI, assume Kexcel is wrong.
+
 ## How it works (short version)
 
 An `.xlsx` file is a ZIP of XML parts. Kexcel parses it into an in-memory object

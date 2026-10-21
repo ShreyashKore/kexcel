@@ -1,0 +1,9 @@
+[submodule "reference/dart-excel"]
+	path = reference/dart-excel
+	url = https://github.com/justkawal/excel.git
+	branch = main
+	shallow = true
+[submodule "reference/poi"]
+	path = reference/poi
+	url = https://github.com/apache/poi.git
+	shallow = true

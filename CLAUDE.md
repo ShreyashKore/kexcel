@@ -51,6 +51,21 @@ When adding a feature, the read and write paths must stay symmetric (see *Archit
 - Preview the guides (needs `pip install -r requirements.txt`): `mkdocs serve`
 - Full-site build the way CI does it: `./gradlew :kexcel:dokkaGenerate && mkdir -p docs/api && cp -r kexcel/build/dokka/html/. docs/api/ && mkdocs build --strict`
 
+## Reference libraries (read-only)
+
+`reference/` holds two git submodules that serve as the ground truth for OOXML behaviour. Neither is part of the build.
+
+- `reference/poi` — Apache POI source at the tag matching `poi` in `gradle/libs.versions.toml` (currently `REL_5_4_1`). This is the same version as the `poi-ooxml` jar that `PoiInteropTest` runs against. Read the readers and writers under `poi-ooxml/src/main/java/org/apache/poi/xssf/` (for example `usermodel/XSSFCell.java` with `convertSharedFormula`, and `model/SharedStringsTable.java`). It also has about 340 real `.xlsx` files under `test-data/spreadsheet/` that can be copied into `test_resources/` as fixtures.
+- `reference/dart-excel` — the upstream Dart `excel` library Kexcel is ported from (`lib/src/` mirrors Kexcel's packages). Check it when porting an upstream fix and for parity questions.
+
+A fresh clone doesn't fetch them. Run `scripts/reference.sh init` to get them.
+
+Rules for agents:
+- **Consult before deciding.** For a question about what Kexcel should read or write (element order, attribute defaults, cell types, shared formulas, string escaping), read the POI implementation and the spec first. Cite the file or spec section in the test comment, the way the `// Dart: '...'` comments already do.
+- **Never modify `reference/`, `.gitmodules`, `scripts/reference.sh`, or `.claude/`.** `.claude/settings.json` denies those edits, and `.claude/hooks/check-reference-untouched.sh` reports any change to the checkouts after every tool call. Only a human bumps a reference, with `scripts/reference.sh update`, and then commits the new pointer.
+- **Never build, run or depend on reference sources** (no `includeBuild`, source sets, or running their scripts). The executable oracle is the `poi-ooxml` jar from Maven Central in `jvmTest`.
+- **Don't bend tests to fit the code.** Change an existing test's expected value only when the spec, POI, or Excel's behaviour backs the new value. Name that evidence in the test comment and the commit message. If Kexcel disagrees with POI, assume Kexcel is wrong until shown otherwise.
+
 ## API conventions
 
 The `:kexcel` module enables `explicitApi()`. **All public declarations require explicit visibility modifiers and explicit return types** — the build fails otherwise. Internal machinery is marked `internal`; the public surface is deliberately small.
