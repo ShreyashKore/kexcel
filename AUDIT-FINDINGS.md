@@ -5,10 +5,125 @@
 | Audited commit | `53a21be` (`chore/reference-libraries`) |
 | Date | 2026-11-10 |
 | Oracles | Apache POI `REL_5_4_1` (`reference/poi`, and the `poi-ooxml` jar in `jvmTest`), ECMA-376, Dart `excel` 5.0.0 (`reference/dart-excel`) |
-| Status of this document | Findings only. Nothing in `kexcel/` was changed. |
+| Fix branch | `fix/audit-findings-2026-11-10`, branched from the audited commit |
+| Status of this document | Findings and their status. See **Progress** for what is fixed. |
 
 This is a living list. Each finding has a stable ID. When one is fixed, set its **Status**
 to `Fixed in <commit>` rather than deleting the row, and name the test that now covers it.
+
+## Progress
+
+Last updated 2026-11-10, on `fix/audit-findings-2026-11-10`. Of 64 findings: **44 fixed**,
+5 partly fixed, 15 open.
+
+- Each fix comes with tests for the behaviour the probes showed to be broken. They were not
+  each re-run against the unfixed code.
+- The tests that existed before still pass. Four of their expectations changed, each with
+  POI or the specification as evidence (see T-02).
+- `:kexcel:jvmTest` (389 tests) and `:kexcel:macosArm64Test` (188 common tests, run
+  natively) pass; the wasm and iOS simulator targets compile; `:kexcel:checkKotlinAbi`
+  passes, so the public API is unchanged.
+- Nothing was checked in Excel itself.
+
+| ID | Status | Commit | Note |
+|---|---|---|---|
+| D-01 | Fixed | `f95a967` |  |
+| D-02 | Fixed | `375eacb` | Followers are expanded on read, as POI does. |
+| D-03 | Fixed | `375eacb` |  |
+| D-04 | Fixed | `d63c381` |  |
+| D-05 | Fixed | `8ce5e08` `375eacb` | Detection ported from POI; unedited numbers are written back digit for digit. |
+| D-06 | Fixed | `8ce5e08` |  |
+| D-07 | Partly | `8ce5e08` | Serials below 61 fixed in both directions. A date before 1900 is still written as a negative serial. |
+| D-08 | Fixed | `8ce5e08` `375eacb` |  |
+| D-09 | Fixed | `010c5a9` |  |
+| D-10 | Fixed | `308bd3b` |  |
+| D-11 | Fixed | `8b86da7` |  |
+| D-12 | **Open** | — | Needs a formula and range shifter. The limit is now stated in `docs/guides/rows-and-columns.md`. |
+| D-13 | Fixed | `27724f8` | `copy()` still starts from an empty worksheet part, so panes and validations are not copied (F-11). |
+| D-14 | Fixed | `27724f8` | `setDefaultSheet` still moves the tab to the front; the names follow it now. |
+| D-15 | Fixed | `375eacb` | Cached results kept until a value changes, then dropped with `fullCalcOnLoad` set and the calc chain removed. Reading a cached result through the API is still not possible. |
+| D-17 | Fixed | `7bc8d77` |  |
+| D-18 | Partly | `375eacb` | An unedited error cell is written back as an error. There is still no error value type. |
+| D-19 | Fixed | `7bc8d77` |  |
+| D-20 | Fixed | `375eacb` |  |
+| D-21 | Fixed | `83cc03a` | Written back on save. The model still shows only the top-left cell of a merge. |
+| D-22 | **Open** | — | By design for now. |
+| D-23 | Fixed | `8b86da7` | Found while fixing D-11. |
+| O-01 | Fixed | `99426ca` |  |
+| O-02 | Fixed | `e30bf68` |  |
+| O-04 | Fixed | `99426ca` |  |
+| O-05 | Fixed | `27724f8` |  |
+| O-06 | Fixed | `5e152ae` |  |
+| O-07 | Fixed | `99426ca` | `applyBorder` and `applyNumberFormat` on new styles. Not checked in Excel. |
+| O-08 | **Open** | — |  |
+| O-09 | **Open** | — | Needs an API decision: `Left` is also the default value. |
+| O-10 | Fixed | `f2435fc` |  |
+| O-11 | **Open** | — |  |
+| R-01 | Fixed | `62cd4e5` |  |
+| R-02 | Fixed | `62cd4e5` |  |
+| R-03 | Fixed | `62cd4e5` | Reads as an empty string, as POI does. |
+| R-04 | Fixed | `62cd4e5` |  |
+| R-05 | Fixed | `62cd4e5` |  |
+| R-06 | Fixed | `62cd4e5` |  |
+| R-07 | Fixed | `375eacb` |  |
+| R-08 | Fixed | `62cd4e5` |  |
+| R-09 | **Open** | — |  |
+| R-10 | **Open** | — |  |
+| R-11 | **Open** | — |  |
+| R-12 | **Open** | — |  |
+| R-13 | Partly | `62cd4e5` | A bad number or date names its cell in a damaged-file error. Other paths unchanged. |
+| F-01 | Fixed | `375eacb` `0377f78` `99426ca` |  |
+| F-02 | Fixed | `375eacb` | On load. The editing API still swaps a format that cannot show the new value. |
+| F-03 | Partly | `8ce5e08` | Ids 5-8 and 41-44 added, three codes corrected, ids below 164 honoured. The locale-dependent ids 23-36 and 50-81 are still unknown. |
+| F-04 | Fixed | `5e152ae` |  |
+| F-05 | Fixed | `5e152ae` |  |
+| F-06 | Fixed | `38a45d0` |  |
+| F-07 | Fixed | `5e152ae` `83cc03a` |  |
+| F-08 | Fixed | `5e152ae` | Unchanged sizes keep their stored text. A size set in code is still written with two decimals. |
+| F-09 | Fixed | `99426ca` |  |
+| F-10 | **Open** | — |  |
+| F-11 | Partly | `5e152ae` `27724f8` | Default sizes, row and column settings and merges are copied. What lives only in the XML is not. |
+| F-12 | **Open** | — | No longer loses anything on a round trip (F-01); still not modelled. |
+| M-01 | **Open** | — |  |
+| M-02 | Fixed | `308bd3b` |  |
+| M-03 | Fixed | `308bd3b` |  |
+| M-04 | Fixed | `f2435fc` | `kotlinx-datetime` now resolves its own `kotlinx-serialization-core` (1.6.2) for consumers instead of the newer one the removed dependency pulled in. |
+| M-05 | **Open** | — |  |
+| M-06 | **Open** | — |  |
+| M-07 | **Open** | — | `:kexcel:macosArm64Test` was run by hand for this work and passes. |
+
+Also on the branch: `4c3c9ad` adds the POI oracle the fidelity tests are built on (T-01), and
+the last code commit keeps the common source set free of JVM-only calls.
+
+### The corpus, before and after
+
+The same no-edit round trip of the 354 POI files, run again at the end.
+
+| Change after a no-edit round trip | Files before | Files after |
+|---|---|---|
+| Kexcel cannot open a file POI opens | 28 | 9 |
+| Round trip completed | 301 | 321 |
+| Cached formula results dropped | 120 | 1 |
+| Formulas emptied (shared-formula followers) | 47 | 0 |
+| Every shared string wiped | 1 | 0 |
+| Numeric values changed | 3 | 0 |
+| Header/footer text corrupted | 26 | 0 |
+| Number format of a cell changed | 58 | 0 |
+| Font / fill / alignment / protection / border of a cell changed | 47 / 40 / 25 / 14 / 11 | 0 |
+| Column widths changed | 87 | 0 |
+| Column / row default style lost | 55 / 48 | 0 |
+| Hidden columns / rows became visible | 11 / 8 | 0 |
+| Rows with attributes but no cells dropped | 32 | 0 |
+| Styling of merged regions lost | 32 | 0 |
+| `<fonts count>` no longer matches the table | 134 | 0 |
+
+The nine files Kexcel still cannot open are seven fuzzer outputs, one whose zip entries
+use backslashes (R-11) and one decompression bomb (R-10).
+
+Two files still differ: `56702.xlsx` has 25 cells with an empty `<v></v>`, which POI
+counts as the number 0 and Kexcel as empty; `52575_main.xlsx` has one formula whose cached
+string is stored in a non-standard place. POI also prints the text of 1,394 expanded
+shared-formula followers with different spacing than the file has; the formulas are the same.
 
 ## How the evidence was gathered
 
@@ -101,7 +216,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   workbook that yields zero sheets should fail on decode.
 - **Tests**: reader conformance with a prefixed workbook, worksheet, shared strings, styles and
   rels; a corpus fixture (`65016.xlsx`).
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `f95a967`.
 
 ### D-02 Shared formulas: every follower cell is saved as an empty formula
 
@@ -118,7 +233,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
 - **Tests**: `ForeignWorksheetXmlTest.theHostOfASharedFormulaKeepsItsExpression` currently
   *asserts* the empty follower. It has to change when this is fixed. Add a POI cross-check on
   `shared_formulas.xlsx` and `51710.xlsx`.
-- **Origin**: Dart. **Status**: Open (pinned by a test).
+- **Origin**: Dart. **Status**: Fixed in `375eacb`. Followers are expanded on read, as POI does.
 
 ### D-03 Array, data-table and dynamic-array formulas lose their type
 
@@ -128,7 +243,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   rich values) are dropped because `<c>` is rebuilt with only `r`, `s`, `t` (`SaveFile.kt:104-110`).
   In `MatrixFormulaEvalTestData.xlsx`, 119 cells change from formula to number for POI.
 - **Fix**: same carrier as D-02 step 1: preserve `<f>` attributes, and `cm` / `vm` / `ph` on `<c>`.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `375eacb`.
 
 ### D-04 Adding a sheet can overwrite an existing sheet's data
 
@@ -141,7 +256,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
 - **Fix**: choose a part name that is not already in the archive.
 - **Tests**: package test: add a sheet to a workbook with a `sheetId` gap, then assert no
   part is replaced and every sheet's cells survive.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `d63c381`.
 
 ### D-05 Numbers are read as dates when the format contains a colour or currency tag, and are then altered
 
@@ -162,7 +277,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   disagreed with it on 12 of 39 sample format codes.
 - **Fix**: port POI's rule. Never let a date reading change the stored number: keep the raw
   serial and write it back unchanged if the cell was not edited.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `8ce5e08`, `375eacb`. Detection ported from POI; unedited numbers are written back digit for digit.
 
 ### D-06 The 1904 date system is ignored
 
@@ -171,7 +286,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   as `2028-03-16`. Corpus: `DateFormatTests.xlsx` and `48962.xlsx`, 52 dates, all 1,462 days early.
 - **Cause**: a single fixed epoch (`BaseNumFormat.kt:246-251`). Nothing reads `date1904`.
 - **Reference**: `XSSFWorkbook.isDate1904` (`XSSFWorkbook.java:1946`).
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `8ce5e08`.
 
 ### D-07 Dates before 1 March 1900 are off by one day; earlier dates become negative serials
 
@@ -182,7 +297,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   29 February 1900 that never existed.
 - **Reference**: `DateUtil.getJavaDate`, the `wholeDays < 61` branch (`DateUtil.java:428`).
 - **Fix**: adjust below serial 61, and reject dates Excel cannot represent.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Partly in `8ce5e08`. Serials below 61 fixed in both directions. A date before 1900 is still written as a negative serial.
 
 ### D-08 Times of day are truncated to the millisecond below, and date-times are re-quantised
 
@@ -197,7 +312,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   Dart uses `.round()` (`reference/dart-excel/lib/src/sheet/data_model.dart:272-276`).
   `TimeNumFormat.read` rounds correctly, so only this path is affected.
 - **Fix**: round. Separately, keep the original serial for cells that were not edited.
-- **Origin**: Port (truncation); Dart (re-quantising). **Status**: Open.
+- **Origin**: Port (truncation); Dart (re-quantising). **Status**: Fixed in `8ce5e08`, `375eacb`.
 
 ### D-09 Header and footer text is corrupted on every save
 
@@ -211,7 +326,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
 - **Fix**: delete `simplifyText`, pass the raw string to the text node, read with `wholeText()`.
 - **Tests**: the existing header/footer tests compare Kexcel with itself, which is why they
   pass. Add a POI cross-check with `&P`, a literal `&`, a quote and a newline.
-- **Origin**: Dart (escaping), Port (whitespace). **Status**: Open.
+- **Origin**: Dart (escaping), Port (whitespace). **Status**: Fixed in `010c5a9`.
 
 ### D-10 After a row or column is removed or inserted, `Data` objects write to the wrong cell
 
@@ -224,7 +339,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   (`sheet/DataModel.kt:67-76`).
 - **Also**: row heights and column widths are keyed by index and are not shifted by any of
   the four operations (probe: `{2=40.0}` unchanged after `removeRow(0)`).
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `308bd3b`.
 
 ### D-11 `_xHHHH_` escapes are not decoded on read or encoded on write
 
@@ -235,7 +350,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
     lone `\r` is written raw and becomes `\n` for any XML reader. A literal `_x000D_` typed by
     a user is read by Excel and POI as a carriage return.
 - **Reference**: `XSSFRichTextString.utfDecode` (`XSSFRichTextString.java:539`, pattern at `:80`).
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `8b86da7`.
 
 ### D-12 Inserting or removing rows and columns shifts cell values only
 
@@ -249,7 +364,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   conditional formatting and hyperlinks (`reference/poi/poi-ooxml/.../usermodel/helpers/`).
 - **Fix options**: shift the ranges in the retained XML, or document the limit clearly and
   refuse structural edits on sheets that carry such features.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: **Open**. Needs a formula and range shifter. The limit is now stated in `docs/guides/rows-and-columns.md`.
 
 ### D-13 `rename()` rebuilds the sheet from scratch; `copy()` drops merges
 
@@ -265,7 +380,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   as orphans. If a later sheet reuses the part name, it inherits them (seen in the probe).
 - **Fix**: rename by changing the `name` attribute of `<sheet>` and rewriting sheet
   references in formulas and defined names.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `27724f8`. `copy()` still starts from an empty worksheet part, so panes and validations are not copied (F-11).
 
 ### D-14 `delete()` and `setDefaultSheet()` break sheet-scoped names and the active tab
 
@@ -280,7 +395,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   (`save/SaveFile.kt:577-601`), change positions without renumbering.
 - **Fix**: renumber or drop `localSheetId` on delete, clamp `activeTab`, and implement the
   default sheet with `activeTab` instead of reordering tabs.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `27724f8`. `setDefaultSheet` still moves the tab to the front; the names follow it now.
 
 ### D-15 Cached formula results are discarded on every save, and cannot be read
 
@@ -299,9 +414,11 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
 - **Fix**: carry the cached value and its type on `FormulaCellValue`; write it back for
   unedited cells; drop `calcChain.xml` (and its relationship and content type) or set
   `fullCalcOnLoad` once any cell has changed.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `375eacb`. Cached results kept until a value changes, then dropped with `fullCalcOnLoad` set and the calc chain removed. Reading a cached result through the API is still not possible.
 
-### D-17 to D-22 Other S1 findings
+### D-17 to D-23 Other S1 findings
+
+Status for the findings listed in tables is in **Progress** above.
 
 | ID | Finding | Evidence | Origin |
 |---|---|---|---|
@@ -311,6 +428,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
 | D-20 | A cell typed `t="s"` or `t="inlineStr"` that also has `<f>` loses the formula (`Parser.kt:600`). Seen in `52575_main.xlsx` (LibreOffice). | Corpus | Kexcel |
 | D-21 | Cells inside a merged region other than the top-left are deleted on read (`Parser.kt:246-259`), with their values and styles. Excel allows such cells to exist. See F-07 for the styling effect. | Corpus | Dart |
 | D-22 | `findAndReplace` and any text edit replace a rich-text cell with plain text. Documented by a test; listed for completeness. | Read | Dart |
+| D-23 | The XML library writes tabs and line breaks in attribute values, and carriage returns in text, unescaped. XML then normalises them: a two-line data validation message or hyperlink tooltip came back as one line after a no-edit save, and a carriage return as a line feed. Found while fixing D-11. | Probe | Kexcel |
 
 ---
 
@@ -348,7 +466,7 @@ damage, because the parser itself creates "new" styles (F-02).
 - **Tests**: `OoxmlPackageTest.everyCellStyleIndexPointsAtAnExistingCellXf` checks `s` only.
   Add the same check for `fontId`, `fillId`, `borderId` and `numFmtId`, and for each
   `count`, on files that have `dxfs` and unused fonts.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `99426ca`.
 
 ### O-02 Worksheet children are written out of schema order
 
@@ -368,7 +486,7 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
 - **Tests**: the two existing order tests use the built-in template, which never has the
   elements that expose this. Run the order assertion over fixtures with autofilter, protection,
   conditional formatting and no sheet views.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `e30bf68`.
 
 ### O-04 to O-11 Other S2 findings
 
@@ -426,7 +544,7 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
   style was changed. Derive an edited style from the original `xf` rather than from the model alone.
 - **Tests**: a POI cross-check that compares a full style signature per cell before and
   after, not just values.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `375eacb`, `0377f78`, `99426ca`.
 
 ### F-02 The number format is replaced when Kexcel thinks it does not fit the value
 
@@ -451,7 +569,7 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
   If the check stays for the editing API, it should not run on load.
 - **Tests**: `WorkbookRoundTripTest.aStyleThatRejectsTheValueFallsBackToTheDefaultFormat` and
   `changingAValueRelaxesAnIncompatibleFormat` pin the current behaviour.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `375eacb`. On load. The editing API still swaps a format that cannot show the new value.
 
 ### F-03 The number-format table is incomplete
 
@@ -467,7 +585,7 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
   `#,##0.00;[Red](#,#)` (should be `#,##0.00;[Red](#,##0.00)`), id 48 is `##0.0` (should be
   `##0.0E+0`). All three are the same in Dart.
 - **Reference**: `BuiltinFormats` (`reference/poi/poi/.../ss/usermodel/BuiltinFormats.java`).
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Partly in `8ce5e08`. Ids 5-8 and 41-44 added, three codes corrected, ids below 164 honoured. The locale-dependent ids 23-36 and 50-81 are still unknown.
 
 ### F-04 Row attributes are discarded
 
@@ -479,7 +597,7 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
   the row style `s` / `customFormat` (48 files), and any row that has a height or style but no
   cells (32 files).
 - **Fix**: keep the original `<row>` attributes and re-attach them.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `5e152ae`.
 
 ### F-05 `<cols>` is rebuilt from widths alone
 
@@ -489,7 +607,7 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
   every column up to the last one that has a width.
 - Lost (Probe + Corpus): widths of all but the first column of a range (width changed in 87
   files), `hidden` (11 files), the column default style (55 files), outline levels.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `5e152ae`.
 
 ### F-06 Setting a value clears the cell's style
 
@@ -498,7 +616,7 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
 - **Cause**: `putData` assigns a fresh `CellStyle` every time (`sheet/Sheet.kt:893-894`), and
   `updateCell` reads "the style before" only after that reset (`:606`).
 - **Fix**: keep the existing style when none is passed.
-- **Origin**: Dart. **Status**: Open.
+- **Origin**: Dart. **Status**: Fixed in `38a45d0`.
 
 ### F-07 to F-12
 
@@ -586,6 +704,12 @@ and inputs from other producers.
 
 ### T-01 No test uses a real third-party corpus
 
+**Done.** `PoiOracle` (jvmTest) compares two workbooks through POI, `assertOnlyDiffers`
+turns that into a fidelity assertion with a list of known differences that can only
+shrink, and `assertReadsLikePoi` checks every cell Kexcel reads against POI's reading.
+`PoiCorpusRoundTripTest` runs 19 files copied into `test_resources/poi/`; every one now
+round-trips with no difference. The paragraph below is the original proposal.
+
 `reference/poi/test-data/spreadsheet` has 354 files and none are used. The one-off corpus
 run in this audit found D-01, D-02, D-09, F-01 and most of S3 in minutes.
 
@@ -615,7 +739,21 @@ each fix removes entries. Candidates: `65016.xlsx`, `51710.xlsx`, `shared_formul
 Per the repo rule, change an expected value only with POI or the spec as evidence. For
 each row the evidence is cited in the finding.
 
+**Changed so far**, each with the evidence in the test comment and the commit message:
+
+- `theHostOfASharedFormulaKeepsItsExpression` is now `aSharedFormulaIsExpandedForEveryCellThatSharesIt`.
+- `NumberFormatTest.timeFormatsReadFractionsOfADay` expected serial 1 to be 31 December 1899; it is 1 January 1900.
+- `NumberFormatTest.maintainerKnowsEveryStandardFormatUpFront` used the assigned id 5 as its example of an unassigned one.
+- `SheetOperationsTest.sheetRemoveAndRenameOperations` expected no default sheet after renaming the default sheet.
+- `aNonNumericSharedStringIndexIsReportedAsADamagedFile` is unchanged; an empty index has its own test.
+
+Still pinned: `errorCellsSurfaceTheirErrorLiteral` (D-18), the two format-replacement tests
+(the editing API keeps that behaviour), and `decodeCustomNumFmtIdBelow164`, which is now
+backed by a POI comparison on `bug66675.xlsx`.
+
 ### T-03 Reader conformance (`ForeignWorksheetXmlTest`) cases to add
+
+Added for every fixed finding. Not yet covered: every built-in format id, and the open findings.
 
 Prefixed namespaces on every part (D-01); shared, array and data-table formulas (D-02, D-03);
 `cm` / `vm` attributes; `t="d"`; lowercase exponent; whitespace inside `<v>`; an integer
@@ -625,6 +763,8 @@ serials 1, 59, 60, 61 (D-07); a negative serial in a date format (R-04); `<col>`
 workbook with no styles part, with no shared strings, with non-`rId` ids, and with a chart sheet.
 
 ### T-04 Package tests (`OoxmlPackageTest`) to add
+
+All of these are in place.
 
 - Child order after **each** mutating operation, on sheets that already have `autoFilter`,
   `sheetProtection`, `conditionalFormatting`, no `sheetViews`, no `sheetFormatPr` (O-02).
@@ -639,6 +779,8 @@ workbook with no styles part, with no shared strings, with non-`rId` ids, and wi
 
 ### T-05 Model tests (`commonTest`) to add
 
+In place, except `cell()` not growing the sheet (M-01, open).
+
 - `Data.rowIndex` / `columnIndex` / `cellIndex` after each of the four structural
   operations, and that `data.value = …` edits the cell it was read from (D-10).
 - Row heights and column widths follow their rows and columns (D-10).
@@ -650,6 +792,8 @@ workbook with no styles part, with no shared strings, with non-`rId` ids, and wi
 - Sheet-name validation (O-05); `NaN` / `Infinity` rejected (D-17).
 
 ### T-06 Interop tests (`PoiInteropTest`) to add
+
+In place, except the last item (D-12, open).
 
 - Borders Kexcel writes are visible to POI (O-07). `poiReadsKexcelStyling` does not look at borders.
 - Style fidelity, not only values: full style signature per cell before and after a Kexcel
@@ -674,6 +818,10 @@ workbook with no styles part, with no shared strings, with non-`rId` ids, and wi
 ---
 
 ## Suggested order of work
+
+Steps 1 to 5 and most of 6 are done. What is left, roughly by value: D-12 (shift references on
+structural edits), an API for cached formula results and error values (D-15, D-18), R-09 and
+R-10 (memory and untrusted input), R-12, and the open S2 and S5 items.
 
 1. **Stop destroying data on a no-edit round trip.** D-01, D-02 (step 1: preserve `<f>`
    attributes), D-09, D-04. Each is a small, contained change.
