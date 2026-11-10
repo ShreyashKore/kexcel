@@ -78,4 +78,27 @@ class PoiCorpusRoundTripTest {
         kotlin.test.assertFalse("calcChain" in readZipEntry(saved, "xl/_rels/workbook.xml.rels").decodeToString())
         PoiOracle.read(saved) { kotlin.test.assertTrue(it.forceFormulaRecalculation) }
     }
+
+    // R-01: a chart sheet beside the worksheets.
+    @Test
+    fun aWorkbookWithAChartSheetSurvives() = assertLossless("chart_sheet.xlsx")
+
+    // R-02: no styles part and no shared strings part.
+    @Test
+    fun aWorkbookWithoutAStylesPartSurvives() = assertLossless("56278.xlsx")
+
+    // R-03: `<c t="s"><v/></c>`.
+    @Test
+    fun aStringCellWithoutAnIndexSurvives() = assertLossless("64508.xlsx")
+
+    // R-04: a negative number in a date-formatted cell.
+    @Test
+    fun aNegativeDateSurvives() = assertLossless("bug60858.xlsx")
+
+    // R-05: relationship ids that are not `rId<number>`, in workbooks with no shared strings part.
+    @Test
+    fun opaqueRelationshipIdsSurvive() {
+        assertLossless("60825.xlsx")
+        assertLossless("52348.xlsx")
+    }
 }

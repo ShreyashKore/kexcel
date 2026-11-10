@@ -264,7 +264,8 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     internal fun getDefaultSheetInternal(): String? {
         val elements = xmlFiles["xl/workbook.xml"]?.getElementsByTag("sheet")
-        val sheet = elements?.firstOrNull()
+        // The first worksheet: a chart sheet may come first, but it is not in the model.
+        val sheet = elements?.firstOrNull { sheetMap.containsKey(it.attr("name")) } ?: elements?.firstOrNull()
 
         return if (sheet != null) {
             val name = sheet.attribute("name")?.value

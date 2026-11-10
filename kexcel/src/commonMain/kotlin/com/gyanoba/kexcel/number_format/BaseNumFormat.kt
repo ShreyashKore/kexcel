@@ -173,11 +173,13 @@ public interface CustomNumFormat: NumFormat {
 public sealed class NumericNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
 
     override fun read(v: String): CellValue {
-        val eIdx = v.indexOf('E')
+        // xsd:double allows either case for the exponent; Excel writes `E`, others `e`.
+        val eIdx = v.indexOfFirst { it == 'E' || it == 'e' }
         val decimalIdx = v.indexOf('.')
 
         if (decimalIdx == -1 && eIdx == -1) {
-            return IntCellValue(v.toLong())
+            // More digits than a Long holds is still a number.
+            return v.toLongOrNull()?.let { IntCellValue(it) } ?: DoubleCellValue(v.toDouble())
         }
 
         // treat .0 or .00 as int
@@ -189,7 +191,7 @@ public sealed class NumericNumFormat(override val formatCode: String) : BaseNumF
             }
         }
         if (noActualDecimalPlaces) {
-            return IntCellValue(v.substring(0, decimalIdx).toLong())
+            v.substring(0, decimalIdx).toLongOrNull()?.let { return IntCellValue(it) }
         }
 
         return DoubleCellValue(v.toDouble())
@@ -250,6 +252,15 @@ private val DATE_OFFSET_MILLIS: Long by lazy {
         .toEpochMilliseconds()
 }
 
+/**
+ * Whether [serial] is a date Excel can show: from day 0 to 31 December 9999 (serial
+ * 2958465). A negative number, or a larger one, in a date-formatted cell is displayed as
+ * `####` and has no date or time to read, so it is surfaced as the number it is — as POI
+ * does (`DateUtil.isValidExcelDate`). Reading it as a time used to throw, and one such
+ * cell made the whole workbook impossible to open.
+ */
+internal fun isDateSerial(serial: Double): Boolean = serial >= 0.0 && serial < 2958466.0
+
 public sealed class DateTimeNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
 
     override fun read(v: String): CellValue {
@@ -257,6 +268,7 @@ public sealed class DateTimeNumFormat(override val formatCode: String) : BaseNum
             return TimeCellValue(hour = 0, minute = 0, second = 0, millisecond = 0, microsecond = 0)
         }
         val value = v.toDouble()
+        if (!isDateSerial(value)) return NumFormat.defaultNumeric.read(v)
         if (value < 1.0) {
             return TimeCellValue.fromFractionOfDay(value)
         }
@@ -319,6 +331,7 @@ public sealed class TimeNumFormat(override val formatCode: String) : BaseNumForm
             return TimeCellValue(hour = 0, minute = 0, second = 0, millisecond = 0, microsecond = 0)
         }
         val value = v.toDouble()
+        if (!isDateSerial(value)) return NumFormat.defaultNumeric.read(v)
         if (value < 1.0) {
             val deltaMs = (value * 24 * 3600 * 1000).roundToLong()
             val duration = deltaMs.milliseconds

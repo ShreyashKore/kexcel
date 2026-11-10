@@ -964,4 +964,85 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- Workbooks that used to be refused ---
+
+    @Test
+    fun aNegativeNumberInADateFormattedCellDoesNotStopTheWorkbookOpening() {
+        // Excel shows `####` for a negative date; there is no date to read. POI treats it
+        // as an invalid date (DateUtil.isValidExcelDate). Kexcel tried to build a time from
+        // it, threw, and the whole workbook failed to open — including for a plain number
+        // whose format merely contains `[Red]`.
+        val cells = listOf("[Red]0.00" to -5.0, "h:mm" to -0.25, "yyyy-mm-dd" to -1.0, "yyyy-mm-dd" to 1.0E12)
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            cells.forEachIndexed { i, (format, value) ->
+                sheet.createRow(i).createCell(0).apply {
+                    setCellValue(value)
+                    cellStyle = wb.createCellStyle().apply { dataFormat = wb.createDataFormat().getFormat(format) }
+                }
+            }
+        }
+
+        val sheet = Excel.decodeBytes(source)["S"]
+        assertEquals(
+            listOf(IntCellValue(-5), DoubleCellValue(-0.25), IntCellValue(-1), DoubleCellValue(1.0E12)),
+            cells.indices.map { sheet.cell(CellIndex.indexByColumnRow(0, it)).value },
+        )
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun aWorkbookWithoutAStylesPartCanBeReadAndStyled() {
+        // The styles part is optional; POI corpus 56278.xlsx has none.
+        val unstyled = fixture("poi/56278.xlsx")
+        kotlin.test.assertFalse(zipEntryNames(unstyled).any { it.endsWith("styles.xml") })
+
+        val excel = Excel.decodeBytes(unstyled)
+        val name = excel.tables.keys.first()
+        excel[name].updateCell(CellIndex.indexByString("Z1"), TextCellValue("bold"), CellStyle(bold = true))
+
+        readWithPoi(excel.encode()!!) { wb ->
+            val cell = wb.getSheet(name).getRow(0).getCell(25)
+            assertEquals("bold", cell.stringCellValue)
+            assertTrue((cell.cellStyle as org.apache.poi.xssf.usermodel.XSSFCellStyle).font.bold)
+        }
+    }
+
+    @Test
+    fun aWorksheetCanBeAddedNextToAChartSheet() {
+        // <sheets> lists chart sheets too. They have no cells and no Sheet in the model,
+        // but they must survive a save and keep their place.
+        val source = fixture("poi/chart_sheet.xlsx")
+        val before = readWithPoi(source) { wb -> (0 until wb.numberOfSheets).map { wb.getSheetName(it) } }
+
+        val excel = Excel.decodeBytes(source)
+        kotlin.test.assertTrue(excel.tables.isNotEmpty() && excel.tables.size < before.size)
+        excel["Added"].updateCell(CellIndex.indexByString("A1"), IntCellValue(1))
+
+        readWithPoi(excel.encode()!!) { wb ->
+            assertEquals(before + "Added", (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals(1.0, wb.getSheet("Added").getRow(0).getCell(0).numericCellValue)
+        }
+    }
+
+    @Test
+    fun aSheetCanBeAddedWhenRelationshipIdsAreNotNumbered() {
+        // Relationship ids are opaque (OPC §9.2). The OpenXML SDK writes ids such as
+        // `R856eb3046363446b`; parsing them as `rId<number>` threw NumberFormatException.
+        var source = poiWorkbook { wb -> wb.createSheet("One").createRow(0).createCell(0).setCellValue("one") }
+        for (part in listOf("xl/workbook.xml", "xl/_rels/workbook.xml.rels")) {
+            source = replaceZipEntry(source, part, readZipEntry(source, part).decodeToString().replace("\"rId", "\"Rabc").encodeToByteArray())
+        }
+
+        val saved = roundTrip(source) { it["New"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new")) }
+
+        readWithPoi(saved) { wb ->
+            assertEquals(listOf("One", "New"), (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals(listOf("one", "new"), (0 until wb.numberOfSheets).map { wb.getSheetAt(it).getRow(0).getCell(0).stringCellValue })
+        }
+    }
+
+    // endregion
 }

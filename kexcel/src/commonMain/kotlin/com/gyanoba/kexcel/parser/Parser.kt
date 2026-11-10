@@ -15,6 +15,12 @@ import com.gyanoba.kexcel.sheet.CellIndex
 import com.gyanoba.kexcel.sheet.CellSource
 import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.CellValue
+import com.gyanoba.kexcel.sheet.DateCellValue
+import com.gyanoba.kexcel.sheet.DateTimeCellValue
+import com.gyanoba.kexcel.sheet.TimeCellValue
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import com.gyanoba.kexcel.sheet.Element
 import com.gyanoba.kexcel.sheet.FontStyle
 import com.gyanoba.kexcel.sheet.FormulaCellValue
@@ -42,6 +48,8 @@ public class Parser internal constructor(private val excel: Excel) {
     private val rId: MutableList<String> = mutableListOf()
     // rId -> archive entry name of the worksheet part, e.g. `xl/worksheets/sheet1.xml`.
     private val worksheetPaths: MutableMap<String, String> = mutableMapOf()
+    // rId -> relationship type, for every relationship of the workbook part.
+    private val relationshipTypes: MutableMap<String, String> = mutableMapOf()
 
     internal fun startParsing() {
         putContentXml()
@@ -77,6 +85,7 @@ public class Parser internal constructor(private val excel: Excel) {
         document.getElementsByTag("Relationship").forEach { node ->
             val id = node.attr("Id")
             val target = node.attr("Target")
+            if (id != null) relationshipTypes[id] = node.attr("Type")
             if (target != null) {
                 when (node.attr("Type")) {
                     RELATIONSHIPS_STYLES -> excel.stylesPath = resolveWorkbookRelTarget(target)
@@ -192,6 +201,14 @@ public class Parser internal constructor(private val excel: Excel) {
 
         sheetNodes.forEach { node ->
             if (run) {
+                // <sheets> also lists chart sheets, macro sheets and dialog sheets
+                // (§18.2.19). Their parts are not worksheets and have no cells; they stay
+                // in the package as they are and simply have no Sheet in the model.
+                // An entry with no relationship id at all (POI corpus 60825.xlsx) names no
+                // part; POI skips it too. An id whose part is missing is still damage.
+                val id = relationshipId(node) ?: return@forEach
+                val type = relationshipTypes[id]
+                if (type != null && type != RELATIONSHIPS_WORKSHEET) return@forEach
                 parseTable(node)
             } else {
                 val rid = relationshipId(node)
@@ -209,41 +226,33 @@ public class Parser internal constructor(private val excel: Excel) {
      * region except for the top-left cell, preserving its content.
      */
     private fun parseMergedCells() {
-        val spannedCells = mutableMapOf<String, MutableList<String>>()
-
         excel.sheets.forEach { (sheetName, node) ->
             excel.availSheet(sheetName)
             val sheetDataNode = node as Element
-            val spanList = mutableListOf<String>()
             val sheet = excel.sheetMap[sheetName]!!
+
+            // Membership is checked in a set: against the list it was a linear scan per
+            // merge, and with it a rebuild of the sheet's reference list, which made a
+            // sheet with 50,000 merges (POI corpus 57893-many-merges.xlsx) take minutes.
+            val known = HashSet<Span>(sheet.spanList.filterNotNull())
 
             val worksheetNode = sheetDataNode.parent()
             worksheetNode?.getElementsByTag("mergeCell")?.forEach { element ->
-                val ref = element.attr("ref")
-                if (ref != null && ref.contains(':') && ref.split(':').size == 2) {
-                    if (!sheet.spannedItems.contains(ref)) {
-                        sheet.addSpannedItem(ref)
-                    }
-
-                    val startCell = ref.split(':')[0]
-                    val endCell = ref.split(':')[1]
-
-                    if (!spanList.contains(startCell)) {
-                        spanList.add(startCell)
-                    }
-                    spannedCells[sheetName] = spanList
-
-                    val startIndex = CellIndex.indexByString(startCell)
-                    val endIndex = CellIndex.indexByString(endCell)
-                    val spanObj = Span.fromCellIndex(start = startIndex, end = endIndex)
-
-                    if (!sheet.spanList.contains(spanObj)) {
+                val corners = element.attr("ref").split(':')
+                if (corners.size == 2) {
+                    val spanObj = Span.fromCellIndex(
+                        start = CellIndex.indexByString(corners[0]),
+                        end = CellIndex.indexByString(corners[1]),
+                    )
+                    if (known.add(spanObj)) {
                         sheet.spanList.add(spanObj)
                         deleteAllButTopLeftCellsOfSpanObj(spanObj, sheet)
                     }
                     excel.addMergeChangeLookup(sheetName)
                 }
             }
+            // Derives the sheet's list of merge references from the spans just read.
+            sheet.spannedItems
         }
     }
 
@@ -271,7 +280,35 @@ public class Parser internal constructor(private val excel: Excel) {
     }
 
     // Reads the styles from the Excel file.
-    private fun parseStyles(stylesPath: String) {
+    private fun parseStyles(declaredPath: String) {
+        var stylesPath = declaredPath
+        if (stylesPath.isEmpty()) {
+            // The styles part is optional (§18.8): a workbook without one is unformatted,
+            // not damaged, and minimal writers leave it out. Give it the default one so
+            // that styling such a workbook works like any other.
+            stylesPath = "xl/styles.xml"
+            excel.stylesPath = stylesPath
+            val content = DEFAULT_STYLES.encodeToByteArray()
+            excel.archive.addFile(ArchiveFile(stylesPath, content.size, content))
+
+            val rIdNumber = getAvailableRid()
+            excel.xmlFiles["xl/_rels/workbook.xml.rels"]?.getElementsByTag("Relationships")?.firstOrNull()?.appendChild(
+                Element(
+                    "Relationship",
+                    listOf(Attribute("Id", "rId$rIdNumber"), Attribute("Type", RELATIONSHIPS_STYLES), Attribute("Target", "styles.xml")),
+                )
+            )
+            rId.add("rId$rIdNumber")
+
+            val contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"
+            val types = excel.xmlFiles["[Content_Types].xml"]
+            if (types?.getElementsByTag("Override")?.none { it.attr("ContentType") == contentType } == true) {
+                types.getElementsByTag("Types").firstOrNull()?.appendChild(
+                    Element("Override", listOf(Attribute("PartName", "/xl/styles.xml"), Attribute("ContentType", contentType)))
+                )
+            }
+        }
+
         val styles = excel.archive.findFile(stylesPath)
             ?: damagedExcel(text = "styles")
 
@@ -656,16 +693,28 @@ public class Parser internal constructor(private val excel: Excel) {
             // shared string
             "s" -> {
                 val raw = (rawValue ?: "").trim()
-                val index = raw.toIntOrNull()
-                    ?: damagedExcel("Cell ${node.attr("r")} has a non-numeric shared string index: `$raw`")
-                val sharedString = excel.sharedStrings.value(index)
-                    ?: damagedExcel(
-                        "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
-                    )
-                TextCellValue.span(sharedString.textSpan).also {
-                    it.sourceItem = sharedString.node
+                // No index at all is a string cell with nothing in it; POI reads it as an
+                // empty string. Only an index that is *wrong* means damage.
+                if (raw.isEmpty()) TextCellValue("").also {
                     it.source = CellSource(type, rawValue = null, cellAttributes = cellAttributes)
+                } else {
+                    val index = raw.toIntOrNull()
+                        ?: damagedExcel("Cell ${node.attr("r")} has a non-numeric shared string index: `$raw`")
+                    val sharedString = excel.sharedStrings.value(index)
+                        ?: damagedExcel(
+                            "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
+                        )
+                    TextCellValue.span(sharedString.textSpan).also {
+                        it.sourceItem = sharedString.node
+                        it.source = CellSource(type, rawValue = null, cellAttributes = cellAttributes)
+                    }
                 }
+            }
+            // A date in ISO 8601 form (§18.18.11, ST_CellType `d`), which is how the Strict
+            // conformance class stores dates and what some exporters write.
+            "d" -> if (rawValue.isNullOrBlank()) null else {
+                isoDateTime(rawValue.trim(), node.attr("r"))
+                    .also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
             }
             // boolean
             "b" -> BoolCellValue(rawValue == "1")
@@ -693,13 +742,34 @@ public class Parser internal constructor(private val excel: Excel) {
                     val numFormat = if (s1 != null) {
                         excel.numFormats.getByNumFmtId(excel.numFmtIds.getOrElse(s) { 0 }) ?: NumFormat.defaultNumeric
                     } else NumFormat.defaultNumeric
-                    numFormat.read(rawValue).also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
+                    // Pretty-printed XML puts whitespace around the number.
+                    val number = rawValue.trim()
+                    val read = try {
+                        numFormat.read(number)
+                    } catch (e: NumberFormatException) {
+                        damagedExcel("Cell ${node.attr("r")} holds `$number`, which is not a number")
+                    }
+                    read.also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
                 }
             }
         }
 
         sheetObject.putParsed(rowIndex, columnIndex, value, style, styleIsImplicit = s1 == null)
         return columnIndex
+    }
+
+    /** Reads `2024-01-15`, `2024-01-15T10:30:00`, `2024-01-15T10:30:00.250Z` or `10:30:00`. */
+    private fun isoDateTime(text: String, cellRef: String): CellValue {
+        val value = text.removeSuffix("Z")
+        return try {
+            when {
+                'T' in value -> DateTimeCellValue.fromLocalDateTime(LocalDateTime.parse(value))
+                '-' in value -> DateCellValue.fromLocalDate(LocalDate.parse(value))
+                else -> LocalTime.parse(value).let { TimeCellValue(it.hour, it.minute, it.second, it.nanosecond / 1_000_000, (it.nanosecond / 1_000) % 1_000) }
+            }
+        } catch (e: IllegalArgumentException) {
+            damagedExcel("Cell $cellRef holds `$text`, which is not an ISO 8601 date")
+        }
     }
 
     private fun inlineString(cell: Element): TextCellValue {
@@ -770,13 +840,17 @@ public class Parser internal constructor(private val excel: Excel) {
 
 
 
+    /**
+     * A number N such that `rIdN` is not yet a relationship id of the workbook.
+     *
+     * Ids are opaque strings (OPC §9.2); `rId1`, `rId2`, … is only Excel's habit. The
+     * OpenXML SDK writes ids such as `R856eb3046363446b`, and parsing those as numbers
+     * threw, which made such a workbook impossible to open or to add a sheet to.
+     */
     private fun getAvailableRid(): Int {
-        rId.sortWith(Comparator { a, b ->
-            a.substring(3).toInt().compareTo(b.substring(3).toInt())
-        })
-        val lastRid = rId.last()
-        val digits = lastRid.filter { it.isDigit() }
-        return digits.toInt() + 1
+        val pattern = Regex("""^rId(\d+)$""")
+        val highest = rId.mapNotNull { pattern.find(it)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
+        return highest + 1
     }
 
     /**
@@ -970,6 +1044,21 @@ public class Parser internal constructor(private val excel: Excel) {
     }
 
     internal companion object {
+        /**
+         * What a workbook with no styles part is given: the two fills every workbook has, one
+         * border, one `<xf>`, and the default font POI assumes for such a workbook
+         * (`StylesTable.createDefaultFont`).
+         */
+        const val DEFAULT_STYLES =
+            """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""" +
+                """<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""" +
+                """<fonts count="1"><font><sz val="11"/><color indexed="8"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>""" +
+                """<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>""" +
+                """<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>""" +
+                """<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>""" +
+                """<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>""" +
+                """</styleSheet>"""
+
         /** Takes the place, in the fill list, of a `<fill>` that has no ARGB colour. */
         const val UNMODELLED_FILL = ""
 

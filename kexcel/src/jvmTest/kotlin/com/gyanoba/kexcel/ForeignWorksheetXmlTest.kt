@@ -1,5 +1,8 @@
 package com.gyanoba.kexcel
 
+import com.gyanoba.kexcel.sheet.TimeCellValue
+import com.gyanoba.kexcel.sheet.DateTimeCellValue
+import com.gyanoba.kexcel.sheet.DateCellValue
 import kotlin.test.assertFalse
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.CellIndex
@@ -547,4 +550,81 @@ class ForeignWorksheetXmlTest {
         assertFalse(rawCell(saved, "C1").hasAttr("s"))
         assertTrue(rawCell(saved, "B1").hasAttr("s"), "a style given in code is written")
     }
+
+
+    // region --- Valid input that used to be refused ---
+
+    private fun valueOf(sheetDataXml: String, ref: String = "A1") =
+        sheetFromRawXml(sheetDataXml).cell(CellIndex.indexByString(ref)).value
+
+    @Test
+    fun aLowerCaseExponentIsANumber() {
+        // xsd:double accepts `e` and `E`; Excel writes `E`, other producers `e`.
+        assertEquals(DoubleCellValue(100000.0), valueOf("""<row r="1"><c r="A1"><v>1e5</v></c></row>"""))
+        assertEquals(DoubleCellValue(0.0015), valueOf("""<row r="1"><c r="A1"><v>1.5e-3</v></c></row>"""))
+    }
+
+    @Test
+    fun whitespaceAroundANumberIsIgnored() {
+        // Pretty-printed XML: the value is on a line of its own.
+        assertEquals(IntCellValue(7), valueOf("<row r=\"1\"><c r=\"A1\"><v>\n      7\n    </v></c></row>"))
+    }
+
+    @Test
+    fun anIntegerTooLargeForALongIsStillANumber() {
+        assertEquals(DoubleCellValue(1.2345678901234567E19), valueOf("""<row r="1"><c r="A1"><v>12345678901234567890</v></c></row>"""))
+    }
+
+    @Test
+    fun somethingThatIsNotANumberIsReportedAsADamagedFile() {
+        val error = assertFailsWith<IllegalArgumentException> { valueOf("""<row r="1"><c r="B7"><v>twelve</v></c></row>""") }
+        assertTrue("B7" in error.message!!, error.message)
+    }
+
+    @Test
+    fun isoDatesAreReadAndWrittenBackAsTheyWere() {
+        // §18.18.11: `t="d"` holds an ISO 8601 date, the form the Strict conformance
+        // class uses. It used to be parsed as a number and threw.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1" t="d"><v>2024-01-15T10:30:00</v></c><c r="B1" t="d"><v>2024-01-15</v></c>""" +
+                """<c r="C1" t="d"><v>2024-01-15T10:30:00.250Z</v></c><c r="D1" t="d"><v>10:30:00</v></c></row>"""
+        )
+        val sheet = Excel.decodeBytes(source)["Sheet1"]
+
+        assertEquals(DateTimeCellValue(2024, 1, 15, 10, 30), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(DateCellValue(2024, 1, 15), sheet.cell(CellIndex.indexByString("B1")).value)
+        assertEquals(DateTimeCellValue(2024, 1, 15, 10, 30, millisecond = 250), sheet.cell(CellIndex.indexByString("C1")).value)
+        assertEquals(TimeCellValue(10, 30), sheet.cell(CellIndex.indexByString("D1")).value)
+
+        val saved = roundTrip(source)
+        assertEquals("d", rawCell(saved, "A1").attr("t"))
+        assertEquals("2024-01-15T10:30:00", rawCell(saved, "A1").getElementsByTag("v").first()!!.text())
+    }
+
+    @Test
+    fun aStringCellWithoutAnIndexIsAnEmptyString() {
+        // POI corpus 64508.xlsx: `<c t="s"><v/></c>`. POI reads an empty string; this used
+        // to be reported as a damaged file, which made the whole workbook unreadable.
+        val sheet = sheetFromRawXml("""<row r="1"><c r="A1" t="s"><v/></c><c r="B1" t="s"/><c r="C1"><v>3</v></c></row>""")
+
+        assertEquals(TextCellValue(""), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(TextCellValue(""), sheet.cell(CellIndex.indexByString("B1")).value)
+        assertEquals(IntCellValue(3), sheet.cell(CellIndex.indexByString("C1")).value)
+    }
+
+    @Test
+    fun aSheetWithTensOfThousandsOfMergesIsReadPromptly() {
+        // Each merge used to rescan every merge read so far (POI corpus
+        // 57893-many-merges.xlsx, 50,000 merges, did not finish in two minutes).
+        val merges = (1..30_000).joinToString("") { """<mergeCell ref="A$it:B$it"/>""" }
+        val source = workbookFromRawXml("", afterSheetData = """<mergeCells count="30000">$merges</mergeCells>""")
+
+        val started = kotlin.time.TimeSource.Monotonic.markNow()
+        val sheet = Excel.decodeBytes(source)["Sheet1"]
+
+        assertEquals(30_000, sheet.spannedItems.size)
+        assertTrue(started.elapsedNow() < kotlin.time.Duration.parse("20s"), "took ${started.elapsedNow()}")
+    }
+
+    // endregion
 }

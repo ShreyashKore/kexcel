@@ -1182,16 +1182,12 @@ public class Sheet internal constructor(
 
     public val spannedItems: List<String>
         get() {
-            _spannedItems = mutableListOf()
-
-            for (i in 0 until this@Sheet.spanList.size) {
-                val spanObj = this@Sheet.spanList[i] ?: continue
-                val rC = getSpanCellId(spanObj.columnSpanStart, spanObj.rowSpanStart, spanObj.columnSpanEnd, spanObj.rowSpanEnd)
-                if (!_spannedItems.contains(rC)) {
-                    _spannedItems.add(rC)
-                }
+            val references = LinkedHashSet<String>()
+            for (spanObj in this@Sheet.spanList) {
+                spanObj ?: continue
+                references.add(getSpanCellId(spanObj.columnSpanStart, spanObj.rowSpanStart, spanObj.columnSpanEnd, spanObj.rowSpanEnd))
             }
-
+            _spannedItems = references.toMutableList()
             return _spannedItems
         }
 
