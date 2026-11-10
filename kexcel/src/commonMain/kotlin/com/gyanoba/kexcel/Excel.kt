@@ -213,8 +213,9 @@ public class Excel internal constructor(internal var archive: Archive) {
         sheets.remove(oldSheetName)?.let { sheets[newSheetName] = it }
         xmlSheetId.remove(oldSheetName)?.let { xmlSheetId[newSheetName] = it }
         cellStyleReferenced.remove(oldSheetName)?.let { cellStyleReferenced[newSheetName] = it }
-        mergeChangeLook.replaceAll { if (it == oldSheetName) newSheetName else it }
-        rtlChangeLook.replaceAll { if (it == oldSheetName) newSheetName else it }
+        for (names in listOf(mergeChangeLook, rtlChangeLook)) {
+            for (i in names.indices) if (names[i] == oldSheetName) names[i] = newSheetName
+        }
 
         val workbook = xmlFiles["xl/workbook.xml"]
         workbook?.getElementsByTag("sheet")?.firstOrNull { it.attr("name") == oldSheetName }

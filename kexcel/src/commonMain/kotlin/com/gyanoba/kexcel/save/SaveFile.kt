@@ -529,7 +529,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         val autoFits = sheetObject.getColumnAutoFits
 
         val specs = sheetObject.columnSpecs.sortedBy { it.min }.toMutableList()
-        for (columnIndex in (customWidths.keys + autoFits.keys).toSortedSet()) {
+        for (columnIndex in (customWidths.keys + autoFits.keys).sorted()) {
             val autoFit = autoFits[columnIndex] == true && !customWidths.containsKey(columnIndex)
             val width = if (autoFit) calcAutoFitColumnWidth(sheetObject, columnIndex) else customWidths[columnIndex] ?: continue
 
@@ -585,7 +585,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         val rowIndexes = (
             sheetObject.sheetData.keys + sheetObject.getRowHeights.keys +
                 sheetObject.rowAttributes.keys + sheetObject.mergedCells.keys
-            ).toSortedSet()
+            ).sorted()
 
         for (rowIndex in rowIndexes) {
             val cells = sheetObject.sheetData[rowIndex].orEmpty()
@@ -593,7 +593,7 @@ public class Save internal constructor(private val excel: Excel, private val par
             val coveredByMerge = sheetObject.mergedCells[rowIndex].orEmpty()
 
             val foundRow = createNewRow(excel.sheets[sheetName]!! as Element, sheetObject, rowIndex)
-            for (columnIndex in (cells.keys + coveredByMerge.keys).toSortedSet()) {
+            for (columnIndex in (cells.keys + coveredByMerge.keys).sorted()) {
                 val data = cells[columnIndex] ?: coveredByMerge.getValue(columnIndex)
                 updateCell(sheetName, foundRow, columnIndex, rowIndex, data)
             }
