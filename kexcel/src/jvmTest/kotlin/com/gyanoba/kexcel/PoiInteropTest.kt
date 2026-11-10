@@ -859,4 +859,109 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- Rows and columns ---
+
+    private fun workbookWithRowAndColumnProperties(): ByteArray = poiWorkbook { wb ->
+        val sheet = wb.createSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+        val bold = (wb.createCellStyle() as org.apache.poi.xssf.usermodel.XSSFCellStyle).apply { setFont(wb.createFont().apply { bold = true }) }
+        sheet.createRow(0).createCell(0).setCellValue("a")
+        sheet.createRow(1).apply { createCell(0).setCellValue("hidden row"); zeroHeight = true }
+        sheet.createRow(2).apply { createCell(0).setCellValue("styled row"); rowStyle = bold }
+        sheet.createRow(3).heightInPoints = 40f // a height, no cells
+        sheet.createRow(4).createCell(0).setCellValue("grouped")
+        sheet.createRow(5).createCell(0).setCellValue("grouped")
+        sheet.groupRow(4, 5)
+        sheet.createRow(6).apply { createCell(0).setCellValue("tall"); heightInPoints = 33.3f }
+        sheet.getRow(0).createCell(25).setCellValue("z")
+        sheet.setColumnHidden(1, true)
+        sheet.setColumnWidth(2, 5000)
+        sheet.setDefaultColumnStyle(3, bold)
+        sheet.groupColumn(5, 6)
+        // One <col> for columns J to T.
+        sheet.ctWorksheet.getColsArray(0).addNewCol().apply { min = 10; max = 20; width = 30.0; customWidth = true }
+    }
+
+    @Test
+    fun rowAndColumnPropertiesSurviveANoEditRoundTrip() {
+        // <sheetData> and <cols> used to be rebuilt from cell values, heights and widths
+        // alone: hidden rows and columns became visible, grouping and row/column styles
+        // went, a <col> range kept its width on the first column only, and a row with a
+        // height but no cells disappeared.
+        val source = workbookWithRowAndColumnProperties()
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun aColumnRangeGivesItsWidthToEveryColumnInIt() {
+        // §18.3.1.13: one <col min="10" max="20"> describes eleven columns.
+        val sheet = Excel.decodeBytes(workbookWithRowAndColumnProperties())["S"]
+        assertEquals(List(11) { 30.0 }, (9..19).map { sheet.getColumnWidth(it) })
+    }
+
+    @Test
+    fun changingOneColumnWidthLeavesEverythingElseAboutTheColumnsAlone() {
+        val source = workbookWithRowAndColumnProperties()
+        val saved = roundTrip(source) { excel ->
+            excel["S"].setColumnWidth(1, 12.0)   // the hidden column
+            excel["S"].setColumnWidth(14, 50.0)  // in the middle of the J:T range
+        }
+
+        readWithPoi(saved) { wb ->
+            val sheet = wb.getSheetAt(0)
+            assertTrue(sheet.isColumnHidden(1), "a hidden column stays hidden when its width changes")
+            assertEquals(12 * 256, sheet.getColumnWidth(1))
+            assertEquals(50 * 256, sheet.getColumnWidth(14))
+            assertEquals(listOf(7680, 7680, 7680, 7680), listOf(9, 13, 15, 19).map { sheet.getColumnWidth(it) })
+            assertEquals(5000, sheet.getColumnWidth(2))
+            assertTrue((sheet.getColumnStyle(3) as org.apache.poi.xssf.usermodel.XSSFCellStyle).font.bold)
+            assertEquals(1, sheet.getColumnOutlineLevel(5))
+            assertEquals(2048, sheet.getColumnWidth(0), "a column that never had a width is not given one")
+        }
+    }
+
+    @Test
+    fun changingARowHeightKeepsTheRowsOtherProperties() {
+        val saved = roundTrip(workbookWithRowAndColumnProperties()) { excel ->
+            excel["S"].setRowHeight(1, 20.0)  // the hidden row
+            excel["S"].setRowHeight(9, 55.0)  // a row with no cells at all
+        }
+
+        readWithPoi(saved) { wb ->
+            val sheet = wb.getSheetAt(0)
+            assertTrue(sheet.getRow(1).zeroHeight)
+            assertEquals(20f, sheet.getRow(1).heightInPoints)
+            assertEquals(55f, sheet.getRow(9).heightInPoints, "a height set on an empty row is saved")
+            assertEquals(1, sheet.getRow(4).outlineLevel.toInt())
+            assertTrue((sheet.getRow(2) as org.apache.poi.xssf.usermodel.XSSFRow).rowStyle.font.bold)
+            assertEquals(40f, sheet.getRow(3).heightInPoints)
+        }
+    }
+
+    @Test
+    fun theBorderAroundAMergedRegionSurvivesARoundTrip() {
+        // Excel stores the border of a merged region on the empty cells beneath it. Kexcel
+        // keeps only the top-left cell of a merge in its model, so those cells — and with
+        // them three sides of the border — were dropped on save.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            for (r in 0..2) sheet.createRow(r).apply { for (c in 0..2) createCell(c) }
+            sheet.getRow(0).getCell(0).setCellValue("merged")
+            val region = CellRangeAddress.valueOf("A1:C3")
+            sheet.addMergedRegion(region)
+            for (set in listOf(
+                org.apache.poi.ss.util.RegionUtil::setBorderTop, org.apache.poi.ss.util.RegionUtil::setBorderBottom,
+                org.apache.poi.ss.util.RegionUtil::setBorderLeft, org.apache.poi.ss.util.RegionUtil::setBorderRight,
+            )) set(org.apache.poi.ss.usermodel.BorderStyle.THICK, region, sheet)
+        }
+
+        val saved = roundTrip(source)
+
+        assertOnlyDiffers(source, saved)
+        // The model is unchanged: only the anchor is a cell.
+        assertEquals(1, Excel.decodeBytes(source)["S"].rows.flatten().count { it != null })
+    }
+
+    // endregion
 }

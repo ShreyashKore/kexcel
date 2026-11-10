@@ -260,6 +260,13 @@ public class Parser internal constructor(private val excel: Excel) {
             for (rowI in rowSpanStart..rowSpanEnd) {
                 val isTopLeft = columnI == columnSpanStart && rowI == rowSpanStart
                 if (isTopLeft) continue
+                // An empty cell under a merge exists only for its style: the region's
+                // borders and fill live on these cells. Remember it for the save path.
+                val covered = sheet.sheetData[rowI]?.get(columnI)
+                val style = covered?.cellStyle
+                if (covered != null && covered.value == null && style != null && style.xfIndex > 0) {
+                    sheet.mergedCellStyles.getOrPut(rowI) { mutableMapOf() }[columnI] = style
+                }
                 sheet.removeCell(rowI, columnI)
             }
         }
@@ -597,6 +604,9 @@ public class Parser internal constructor(private val excel: Excel) {
         val rowIndex = getRowNumber(node)?.minus(1) ?: (previousRowIndex + 1)
         if (rowIndex < 0) return previousRowIndex
 
+        val attributes = node.attributes().filter { it.key != "r" }.associate { it.key to it.value }
+        if (attributes.isNotEmpty()) sheetObject.rowAttributes[rowIndex] = attributes
+
         var previousColumnIndex = -1
         findCells(node).forEach { child ->
             previousColumnIndex = parseCell(child, sheetObject, rowIndex, name, previousColumnIndex, sharedFormulas)
@@ -923,22 +933,25 @@ public class Parser internal constructor(private val excel: Excel) {
                 ?.let { sheetObject.setDefaultRowHeight(it) }
         }
 
-        // Parse custom column widths
-        // e.g. <col min="2" max="2" width="71.83" customWidth="1"/>
-        worksheet?.getElementsByTag("col")?.forEach { element ->
-            val colAttr = element.attr("min")
-            val widthAttr = element.attr("width")
-            if (colAttr != null && widthAttr != null) {
-                val col = colAttr.toIntOrNull()
-                val width = widthAttr.toDoubleOrNull()
-                if (col != null && width != null) {
-                    val colIndex = col - 1 // convert to 0-based index
-                    if (colIndex >= 0) {
-                        sheetObject._columnWidths[colIndex] = width
-                    }
-                }
-            }
+        // Parse the column definitions.
+        // e.g. <col min="2" max="4" width="71.83" customWidth="1" hidden="1" style="3"/>
+        // One <col> covers every column from `min` to `max` (§18.3.1.13). Reading only `min`
+        // gave the width to the first column of a range and lost it for the others.
+        worksheet?.getElementsByTag("cols")?.firstOrNull()?.children()?.filter { it.tagName() == "col" }?.forEach { element ->
+            val min = element.attr("min").trim().toIntOrNull() ?: return@forEach
+            val max = (element.attr("max").trim().toIntOrNull() ?: min).coerceAtMost(16384)
+            if (min < 1 || max < min) return@forEach
+            sheetObject.columnSpecs.add(
+                Sheet.ColumnSpec(
+                    min = min - 1,
+                    max = max - 1,
+                    attributes = element.attributes().filter { it.key != "min" && it.key != "max" }.associate { it.key to it.value },
+                )
+            )
+            val width = element.attr("width").toDoubleOrNull() ?: return@forEach
+            for (columnIndex in (min - 1)..(max - 1)) sheetObject._columnWidths[columnIndex] = width
         }
+        sheetObject.columnsDirty = false
 
         // Parse custom row heights
         // e.g. <row r="1" ht="44" customHeight="1" ...>

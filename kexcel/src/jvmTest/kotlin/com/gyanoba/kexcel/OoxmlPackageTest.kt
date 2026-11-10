@@ -450,4 +450,32 @@ class OoxmlPackageTest {
     }
 
     // endregion
+
+
+    // region --- Dimension ---
+
+    private fun dimensionOf(bytes: ByteArray, part: String) = bytes.part(part).getElementsByTag("dimension").first()?.attr("ref")
+
+    @Test
+    fun theDimensionFollowsTheCellsOnceTheyChange() {
+        // §18.3.1.35: <dimension> is the used range. Readers that trust it — openpyxl in
+        // read-only mode, streaming readers — stop at its edge, so a stale one hides data.
+        val source = PoiOracle.workbook { wb ->
+            val sheet = wb.createSheet("S")
+            for (r in 0 until 3) sheet.createRow(r).createCell(0).setCellValue(1.0)
+        }
+        assertEquals("A1:A3", dimensionOf(source, "xl/worksheets/sheet1.xml"))
+
+        val saved = roundTrip(source) { excel ->
+            excel["S"].updateCell(CellIndex.indexByString("F20"), IntCellValue(9))
+            excel["New"].updateCell(CellIndex.indexByString("C5"), IntCellValue(1))
+            excel["New"].updateCell(CellIndex.indexByString("E9"), IntCellValue(2))
+        }
+
+        assertEquals("A1:F20", dimensionOf(saved, "xl/worksheets/sheet1.xml"))
+        assertEquals("C5:E9", dimensionOf(saved, "xl/worksheets/sheet2.xml"))
+        assertEquals("A1:A3", dimensionOf(roundTrip(source), "xl/worksheets/sheet1.xml"), "untouched when nothing changed")
+    }
+
+    // endregion
 }

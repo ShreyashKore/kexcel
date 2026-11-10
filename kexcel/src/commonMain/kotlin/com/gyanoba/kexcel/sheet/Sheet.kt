@@ -36,6 +36,30 @@ public class Sheet internal constructor(
     internal var sheetData: MutableMap<Int, MutableMap<Int, Data>> = mutableMapOf()
     internal var _headerFooter: HeaderFooter? = null
 
+    /**
+     * The attributes each `<row>` was read with (§18.3.1.73), apart from `r`: `hidden`,
+     * `outlineLevel`, `collapsed`, the row style `s` / `customFormat`, `ht`, … . The model
+     * only knows row heights; the rest is written back as it was.
+     */
+    internal var rowAttributes: MutableMap<Int, Map<String, String>> = mutableMapOf()
+
+    /** The `<col>` elements the sheet was read with (§18.3.1.13), ranges and all. */
+    internal var columnSpecs: MutableList<ColumnSpec> = mutableListOf()
+
+    /** Whether column widths were changed in code; until then `<cols>` is left untouched. */
+    internal var columnsDirty: Boolean = false
+
+    /**
+     * The styles of the empty cells under a merged region. Reading a merge keeps only its
+     * top-left cell in [sheetData], but Excel stores the region's borders and fill on the
+     * cells beneath it, so their styles are kept here and written back while the sheet's
+     * layout is unchanged. Row index → column index → style.
+     */
+    internal val mergedCellStyles: MutableMap<Int, MutableMap<Int, CellStyle>> = mutableMapOf()
+
+    /** A `<col>` element: a zero-based, inclusive column range and its other attributes. */
+    internal class ColumnSpec(val min: Int, val max: Int, val attributes: Map<String, String>)
+
     internal companion object {
         fun clone(excel: Excel, sheetName: String, oldSheetObject: Sheet): Sheet {
             return Sheet(
@@ -51,7 +75,14 @@ public class Sheet internal constructor(
                 columnAutoFitVal = oldSheetObject._columnAutoFit,
                 isRTLVal = oldSheetObject._isRTL,
                 headerFooter = oldSheetObject._headerFooter
-            )
+            ).also { copy ->
+                copy._defaultColumnWidth = oldSheetObject._defaultColumnWidth
+                copy._defaultRowHeight = oldSheetObject._defaultRowHeight
+                copy.rowAttributes = oldSheetObject.rowAttributes.toMutableMap()
+                copy.columnSpecs = oldSheetObject.columnSpecs.toMutableList()
+                // The copy is written to a worksheet part that has no <cols> yet.
+                copy.columnsDirty = true
+            }
         }
     }
 
@@ -283,6 +314,7 @@ public class Sheet internal constructor(
             return
         }
         excel.valuesEdited = true
+        mergedCellStyles.clear()
 
         var updateSpanCell = false
 
@@ -370,6 +402,7 @@ public class Sheet internal constructor(
             )
         }
         excel.valuesEdited = true
+        mergedCellStyles.clear()
 
         var updateSpanCell = false
 
@@ -452,6 +485,7 @@ public class Sheet internal constructor(
         }
         checkMaxRow(rowIndex)
         excel.valuesEdited = true
+        mergedCellStyles.clear()
 
         var updateSpanCell = false
 
@@ -532,6 +566,7 @@ public class Sheet internal constructor(
             )
         }
         excel.valuesEdited = true
+        mergedCellStyles.clear()
 
         var updateSpanCell = false
 
@@ -671,6 +706,7 @@ public class Sheet internal constructor(
 
         excel.mergeChanges = true
         excel.valuesEdited = true
+        mergedCellStyles.clear()
 
         startColumn = gotPosition[0]
         startRow = gotPosition[1]
@@ -743,6 +779,7 @@ public class Sheet internal constructor(
                 }
             }
             _spannedItems.remove(unmergeCells)
+            mergedCellStyles.clear()
             // Like merge(), the save path only rewrites <mergeCells> when this flag is set.
             excel.mergeChanges = true
             excel.addMergeChangeLookup(sheetName)
@@ -984,12 +1021,14 @@ public class Sheet internal constructor(
     public fun setColumnAutoFit(columnIndex: Int) {
         checkMaxColumn(columnIndex)
         if (columnIndex < 0) return
+        columnsDirty = true
         _columnAutoFit[columnIndex] = true
     }
 
     public fun setColumnWidth(columnIndex: Int, columnWidth: Double) {
         checkMaxColumn(columnIndex)
         if (columnWidth < 0) return
+        columnsDirty = true
         _columnWidths[columnIndex] = columnWidth
     }
 

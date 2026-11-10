@@ -48,8 +48,6 @@ import no.synth.kmpzip.zip.ZipOutputStream
 import kotlin.math.max
 import kotlin.math.truncate
 
-private const val EXCEL_DEFAULT_COLUMN_WIDTH = 8.0
-
 public class Save internal constructor(private val excel: Excel, private val parser: Parser) {
 
     private val archiveFiles: MutableMap<String, ArchiveFile> = mutableMapOf()
@@ -58,21 +56,6 @@ public class Save internal constructor(private val excel: Excel, private val par
     private var hasFormulas: Boolean = false
 
     // region --- Column helpers ---
-
-    private fun addNewColumn(columns: Element, min: Int, max: Int, width: Double) {
-        columns.appendChild(
-            Element(
-                "col",
-                listOf(
-                    Attribute("min", (min + 1).toString()),
-                    Attribute("max", (max + 1).toString()),
-                    Attribute("width", width.toFixed2()),
-                    Attribute("bestFit", "1"),
-                    Attribute("customWidth", "1"),
-                )
-            )
-        )
-    }
 
     private fun calcAutoFitColumnWidth(sheet: Sheet, column: Int): Double {
         var maxChars = 0
@@ -214,11 +197,34 @@ public class Save internal constructor(private val excel: Excel, private val par
         return existingXfFor(cellStyle, base) ?: excel.derivedXf[StyleKey(cellStyle, base)] ?: 0
     }
 
-    private fun createNewRow(table: Element, rowIndex: Int, height: Double?): Element {
+    /**
+     * A `<row>` for [rowIndex], with the attributes it was read with.
+     *
+     * The model owns the height only. `hidden`, `outlineLevel`, `collapsed`, the row style
+     * and the rest are written back as they were — rebuilding the element from the height
+     * alone made hidden rows visible and dropped grouping on every save. `spans` is an
+     * optimisation hint about the cells in the row, so it is only kept while they are unchanged.
+     */
+    private fun createNewRow(table: Element, sheetObject: Sheet, rowIndex: Int): Element {
+        val stored = sheetObject.rowAttributes[rowIndex].orEmpty()
+        val height = sheetObject.getRowHeights[rowIndex]
+
         val attrs = mutableListOf(Attribute("r", (rowIndex + 1).toString()))
         if (height != null) {
-            attrs.add(Attribute("ht", height.toFixed2()))
-            attrs.add(Attribute("customHeight", "1"))
+            val storedHeight = stored["ht"]
+            if (storedHeight != null && storedHeight.toDoubleOrNull() == height) {
+                // Unchanged: the stored text, not a re-rounded copy of it.
+                attrs.add(Attribute("ht", storedHeight))
+                stored["customHeight"]?.let { attrs.add(Attribute("customHeight", it)) }
+            } else {
+                attrs.add(Attribute("ht", height.toFixed2()))
+                attrs.add(Attribute("customHeight", "1"))
+            }
+        }
+        stored.forEach { (key, value) ->
+            if (key == "ht" || key == "customHeight") return@forEach
+            if (key == "spans" && excel.valuesEdited) return@forEach
+            attrs.add(Attribute(key, value))
         }
         val row = Element("row", attrs, mutableListOf())
         table.appendChild(row)
@@ -491,12 +497,50 @@ public class Save internal constructor(private val excel: Excel, private val par
 
     // region --- Sheet writing ---
 
+    /**
+     * Writes `<cols>` (§18.3.1.17).
+     *
+     * While no width was changed the element is left exactly as it was read. Once one was,
+     * it is rebuilt from the `<col>` ranges the sheet came with: a column whose width now
+     * differs is split out of its range, and every other attribute — `hidden`, the column
+     * style, `outlineLevel` — stays where it was. Rebuilding the element from the widths
+     * alone, as this used to, made hidden columns visible, dropped column styles and gave
+     * every column up to the last one an explicit width.
+     */
     private fun setColumns(sheetObject: Sheet, xmlFile: Document) {
-        val columnElements = xmlFile.getElementsByTag("cols").toList()
+        if (!sheetObject.columnsDirty) return
 
-        if (sheetObject.getColumnWidths.isEmpty() && sheetObject.getColumnAutoFits.isEmpty()) {
-            if (columnElements.isEmpty()) return
-            columnElements.first().remove()
+        val customWidths = sheetObject.getColumnWidths
+        val autoFits = sheetObject.getColumnAutoFits
+
+        val specs = sheetObject.columnSpecs.sortedBy { it.min }.toMutableList()
+        for (columnIndex in (customWidths.keys + autoFits.keys).toSortedSet()) {
+            val autoFit = autoFits[columnIndex] == true && !customWidths.containsKey(columnIndex)
+            val width = if (autoFit) calcAutoFitColumnWidth(sheetObject, columnIndex) else customWidths[columnIndex] ?: continue
+
+            val position = specs.indexOfFirst { columnIndex in it.min..it.max }
+            val existing = specs.getOrNull(position)
+            if (existing != null && !autoFit && existing.attributes["width"]?.toDoubleOrNull() == width) continue
+
+            val attributes = existing?.attributes.orEmpty() +
+                mapOf("width" to width.toFixed2(), "bestFit" to "1", "customWidth" to "1")
+            val replacement = buildList {
+                if (existing != null && existing.min < columnIndex) add(Sheet.ColumnSpec(existing.min, columnIndex - 1, existing.attributes))
+                add(Sheet.ColumnSpec(columnIndex, columnIndex, attributes))
+                if (existing != null && existing.max > columnIndex) add(Sheet.ColumnSpec(columnIndex + 1, existing.max, existing.attributes))
+            }
+            if (existing != null) {
+                specs.removeAt(position)
+                specs.addAll(position, replacement)
+            } else {
+                specs.addAll(replacement)
+                specs.sortBy { it.min }
+            }
+        }
+
+        val columnElements = xmlFile.getElementsByTag("cols").toList()
+        if (specs.isEmpty()) {
+            columnElements.firstOrNull()?.remove()
             return
         }
 
@@ -509,46 +553,70 @@ public class Save internal constructor(private val excel: Excel, private val par
         val columns = xmlFile.getElementsByTag("cols").first()
             ?: damagedExcel("Missing <cols> element in sheet XML")
         columns.empty()
-
-        val autoFits = sheetObject.getColumnAutoFits
-        val customWidths = sheetObject.getColumnWidths
-
-        val columnCount = max(
-            if (autoFits.isEmpty()) 0 else autoFits.keys.max() + 1,
-            if (customWidths.isEmpty()) 0 else customWidths.keys.max() + 1,
-        )
-
-        val defaultColumnWidth = sheetObject.defaultColumnWidth ?: EXCEL_DEFAULT_COLUMN_WIDTH
-
-        for (index in 0 until columnCount) {
-            val width = when {
-                autoFits.containsKey(index) && !customWidths.containsKey(index) ->
-                    calcAutoFitColumnWidth(sheetObject, index)
-                customWidths.containsKey(index) -> customWidths[index]!!
-                else -> defaultColumnWidth
-            }
-            addNewColumn(columns, index, index, width)
+        specs.forEach { spec ->
+            columns.appendChild(
+                Element(
+                    "col",
+                    listOf(Attribute("min", (spec.min + 1).toString()), Attribute("max", (spec.max + 1).toString())) +
+                        spec.attributes.map { Attribute(it.key, it.value) },
+                )
+            )
         }
     }
 
     private fun setRows(sheetName: String, sheetObject: Sheet) {
-        val customHeights = sheetObject.getRowHeights
+        // A row is written when it holds cells, and also when it only has a height, a
+        // style or a flag such as `hidden`: those are properties of the row itself.
+        val rowIndexes = (
+            sheetObject.sheetData.keys + sheetObject.getRowHeights.keys +
+                sheetObject.rowAttributes.keys + sheetObject.mergedCellStyles.keys
+            ).toSortedSet()
 
-        for (rowIndex in 0 until sheetObject.maxRows) {
-            val height = customHeights[rowIndex]
+        for (rowIndex in rowIndexes) {
+            val cells = sheetObject.sheetData[rowIndex].orEmpty()
+            val coveredByMerge = sheetObject.mergedCellStyles[rowIndex].orEmpty()
 
-            if (sheetObject.sheetData[rowIndex] == null) continue
-
-            val foundRow = createNewRow(
-                excel.sheets[sheetName]!! as Element,
-                rowIndex,
-                height,
-            )
-            for (columnIndex in 0 until sheetObject.maxColumns) {
-                val data = sheetObject.sheetData[rowIndex]!![columnIndex] ?: continue
-                updateCell(sheetName, foundRow, columnIndex, rowIndex, data.value)
+            val foundRow = createNewRow(excel.sheets[sheetName]!! as Element, sheetObject, rowIndex)
+            for (columnIndex in (cells.keys + coveredByMerge.keys).toSortedSet()) {
+                val data = cells[columnIndex]
+                if (data != null) {
+                    updateCell(sheetName, foundRow, columnIndex, rowIndex, data.value)
+                } else {
+                    // An empty cell under a merged region, kept for the border or fill it carries.
+                    foundRow.appendChild(
+                        Element(
+                            "c",
+                            listOf(
+                                Attribute("r", getCellId(columnIndex, rowIndex)),
+                                Attribute("s", styleIndexOf(coveredByMerge.getValue(columnIndex)).toString()),
+                            ),
+                        )
+                    )
+                }
             }
         }
+    }
+
+    /**
+     * Brings `<dimension>` (§18.3.1.35) up to date once cells have changed. It is the used
+     * range of the sheet, and readers that trust it — openpyxl in read-only mode, streaming
+     * readers — stop at its edge. A new sheet was always written with `A1`.
+     */
+    private fun setDimension(sheetObject: Sheet, xmlFile: Document) {
+        if (!excel.valuesEdited) return
+        val dimension = xmlFile.getElementsByTag("dimension").firstOrNull() ?: return
+
+        val rows = sheetObject.sheetData.filterValues { it.isNotEmpty() }
+        val ref = if (rows.isEmpty()) "A1" else {
+            val firstRow = rows.keys.min()
+            val lastRow = rows.keys.max()
+            val firstColumn = rows.values.minOf { it.keys.min() }
+            val lastColumn = rows.values.maxOf { it.keys.max() }
+            val topLeft = getCellId(firstColumn, firstRow)
+            val bottomRight = getCellId(lastColumn, lastRow)
+            if (topLeft == bottomRight) topLeft else "$topLeft:$bottomRight"
+        }
+        dimension.attr("ref", ref)
     }
 
     private fun setDefaultSheet(sheetName: String?): Boolean {
@@ -761,11 +829,13 @@ public class Save internal constructor(private val excel: Excel, private val par
             // producing application put on <sheetFormatPr> (baseColWidth, outlineLevelRow,
             // zeroHeight, x14ac:dyDescent, …) is unmodelled and must survive a round trip.
             sheetFormatPrEl?.let { el ->
-                if (defaultRowHeight != null) el.attr("defaultRowHeight", defaultRowHeight.toFixed2())
-                else el.removeAttr("defaultRowHeight")
+                // An unchanged size keeps its stored text; rounding it to two decimals on
+                // every save moved widths that Excel keeps in 1/256 steps.
+                if (defaultRowHeight == null) el.removeAttr("defaultRowHeight")
+                else if (el.attr("defaultRowHeight").toDoubleOrNull() != defaultRowHeight) el.attr("defaultRowHeight", defaultRowHeight.toFixed2())
 
-                if (defaultColumnWidth != null) el.attr("defaultColWidth", defaultColumnWidth.toFixed2())
-                else el.removeAttr("defaultColWidth")
+                if (defaultColumnWidth == null) el.removeAttr("defaultColWidth")
+                else if (el.attr("defaultColWidth").toDoubleOrNull() != defaultColumnWidth) el.attr("defaultColWidth", defaultColumnWidth.toFixed2())
 
                 // Nothing left to say — an attribute-less <sheetFormatPr> carries no information.
                 if (el.attributesSize() == 0) el.remove()
@@ -773,6 +843,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
             setColumns(sheetObject, xmlFile)
             setRows(sheetName, sheetObject)
+            setDimension(sheetObject, xmlFile)
             setHeaderFooter(sheetName)
         }
     }

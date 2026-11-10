@@ -21,10 +21,7 @@ class PoiCorpusRoundTripTest {
 
     // D-01: <x:workbook>, <x:sst>, <x:worksheet> — the main namespace bound to a prefix.
     @Test
-    fun aWorkbookWithPrefixedPartsSurvives() = assertLossless(
-        "59746_NoRowNums.xlsx",
-        known = setOf("row: hidden", "row: outline level"), // F-04
-    )
+    fun aWorkbookWithPrefixedPartsSurvives() = assertLossless("59746_NoRowNums.xlsx")
 
     // D-01: <x:worksheet> with a rich inline string.
     @Test
@@ -35,18 +32,13 @@ class PoiCorpusRoundTripTest {
     fun prefixedRelationshipsSurvive() = assertLossless("58760.xlsx")
 
     // D-09: header and footer field codes (&C, &P, &"Font,Style", &12).
+    // F-04: hidden and grouped rows, and a row that has a height but no cells.
     @Test
-    fun headerAndFooterCodesSurvive() = assertLossless(
-        "55640.xlsx",
-        known = setOf("row: hidden", "row: outline level", "row dropped", "column: width"), // F-04, F-05
-    )
+    fun headerAndFooterCodesSurvive() = assertLossless("55640.xlsx")
 
     // D-02: shared formulas — every follower must keep the expression POI derives for it.
     @Test
-    fun sharedFormulasSurvive() = assertLossless(
-        "shared_formulas.xlsx",
-        known = setOf("column: width", "row: style"), // F-04, F-05
-    )
+    fun sharedFormulasSurvive() = assertLossless("shared_formulas.xlsx")
 
     @Test
     fun sharedFormulasFilledAcrossSurvive() = assertLossless("50096.xlsx")
@@ -60,17 +52,12 @@ class PoiCorpusRoundTripTest {
 
     // D-03: a dynamic-array formula (`cm`) and the values it spills.
     @Test
-    fun aDynamicArrayFormulaSurvives() = assertLossless(
-        "xlookup.xlsx",
-        known = setOf("column: width"), // F-05
-    )
+    fun aDynamicArrayFormulaSurvives() = assertLossless("xlookup.xlsx")
 
     // F-01: cell protection, theme fills and fonts that differ only in unmodelled properties.
+    // F-04, F-05, F-07: hidden rows and columns, row and column styles, styled cells under merges.
     @Test
-    fun protectionAndThemeColoursSurvive() = assertLossless(
-        "FillWithoutColor.xlsx",
-        known = setOf("styled blank cell dropped", "row dropped", "column: hidden", "column: style", "column: width", "row: hidden", "row: style", "sheet: default column width"), // F-04, F-05, F-07, F-08
-    )
+    fun protectionAndThemeColoursSurvive() = assertLossless("FillWithoutColor.xlsx")
 
     // D-15: a workbook with a calculation chain.
     @Test
