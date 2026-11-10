@@ -14,13 +14,13 @@ to `Fixed in <commit>` rather than deleting the row, and name the test that now 
 ## Progress
 
 Last updated 2026-11-10, on `fix/audit-findings-2026-11-10`. Of 64 findings: **44 fixed**,
-5 partly fixed, 15 open.
+6 partly fixed, 14 open.
 
 - Each fix comes with tests for the behaviour the probes showed to be broken. They were not
   each re-run against the unfixed code.
 - The tests that existed before still pass. Four of their expectations changed, each with
   POI or the specification as evidence (see T-02).
-- `:kexcel:jvmTest` (389 tests) and `:kexcel:macosArm64Test` (188 common tests, run
+- `:kexcel:jvmTest` (404 tests) and `:kexcel:macosArm64Test` (197 common tests, run
   natively) pass; the wasm and iOS simulator targets compile; `:kexcel:checkKotlinAbi`
   passes, so the public API is unchanged.
 - Nothing was checked in Excel itself.
@@ -38,7 +38,7 @@ Last updated 2026-11-10, on `fix/audit-findings-2026-11-10`. Of 64 findings: **4
 | D-09 | Fixed | `010c5a9` |  |
 | D-10 | Fixed | `308bd3b` |  |
 | D-11 | Fixed | `8b86da7` |  |
-| D-12 | **Open** | — | Needs a formula and range shifter. The limit is now stated in `docs/guides/rows-and-columns.md`. |
+| D-12 | Partly | `32cb58c` | Formulas on every sheet, defined names, hyperlinks, comments, data validations, conditional formats, autofilter, protected ranges and ignored errors now follow the edit; the result agrees with POI's `shiftRows` / `shiftColumns`. Tables, image and chart anchors, pivot tables and threaded comments still do not. |
 | D-13 | Fixed | `27724f8` | `copy()` still starts from an empty worksheet part, so panes and validations are not copied (F-11). |
 | D-14 | Fixed | `27724f8` | `setDefaultSheet` still moves the tab to the front; the names follow it now. |
 | D-15 | Fixed | `375eacb` | Cached results kept until a value changes, then dropped with `fullCalcOnLoad` set and the calc chain removed. Reading a cached result through the API is still not possible. |
@@ -364,7 +364,7 @@ present in `reference/dart-excel`), *Port* (introduced while porting), or *Kexce
   conditional formatting and hyperlinks (`reference/poi/poi-ooxml/.../usermodel/helpers/`).
 - **Fix options**: shift the ranges in the retained XML, or document the limit clearly and
   refuse structural edits on sheets that carry such features.
-- **Origin**: Dart. **Status**: **Open**. Needs a formula and range shifter. The limit is now stated in `docs/guides/rows-and-columns.md`.
+- **Origin**: Dart. **Status**: Partly fixed in `32cb58c`. Formulas, defined names and the ranges in the worksheet and comments parts follow the edit, checked against POI's `shiftRows` and `shiftColumns`. Still open: tables, image and chart anchors, pivot tables, threaded comments, page breaks and the saved selection.
 
 ### D-13 `rename()` rebuilds the sheet from scratch; `copy()` drops merges
 
@@ -793,7 +793,7 @@ In place, except `cell()` not growing the sheet (M-01, open).
 
 ### T-06 Interop tests (`PoiInteropTest`) to add
 
-In place, except the last item (D-12, open).
+All in place. The last item compares Kexcel's insert and remove with POI's on the same workbook.
 
 - Borders Kexcel writes are visible to POI (O-07). `poiReadsKexcelStyling` does not look at borders.
 - Style fidelity, not only values: full style signature per cell before and after a Kexcel
@@ -819,9 +819,9 @@ In place, except the last item (D-12, open).
 
 ## Suggested order of work
 
-Steps 1 to 5 and most of 6 are done. What is left, roughly by value: D-12 (shift references on
-structural edits), an API for cached formula results and error values (D-15, D-18), R-09 and
-R-10 (memory and untrusted input), R-12, and the open S2 and S5 items.
+Steps 1 to 6 are done. What is left, roughly by value: an API for cached formula results and
+error values (D-15, D-18), the rest of D-12 (tables, drawings, pivot tables), R-09 and R-10
+(memory and untrusted input), R-12, and the open S2 and S5 items.
 
 1. **Stop destroying data on a no-edit round trip.** D-01, D-02 (step 1: preserve `<f>`
    attributes), D-09, D-04. Each is a small, contained change.
