@@ -69,3 +69,22 @@ internal fun relationshipsPrefix(document: Document): String {
     root.attr("xmlns:r", RELATIONSHIPS)
     return "r"
 }
+
+/** The order CT_Workbook requires of the children of `<workbook>` (§18.2.27). */
+internal val WORKBOOK_CHILD_ORDER = listOf(
+    "fileVersion", "fileSharing", "workbookPr", "workbookProtection", "bookViews", "sheets",
+    "functionGroups", "externalReferences", "definedNames", "calcPr", "oleSize",
+    "customWorkbookViews", "pivotCaches", "smartTagPr", "smartTagTypes", "webPublishing",
+    "fileRecoveryPr", "webPublishObjects", "extLst",
+)
+
+/**
+ * Adds [child] to [parent] at the position [order] gives its tag. The content models of
+ * `<workbook>` and `<worksheet>` are sequences: the same children in another order are a
+ * schema violation, which Excel reports as a damaged file.
+ */
+internal fun insertInSequence(parent: Element, child: Element, order: List<String>) {
+    val position = order.indexOf(child.tagName())
+    val follower = parent.children().firstOrNull { order.indexOf(it.tagName()) > position }
+    if (follower != null) follower.before(child) else parent.appendChild(child)
+}

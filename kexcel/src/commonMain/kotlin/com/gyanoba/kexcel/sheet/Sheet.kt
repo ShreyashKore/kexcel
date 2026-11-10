@@ -100,6 +100,25 @@ public class Sheet internal constructor(
         countRowsAndColumns()
     }
 
+    /**
+     * Places a cell exactly as it was read from the file. Unlike [updateCell] this neither
+     * redirects into a merged region nor swaps the number format for one that "fits" the
+     * value: any format may sit on any value in a file (a text cell formatted `@`, a
+     * duration in `[h]:mm:ss`), and changing it while loading altered workbooks that were
+     * never edited.
+     */
+    internal fun putParsed(rowIndex: Int, columnIndex: Int, value: CellValue?, style: CellStyle?) {
+        checkMaxColumn(columnIndex)
+        checkMaxRow(rowIndex)
+        val row = sheetData.getOrPut(rowIndex) { mutableMapOf() }
+        val cell = row.getOrPut(columnIndex) { Data.newData(this, rowIndex, columnIndex) }
+        cell._value = value
+        cell._cellStyle = style
+        if (style != null) excel.styleChanges = true
+        if (_maxColumns < columnIndex + 1) _maxColumns = columnIndex + 1
+        if (_maxRows < rowIndex + 1) _maxRows = rowIndex + 1
+    }
+
     internal fun removeCell(rowIndex: Int, columnIndex: Int) {
         sheetData[rowIndex]?.remove(columnIndex)
         val rowIsEmptyAfterRemovalOfCell = sheetData[rowIndex]?.isEmpty() == true
@@ -263,6 +282,7 @@ public class Sheet internal constructor(
         if (columnIndex < 0 || columnIndex >= maxColumns) {
             return
         }
+        excel.valuesEdited = true
 
         var updateSpanCell = false
 
@@ -349,6 +369,7 @@ public class Sheet internal constructor(
                 "Cannot insert a column: the sheet already uses the last column (XFD), which would be pushed past Max (16384)."
             )
         }
+        excel.valuesEdited = true
 
         var updateSpanCell = false
 
@@ -430,6 +451,7 @@ public class Sheet internal constructor(
             return
         }
         checkMaxRow(rowIndex)
+        excel.valuesEdited = true
 
         var updateSpanCell = false
 
@@ -509,6 +531,7 @@ public class Sheet internal constructor(
                 "Cannot insert a row: the sheet already uses the last row, which would be pushed past Max (1048576)."
             )
         }
+        excel.valuesEdited = true
 
         var updateSpanCell = false
 
@@ -633,6 +656,7 @@ public class Sheet internal constructor(
         val gotPosition = getSpanPosition(start, end)
 
         excel.mergeChanges = true
+        excel.valuesEdited = true
 
         startColumn = gotPosition[0]
         startRow = gotPosition[1]
@@ -890,6 +914,7 @@ public class Sheet internal constructor(
             row[columnIndex] = cell
         }
 
+        excel.valuesEdited = true
         cell._value = value
         cell._cellStyle = CellStyle(numberFormat = NumFormat.defaultFor(value))
         if (cell._cellStyle != null && cell._cellStyle!!.numberFormat != NumFormat.standard_0) {
@@ -1046,6 +1071,7 @@ public class Sheet internal constructor(
             }
 
             if (isNotInside) {
+                excel.valuesEdited = true
                 sheetData[rowIndex]!!.keys.toList().forEach { key ->
                     sheetData[rowIndex]!![key] = Data.newData(this, rowIndex, key)
                 }

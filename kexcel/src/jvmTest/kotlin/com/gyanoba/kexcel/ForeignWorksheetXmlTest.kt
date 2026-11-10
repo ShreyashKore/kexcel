@@ -1,5 +1,6 @@
 package com.gyanoba.kexcel
 
+import kotlin.test.assertFalse
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.CellIndex
 import com.gyanoba.kexcel.sheet.DoubleCellValue
@@ -223,17 +224,32 @@ class ForeignWorksheetXmlTest {
     }
 
     @Test
-    fun theHostOfASharedFormulaKeepsItsExpression() {
-        // A shared formula gives the expression once on the host cell; followers carry
-        // only `si`. Kexcel does not expand them, so a follower comes back empty — pinned
-        // here so implementing expansion is a visible change.
+    fun aSharedFormulaIsExpandedForEveryCellThatSharesIt() {
+        // §18.3.1.40: a shared formula gives the expression once, on the master cell; a
+        // follower carries only `si` and means "that expression, moved to my position".
+        // This used to assert that the follower came back empty. POI expands it
+        // (XSSFCell.convertSharedFormula) and reads `B2*2` for A2, and so does Excel; an
+        // empty follower was then saved as an empty <f>, which destroyed the formula.
         val sheet = sheetFromRawXml(
-            """<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">B1*2</f><v>4</v></c></row>""" +
-                """<row r="2"><c r="A2"><f t="shared" si="0"/><v>6</v></c></row>"""
+            """<row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1*2+${'$'}C${'$'}1</f><v>4</v></c></row>""" +
+                """<row r="2"><c r="A2"><f t="shared" si="0"/><v>6</v></c></row>""" +
+                """<row r="3"><c r="A3"><f t="shared" si="0"></f><v>8</v></c></row>"""
         )
 
-        assertEquals(FormulaCellValue("B1*2"), sheet.cell(CellIndex.indexByString("A1")).value)
-        assertEquals(FormulaCellValue(""), sheet.cell(CellIndex.indexByString("A2")).value)
+        assertEquals(FormulaCellValue("B1*2+\$C\$1"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(FormulaCellValue("B2*2+\$C\$1"), sheet.cell(CellIndex.indexByString("A2")).value)
+        assertEquals(FormulaCellValue("B3*2+\$C\$1"), sheet.cell(CellIndex.indexByString("A3")).value)
+    }
+
+    @Test
+    fun aSharedFormulaFollowerMayComeBeforeItsMaster() {
+        // Legal, if unusual: the group is identified by `si`, not by document order.
+        val sheet = sheetFromRawXml(
+            """<row r="1"><c r="B1"><f t="shared" si="3"/><v>1</v></c><c r="C1"><f t="shared" ref="B1:C1" si="3">C5+1</f><v>2</v></c></row>"""
+        )
+
+        assertEquals(FormulaCellValue("B5+1"), sheet.cell(CellIndex.indexByString("B1")).value)
+        assertEquals(FormulaCellValue("C5+1"), sheet.cell(CellIndex.indexByString("C1")).value)
     }
 
     @Test
@@ -423,6 +439,94 @@ class ForeignWorksheetXmlTest {
         val bytes = replaceZipEntry(base, "xl/workbook.xml", workbookXml.encodeToByteArray())
 
         assertFailsWith<IllegalArgumentException> { Excel.decodeBytes(bytes) }
+    }
+
+    // endregion
+
+
+    // region --- Cells are written back as they were stored ---
+
+    @Test
+    fun anArrayFormulaKeepsItsTypeAndRange() {
+        // §18.3.1.40: `t="array"` and `ref` are what make C1:C3 one array formula. Without
+        // them C1 is an ordinary formula and C2:C3 are constants.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c><c r="C1"><f t="array" ref="C1:C3" aca="1">A1:A3*10</f><v>10</v></c></row>""" +
+                """<row r="2"><c r="A2"><v>2</v></c><c r="C2"><v>20</v></c></row>""" +
+                """<row r="3"><c r="A3"><v>3</v></c><c r="C3"><v>30</v></c></row>"""
+        )
+        assertEquals(FormulaCellValue("A1:A3*10"), Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("C1")).value)
+
+        val saved = roundTrip(source)
+
+        val f = rawCell(saved, "C1").getElementsByTag("f").first()!!
+        assertEquals(listOf("array", "C1:C3", "1"), listOf(f.attr("t"), f.attr("ref"), f.attr("aca")))
+        PoiOracle.read(saved) { wb ->
+            assertTrue(wb.getSheetAt(0).getRow(0).getCell(2).isPartOfArrayFormulaGroup)
+            assertTrue(wb.getSheetAt(0).getRow(2).getCell(2).isPartOfArrayFormulaGroup)
+        }
+    }
+
+    @Test
+    fun aDataTableFormulaKeepsItsAttributes() {
+        // A what-if data table has no expression at all; everything is in the attributes.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><f t="dataTable" ref="A1:A2" dt2D="0" dtr="0" r1="B1"/><v>3</v></c></row>"""
+        )
+
+        val f = rawCell(roundTrip(source), "A1").getElementsByTag("f").first()!!
+        assertEquals(listOf("dataTable", "A1:A2", "B1"), listOf(f.attr("t"), f.attr("ref"), f.attr("r1")))
+    }
+
+    @Test
+    fun cellAndValueMetadataIndexesAreKeptUntilTheCellIsEdited() {
+        // §18.3.1.4: `cm` points at the cell metadata that marks a dynamic-array formula,
+        // `vm` at the value metadata of a rich data type. They belong to the stored value.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1" cm="1"><f t="array" ref="A1:A2">_xlfn.SEQUENCE(2)</f><v>1</v></c><c r="B1" vm="2"><v>5</v></c><c r="C1" vm="3"><v>6</v></c></row>"""
+        )
+
+        val saved = roundTrip(source) { it["Sheet1"].updateCell(CellIndex.indexByString("C1"), IntCellValue(7)) }
+
+        assertEquals("1", rawCell(saved, "A1").attr("cm"))
+        assertEquals("2", rawCell(saved, "B1").attr("vm"))
+        assertFalse(rawCell(saved, "C1").hasAttr("vm"), "a new value must not inherit the old value's metadata")
+    }
+
+    @Test
+    fun anErrorLiteralIsWrittenBackAsAnErrorNotAsAFormula() {
+        // An error cell has no <f>. Kexcel surfaces it as a FormulaCellValue for want of an
+        // error type, but saving `<f>#N/A</f>` turned a constant into a formula (POI: the
+        // cell type changed from ERROR to FORMULA on 389 cells of the POI corpus).
+        val source = workbookFromRawXml("""<row r="1"><c r="A1" t="e"><v>#N/A</v></c></row>""")
+        assertEquals(FormulaCellValue("#N/A"), Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("A1")).value)
+
+        val saved = roundTrip(source)
+
+        val cell = rawCell(saved, "A1")
+        assertEquals("e", cell.attr("t"))
+        assertTrue(cell.getElementsByTag("f").isEmpty())
+        assertEquals("#N/A", cell.getElementsByTag("v").first()!!.text())
+        assertOnlyDiffers(source, saved)
+    }
+
+    @Test
+    fun aFormulaOnAStringTypedCellIsStillAFormula() {
+        // POI corpus 52575_main.xlsx (LibreOffice): the cached result is typed as a string,
+        // but the cell is a formula. Its result is kept as text (`t="str"`).
+        val sheetXml = """<row r="1"><c r="A1" t="inlineStr"><f>B1&amp;"!"</f><is><t>hi!</t></is></c></row>"""
+        val source = workbookFromRawXml(sheetXml)
+        assertEquals(FormulaCellValue("B1&\"!\""), Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("A1")).value)
+
+        val cell = rawCell(roundTrip(source), "A1")
+        assertEquals("str", cell.attr("t"))
+        assertEquals("hi!", cell.getElementsByTag("v").first()!!.text())
+    }
+
+    @Test
+    fun aCellStyleBeyondTheStyleTableIsReportedAsADamagedFile() {
+        val source = workbookFromRawXml("""<row r="1"><c r="A1" s="99"><v>5</v></c></row>""")
+        assertFailsWith<IllegalArgumentException> { Excel.decodeBytes(source) }
     }
 
     // endregion

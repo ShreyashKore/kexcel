@@ -64,6 +64,20 @@ internal object PoiOracle {
 
     private class Facts(val workbook: Map<String, String>, val sheets: Map<String, SheetFacts>)
 
+    private val wholeColumns = Regex("""(?<![A-Za-z0-9$])\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})(?![A-Za-z0-9(!])""")
+    private val wholeRows = Regex("""(?<![A-Za-z0-9$.])\$?([0-9]{1,7}):\$?([0-9]{1,7})(?![A-Za-z0-9.])""")
+
+    /**
+     * A formula as POI would print it. For the followers of a shared formula POI does not
+     * return stored text: it re-renders the expression from tokens, which drops the
+     * author's spacing and the `$` anchors of whole-column and whole-row references
+     * (`$D:$E` prints as `D:E`). Neither changes what the formula means.
+     */
+    private fun normalised(formula: String?): String? = formula
+        ?.filterNot(Char::isWhitespace)
+        ?.replace(wholeColumns, "$1:$2")
+        ?.replace(wholeRows, "$1:$2")
+
     private fun <T> safe(default: T, f: () -> T): T = try { f() } catch (_: Throwable) { default }
 
     private fun facts(bytes: ByteArray): Facts = read(bytes) { wb ->
@@ -173,9 +187,7 @@ internal object PoiOracle {
                     CellType.BOOLEAN -> if (ca.value != cb.value) hit("boolean", at)
                     CellType.ERROR -> if (ca.value != cb.value) hit("error", "$at ${ca.value} -> ${cb.value}")
                     CellType.FORMULA -> {
-                        // Whitespace is not significant in a formula, and POI re-renders the
-                        // text of a shared formula's followers without the author's spacing.
-                        if (ca.formula?.filterNot(Char::isWhitespace) != cb.formula?.filterNot(Char::isWhitespace)) hit("formula", "$at '${ca.formula}' -> '${cb.formula}'")
+                        if (normalised(ca.formula) != normalised(cb.formula)) hit("formula", "$at '${ca.formula}' -> '${cb.formula}'")
                         if (!ca.rawValue.isNullOrEmpty() && ca.rawValue != cb.rawValue) hit("cached result", "$at '${ca.rawValue}' -> '${cb.rawValue}'")
                     }
                     else -> Unit

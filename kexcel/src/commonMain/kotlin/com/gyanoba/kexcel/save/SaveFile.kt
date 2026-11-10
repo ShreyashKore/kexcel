@@ -37,6 +37,9 @@ import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.fontStyleIndex
 import com.gyanoba.kexcel.utils.getCellId
+import com.gyanoba.kexcel.utils.WORKBOOK_CHILD_ORDER
+import com.gyanoba.kexcel.utils.insertInSequence
+import com.gyanoba.kexcel.utils.resolveWorkbookRelTarget
 import com.gyanoba.kexcel.utils.toFixed2
 import no.synth.kmpzip.io.ByteArrayOutputStream
 import no.synth.kmpzip.zip.ZipEntry
@@ -50,6 +53,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
     private val archiveFiles: MutableMap<String, ArchiveFile> = mutableMapOf()
     private val innerCellStyle: MutableList<CellStyle> = mutableListOf()
+    private var hasFormulas: Boolean = false
 
     // region --- Column helpers ---
 
@@ -88,10 +92,16 @@ public class Save internal constructor(private val excel: Excel, private val par
         columnIndex: Int,
         rowIndex: Int,
         value: CellValue?,
-        numberFormat: NumFormat?,
     ): Element {
+        // How the cell was stored, when the value is still the object the parser made.
+        val source = value?.source
+        // A formula's string result whose <f> lives elsewhere — a cell an array or dynamic
+        // array formula spills into. It stays `t="str"`; as a shared string it would no
+        // longer be part of the array.
+        val formulaString = source?.rawValue?.takeIf { value is TextCellValue && source.type == "str" }
+
         var sharedString: SharedString? = null
-        if (value is TextCellValue) {
+        if (value is TextCellValue && formulaString == null) {
             // A string read from a file goes back as the <si> it came from, which keeps run
             // properties the model does not cover. The check catches a span whose styles
             // were mutated in place after parsing; that one is rebuilt from the model.
@@ -101,94 +111,89 @@ public class Save internal constructor(private val excel: Excel, private val par
             else excel.sharedStrings.addFromSpan(value.value)
         }
 
+        // An error literal reads as a formula for want of an error type, but it never had an <f>.
+        val isErrorLiteral = value is FormulaCellValue && source != null && !source.hasFormula
+        // A cached result is only as good as the cells it was computed from.
+        val cached = source?.rawValue?.takeIf { value is FormulaCellValue && !isErrorLiteral && !excel.valuesEdited }
+
         val rC = getCellId(columnIndex, rowIndex)
 
         val attributes = mutableListOf(
             Attribute("r", rC),
         )
-        if (value is TextCellValue) attributes.add(Attribute("t", "s"))
-        if (value is BoolCellValue) attributes.add(Attribute("t", "b"))
+        when {
+            formulaString != null -> attributes.add(Attribute("t", "str"))
+            value is TextCellValue -> attributes.add(Attribute("t", "s"))
+            value is BoolCellValue -> attributes.add(Attribute("t", "b"))
+            isErrorLiteral -> attributes.add(Attribute("t", "e"))
+            value is FormulaCellValue -> if (cached != null) source.type?.let { attributes.add(Attribute("t", it)) }
+            // `t="n"` spelled out, or an ISO 8601 date (`t="d"`), on an unedited number.
+            value != null && source?.rawValue != null -> source.type?.let { attributes.add(Attribute("t", it)) }
+        }
 
         val cellStyle = excel.sheetMap[sheet]?.sheetData?.get(rowIndex)?.get(columnIndex)?.cellStyle
 
         if (excel.styleChanges && cellStyle != null) {
-            var upperLevelPos = checkPosition(excel.cellStyleList, cellStyle)
-            if (upperLevelPos == -1) {
-                val lowerLevelPos = checkPosition(innerCellStyle, cellStyle)
-                upperLevelPos = if (lowerLevelPos != -1) {
-                    lowerLevelPos + excel.cellStyleList.size
-                } else {
-                    0
-                }
-            }
-            attributes.add(1, Attribute("s", "$upperLevelPos"))
+            attributes.add(1, Attribute("s", "${styleIndexOf(cellStyle)}"))
         } else if (excel.cellStyleReferenced.containsKey(sheet) &&
             excel.cellStyleReferenced[sheet]!!.containsKey(rC)
         ) {
             attributes.add(1, Attribute("s", "${excel.cellStyleReferenced[sheet]!![rC]}"))
         }
 
+        source?.cellAttributes?.forEach { (key, attributeValue) -> attributes.add(Attribute(key, attributeValue)) }
+
+        fun v(text: String) = Element("v", emptyList(), listOf(TextNode(text)))
+
         val children: List<Element> = when (value) {
             null -> emptyList()
 
-            is FormulaCellValue -> listOf(
-                Element("f", emptyList(), listOf(TextNode(value.formula))),
-                Element("v", emptyList(), listOf(TextNode(""))),
-            )
-
-            is IntCellValue -> {
-                val v = when (numberFormat) {
-                    is NumericNumFormat -> numberFormat.writeInt(value)
-                    else -> throw IllegalStateException("$numberFormat does not work for IntCellValue")
-                }
-                listOf(Element("v", emptyList(), listOf(TextNode(v))))
-            }
-
-            is DoubleCellValue -> {
-                val v = when (numberFormat) {
-                    is NumericNumFormat -> numberFormat.writeDouble(value)
-                    else -> throw IllegalStateException("$numberFormat does not work for DoubleCellValue")
-                }
-                listOf(Element("v", emptyList(), listOf(TextNode(v))))
-            }
-
-            is DateTimeCellValue -> {
-                val v = when (numberFormat) {
-                    is DateTimeNumFormat -> numberFormat.writeDateTime(value)
-                    else -> throw IllegalStateException("$numberFormat does not work for DateTimeCellValue")
-                }
-                listOf(Element("v", emptyList(), listOf(TextNode(v))))
-            }
-
-            is DateCellValue -> {
-                val v = when (numberFormat) {
-                    is DateTimeNumFormat -> numberFormat.writeDate(value)
-                    else -> throw IllegalStateException("$numberFormat does not work for DateCellValue")
-                }
-                listOf(Element("v", emptyList(), listOf(TextNode(v))))
-            }
-
-            is TimeCellValue -> {
-                val v = when (numberFormat) {
-                    is TimeNumFormat -> numberFormat.writeTime(value)
-                    else -> throw IllegalStateException("$numberFormat does not work for TimeCellValue")
-                }
-                listOf(Element("v", emptyList(), listOf(TextNode(v))))
-            }
-
-            is TextCellValue -> listOf(
-                Element(
-                    "v", emptyList(),
-                    listOf(TextNode(excel.sharedStrings.indexOf(sharedString!!).toString()))
+            is FormulaCellValue -> if (isErrorLiteral) {
+                listOf(v(source!!.rawValue ?: value.formula))
+            } else {
+                hasFormulas = true
+                val formulaAttributes = source?.formulaAttributes.orEmpty().map { Attribute(it.key, it.value) }
+                listOf(
+                    Element("f", formulaAttributes, listOf(TextNode(value.formula))),
+                    v(cached ?: ""),
                 )
-            )
+            }
 
-            is BoolCellValue -> listOf(
-                Element("v", emptyList(), listOf(TextNode(if (value.value) "1" else "0")))
-            )
+            // The serial number of a date does not depend on how the cell is formatted, so
+            // none of these consult the number format: a duration may be shown as a date
+            // and a date as a number (§18.17.4).
+            is IntCellValue -> listOf(v(source?.rawValue ?: value.value.toString()))
+            is DoubleCellValue -> listOf(v(source?.rawValue ?: value.value.toString()))
+            is DateTimeCellValue -> listOf(v(source?.rawValue ?: NumFormat.defaultDateTime.let { (it as DateTimeNumFormat).writeDateTime(value) }))
+            is DateCellValue -> listOf(v(source?.rawValue ?: NumFormat.defaultDate.let { (it as DateTimeNumFormat).writeDate(value) }))
+            is TimeCellValue -> listOf(v(source?.rawValue ?: NumFormat.defaultTime.let { (it as TimeNumFormat).writeTime(value) }))
+
+            is TextCellValue -> listOf(v(formulaString ?: excel.sharedStrings.indexOf(sharedString!!).toString()))
+
+            is BoolCellValue -> listOf(v(source?.rawValue ?: if (value.value) "1" else "0"))
         }
 
         return Element("c", attributes, children)
+    }
+
+    /**
+     * The `cellXfs` index to write for [cellStyle].
+     *
+     * A style the parser built *is* an `<xf>` and goes back under its own index. Looking it
+     * up by equality instead — as this used to — returns the first `<xf>` that agrees on the
+     * properties [CellStyle] models, and two `<xf>` that differ only in a theme colour, an
+     * indent or the locked flag then collapsed into one.
+     */
+    private fun styleIndexOf(cellStyle: CellStyle): Int {
+        val own = cellStyle.xfIndex
+        if (own >= 0 && excel.cellStyleList.getOrNull(own) === cellStyle) return own
+
+        var upperLevelPos = checkPosition(excel.cellStyleList, cellStyle)
+        if (upperLevelPos == -1) {
+            val lowerLevelPos = checkPosition(innerCellStyle, cellStyle)
+            upperLevelPos = if (lowerLevelPos != -1) lowerLevelPos + excel.cellStyleList.size else 0
+        }
+        return upperLevelPos
     }
 
     private fun createNewRow(table: Element, rowIndex: Int, height: Double?): Element {
@@ -487,6 +492,7 @@ public class Save internal constructor(private val excel: Excel, private val par
     internal fun save(): ByteArray? {
         if (excel.styleChanges) processStylesFile()
         setSheetElements()
+        if (excel.valuesEdited) invalidateCalculationState()
         if (excel.defaultSheet != null) setDefaultSheet(excel.defaultSheet)
         setSharedStrings()
         if (excel.mergeChanges) setMerge()
@@ -508,6 +514,40 @@ public class Save internal constructor(private val excel: Excel, private val par
             }
         }
         return buf.toByteArray()
+    }
+
+    // endregion
+
+    // region --- Calculation state ---
+
+    /**
+     * Called once a value has changed since the workbook was loaded.
+     *
+     * Two things in the package describe the *previous* calculation. `xl/calcChain.xml`
+     * lists the formula cells in evaluation order; an entry for a cell that is no longer a
+     * formula makes Excel offer to repair the file, and the part is optional, so it is
+     * removed (POI drops entries the same way, `XSSFWorkbook.onDeleteFormula`). And the
+     * cached results are no longer trustworthy, so they are not written (see `createCell`)
+     * and `fullCalcOnLoad` (§18.2.2) asks the next application to recalculate.
+     */
+    private fun invalidateCalculationState() {
+        val relationships = excel.xmlFiles["xl/_rels/workbook.xml.rels"]
+        relationships?.getElementsByTag("Relationship")
+            ?.filter { it.attr("Type").endsWith("/calcChain") }
+            ?.forEach { relationship ->
+                val path = resolveWorkbookRelTarget(relationship.attr("Target"))
+                relationship.remove()
+                excel.xmlFiles["[Content_Types].xml"]?.getElementsByTag("Override")
+                    ?.filter { it.attr("PartName") == "/$path" }
+                    ?.forEach { it.remove() }
+                excel.archive = cloneArchive(excel.archive, emptyMap(), excludedFile = path)
+            }
+
+        if (!hasFormulas) return
+        val workbook = excel.xmlFiles["xl/workbook.xml"]?.getElementsByTag("workbook")?.first() ?: return
+        val calcPr = workbook.children().firstOrNull { it.tagName() == "calcPr" }
+            ?: Element("calcPr").also { insertInSequence(workbook, it, WORKBOOK_CHILD_ORDER) }
+        calcPr.attr("fullCalcOnLoad", "1")
     }
 
     // endregion
@@ -569,7 +609,7 @@ public class Save internal constructor(private val excel: Excel, private val par
             )
             for (columnIndex in 0 until sheetObject.maxColumns) {
                 val data = sheetObject.sheetData[rowIndex]!![columnIndex] ?: continue
-                updateCell(sheetName, foundRow, columnIndex, rowIndex, data.value, data.cellStyle?.numberFormat)
+                updateCell(sheetName, foundRow, columnIndex, rowIndex, data.value)
             }
         }
     }
@@ -757,6 +797,7 @@ public class Save internal constructor(private val excel: Excel, private val par
 
     private fun setSheetElements() {
         excel.sharedStrings.clear()
+        hasFormulas = false
 
         excel.sheetMap.forEach { (sheetName, sheetObject) ->
             if (excel.sheets[sheetName] == null) {
@@ -809,9 +850,8 @@ public class Save internal constructor(private val excel: Excel, private val par
         columnIndex: Int,
         rowIndex: Int,
         value: CellValue?,
-        numberFormat: NumFormat?,
     ): Element {
-        val cell = createCell(sheet, columnIndex, rowIndex, value, numberFormat)
+        val cell = createCell(sheet, columnIndex, rowIndex, value)
         row.appendChild(cell)
         return cell
     }

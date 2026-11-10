@@ -38,6 +38,20 @@ public class CellStyle(
     diagonalBorderDown: Boolean = false,
     public var numberFormat: NumFormat = NumFormat.standard_0,
 ) {
+    /**
+     * The position in `cellXfs` (§18.8.10) of the `<xf>` this object *is*: set on the
+     * instances the parser builds, one per `<xf>`, and `-1` for a style made in code. A cell
+     * that still holds such an instance is written back with that index, so everything the
+     * `<xf>` says that this class does not model — theme colours, protection, indent — is kept.
+     */
+    internal var xfIndex: Int = -1
+
+    /**
+     * The `<xf>` this style was derived from with [copyWith], or `-1`. The save path starts
+     * a derived style from that `<xf>` and replaces only the parts that were changed.
+     */
+    internal var baseXf: Int = -1
+
     // region --- Backing fields ---
 
     private var _fontColorHex: String = isColorAppropriate(fontColorHex.colorHex)
@@ -106,7 +120,7 @@ public class CellStyle(
         diagonalBorderUp = diagonalBorderUpVal ?: _diagonalBorderUp,
         diagonalBorderDown = diagonalBorderDownVal ?: _diagonalBorderDown,
         numberFormat = numberFormat ?: this.numberFormat,
-    )
+    ).also { it.baseXf = if (xfIndex >= 0) xfIndex else baseXf }
 
     // endregion
 

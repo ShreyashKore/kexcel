@@ -103,7 +103,35 @@ public class Data private constructor(
 
 // region --- CellValue sealed hierarchy ---
 
-public sealed class CellValue
+public sealed class CellValue {
+    /**
+     * How this value was stored in the file it was read from, or `null` for a value made
+     * in code. Values are immutable, so as long as a cell still holds the object the
+     * parser put there, the save path can write the cell back exactly as it was — the raw
+     * `<v>` text, the attributes of `<f>`, the cached result of a formula. Not part of
+     * equality.
+     */
+    internal var source: CellSource? = null
+}
+
+/**
+ * The stored form of one `<c>` element (§18.3.1.4).
+ *
+ * @property type the `t` attribute, `null` when absent
+ * @property rawValue the text of `<v>`, `null` when the cell has none
+ * @property hasFormula whether the cell carried an `<f>`; an error literal reads as a
+ *   [FormulaCellValue] without one
+ * @property formulaAttributes the attributes of `<f>` — `t="array"`, `ref`, `ca`, … — minus
+ *   the ones that only describe a shared-formula group once it has been expanded
+ * @property cellAttributes attributes of `<c>` that the model has no place for (`cm`, `vm`, `ph`)
+ */
+internal class CellSource(
+    val type: String?,
+    val rawValue: String?,
+    val hasFormula: Boolean = false,
+    val formulaAttributes: Map<String, String> = emptyMap(),
+    val cellAttributes: Map<String, String> = emptyMap(),
+)
 
 // endregion
 

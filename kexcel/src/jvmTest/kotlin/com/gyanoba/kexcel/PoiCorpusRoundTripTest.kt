@@ -40,4 +40,55 @@ class PoiCorpusRoundTripTest {
         "55640.xlsx",
         known = setOf("row: hidden", "row: outline level", "row dropped", "column: width"), // F-04, F-05
     )
+
+    // D-02: shared formulas — every follower must keep the expression POI derives for it.
+    @Test
+    fun sharedFormulasSurvive() = assertLossless(
+        "shared_formulas.xlsx",
+        known = setOf("column: width", "row: style"), // F-04, F-05
+    )
+
+    @Test
+    fun sharedFormulasFilledAcrossSurvive() = assertLossless("50096.xlsx")
+
+    // D-02: followers whose references are whole columns (`VLOOKUP(A85,D:E,2,0)`).
+    @Test
+    fun sharedFormulasWithWholeColumnReferencesSurvive() = assertLossless("VLookupFullColumn.xlsx")
+
+    @Test
+    fun sharedFormulasNextToShiftedRowsSurvive() = assertLossless("TestShiftRowSharedFormula.xlsx")
+
+    // D-03: a dynamic-array formula (`cm`) and the values it spills.
+    @Test
+    fun aDynamicArrayFormulaSurvives() = assertLossless(
+        "xlookup.xlsx",
+        known = setOf("column: width"), // F-05
+    )
+
+    // F-01: cell protection, theme fills and fonts that differ only in unmodelled properties.
+    @Test
+    fun protectionAndThemeColoursSurvive() = assertLossless(
+        "FillWithoutColor.xlsx",
+        known = setOf("styled blank cell dropped", "row dropped", "column: hidden", "column: style", "column: width", "row: hidden", "row: style", "sheet: default column width"), // F-04, F-05, F-07, F-08
+    )
+
+    // D-15: a workbook with a calculation chain.
+    @Test
+    fun aWorkbookWithACalculationChainSurvives() = assertLossless("56822-Countifs.xlsx")
+
+    @Test
+    fun theCalculationChainIsRemovedOnceAValueChanges() {
+        // xl/calcChain.xml lists the formula cells. An entry for a cell that is no longer a
+        // formula makes Excel offer to repair the workbook; the part is optional, and POI
+        // removes entries the same way (XSSFWorkbook.onDeleteFormula).
+        val original = fixture("poi/56822-Countifs.xlsx")
+        kotlin.test.assertTrue("xl/calcChain.xml" in zipEntryNames(original))
+
+        val saved = roundTrip(original) { excel -> excel[excel.tables.keys.first()].updateCell(com.gyanoba.kexcel.sheet.CellIndex.indexByString("Z99"), com.gyanoba.kexcel.sheet.IntCellValue(1)) }
+
+        kotlin.test.assertFalse("xl/calcChain.xml" in zipEntryNames(saved))
+        kotlin.test.assertFalse("calcChain" in readZipEntry(saved, "[Content_Types].xml").decodeToString())
+        kotlin.test.assertFalse("calcChain" in readZipEntry(saved, "xl/_rels/workbook.xml.rels").decodeToString())
+        PoiOracle.read(saved) { kotlin.test.assertTrue(it.forceFormulaRecalculation) }
+    }
 }

@@ -563,4 +563,137 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- An unedited cell is written back as it was stored ---
+
+    private fun formulaWorkbook(): ByteArray = poiWorkbook { wb ->
+        val sheet = wb.createSheet("S")
+        sheet.createRow(0).createCell(0).setCellValue(2.0)
+        sheet.createRow(1).createCell(0).setCellValue(3.0)
+        val sum = sheet.createRow(2).createCell(0).apply { cellFormula = "A1+A2" }
+        val text = sheet.createRow(3).createCell(0).apply { cellFormula = "\"x\"&\"y\"" }
+        val flag = sheet.createRow(4).createCell(0).apply { cellFormula = "A1<A2" }
+        wb.creationHelper.createFormulaEvaluator().apply { evaluateFormulaCell(sum); evaluateFormulaCell(text); evaluateFormulaCell(flag) }
+    }
+
+    @Test
+    fun cachedFormulaResultsSurviveANoEditRoundTrip() {
+        // The cached <v> is what every reader that does not calculate shows: pandas,
+        // previewers, POI without an evaluator. It used to be emptied on every save.
+        val source = formulaWorkbook()
+        val saved = roundTrip(source)
+
+        assertOnlyDiffers(source, saved)
+        readWithPoi(saved) { wb ->
+            val sheet = wb.getSheetAt(0)
+            assertEquals(5.0, sheet.getRow(2).getCell(0).numericCellValue)
+            assertEquals(CellType.STRING, sheet.getRow(3).getCell(0).cachedFormulaResultType)
+            assertEquals("xy", sheet.getRow(3).getCell(0).stringCellValue)
+            assertEquals(true, sheet.getRow(4).getCell(0).booleanCellValue)
+        }
+    }
+
+    @Test
+    fun editingAValueDropsTheCachedResultsAndAsksForARecalculation() {
+        // Once A1 changes, the cached 5.0 is wrong. A stale result is worse than none, so
+        // it is not written, and fullCalcOnLoad (§18.2.2) tells Excel to recalculate —
+        // what POI's setForceFormulaRecalculation does.
+        val saved = roundTrip(formulaWorkbook()) { it["S"].updateCell(CellIndex.indexByString("A1"), IntCellValue(40)) }
+
+        assertEquals("", rawCell(saved, "A3").getElementsByTag("v").first()!!.text())
+        assertEquals("A1+A2", rawCell(saved, "A3").getElementsByTag("f").first()!!.text())
+        readWithPoi(saved) { wb ->
+            assertTrue(wb.forceFormulaRecalculation)
+            val cell = wb.getSheetAt(0).getRow(2).getCell(0)
+            assertEquals(43.0, wb.creationHelper.createFormulaEvaluator().evaluate(cell).numberValue)
+        }
+    }
+
+    @Test
+    fun stylePropertiesKexcelDoesNotModelSurviveANoEditRoundTrip() {
+        // Each of these differs from the default <xf> only in something CellStyle has no
+        // field for. Looked up by equality they all collapsed onto the first "equal" <xf>:
+        // fills vanished, unlocked cells became locked, and one cell gained the
+        // strike-through of another.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            var row = 0
+            fun cell(value: String, style: (org.apache.poi.xssf.usermodel.XSSFCellStyle) -> Unit) {
+                val c = sheet.createRow(row++).createCell(0)
+                c.setCellValue(value)
+                c.cellStyle = (wb.createCellStyle() as org.apache.poi.xssf.usermodel.XSSFCellStyle).also(style)
+            }
+            fun themed(theme: Long, tint: Double = 0.0) = org.apache.poi.xssf.usermodel.XSSFColor.from(
+                org.openxmlformats.schemas.spreadsheetml.x2006.main.CTColor.Factory.newInstance().also { it.theme = theme; it.tint = tint }, null,
+            )
+            cell("strike-through") { it.setFont(wb.createFont().apply { strikeout = true }) }
+            cell("theme fill") { it.fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND; it.setFillForegroundColor(themed(4, 0.4)) }
+            cell("indexed fill") { it.fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND; it.fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.YELLOW.index }
+            cell("pattern fill") { it.fillPattern = org.apache.poi.ss.usermodel.FillPatternType.THIN_HORZ_BANDS; it.fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index }
+            cell("unlocked") { it.locked = false }
+            cell("hidden formula") { it.hidden = true }
+            cell("indent") { it.indention = 3 }
+            cell("justify") { it.alignment = org.apache.poi.ss.usermodel.HorizontalAlignment.JUSTIFY }
+            cell("theme font colour") { it.setFont((wb.createFont() as org.apache.poi.xssf.usermodel.XSSFFont).apply { setColor(themed(5)) }) }
+            cell("10.5 pt") { it.setFont((wb.createFont() as org.apache.poi.xssf.usermodel.XSSFFont).apply { setFontHeight(10.5) }) }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(1234.5); cellStyle = wb.createCellStyle().apply { dataFormat = 44 } }
+            sheet.createRow(row).createCell(0).apply { setCellValue(12.0); cellStyle = wb.createCellStyle().apply { dataFormat = 5 } }
+        }
+
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun loadingAWorkbookDoesNotChangeAnyNumberFormat() {
+        // Any format may sit on any value. Kexcel used to swap in the default format for
+        // the value's type whenever it judged the two a poor match — text formatted `@`
+        // became General, `hh:mm:ss` became `h:mm` — and, the replacement being a new
+        // style, the cell lost its font, fill and border with it.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            val formats = wb.createDataFormat()
+            var row = 0
+            fun styled(format: String) = wb.createCellStyle().apply {
+                dataFormat = formats.getFormat(format)
+                setFont(wb.createFont().apply { bold = true; fontName = "Arial" })
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
+                fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.LIGHT_GREEN.index
+                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
+            }
+            sheet.createRow(row++).createCell(0).apply { setCellValue("00123"); cellStyle = styled("@") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue("Total"); cellStyle = styled("#,##0") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(0.5); cellStyle = styled("hh:mm:ss") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(1.25); cellStyle = styled("[h]:mm:ss") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(0.25); cellStyle = styled("m/d/yy") }
+            sheet.createRow(row).createCell(0).apply { setCellValue(true); cellStyle = styled("yyyy-mm-dd") }
+        }
+
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun unEditedNumbersAreWrittenBackDigitForDigit() {
+        // A date or time is read into whole milliseconds; rebuilding the serial from those
+        // changed the stored number (POI corpus 58747.xlsx: 42354.58333333334 became
+        // 42354.583333333336). The first value is a plain number that Kexcel takes for a
+        // date because of the `[Red]` in its format.
+        val values = listOf("[Red]0.00" to 1234.123456789, "h:mm:ss" to 0.64604166, "yyyy-mm-dd h:mm" to 42354.58333333334, "0.00" to 0.1 + 0.2)
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            values.forEachIndexed { i, (format, value) ->
+                sheet.createRow(i).createCell(0).apply {
+                    setCellValue(value)
+                    cellStyle = wb.createCellStyle().apply { dataFormat = wb.createDataFormat().getFormat(format) }
+                }
+            }
+        }
+
+        val saved = roundTrip(source)
+
+        assertOnlyDiffers(source, saved)
+        readWithPoi(saved) { wb -> assertEquals(values.map { it.second }, values.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).numericCellValue }) }
+    }
+
+    // endregion
 }

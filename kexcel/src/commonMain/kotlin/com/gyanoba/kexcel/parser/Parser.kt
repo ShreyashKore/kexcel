@@ -12,6 +12,7 @@ import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.Border
 import com.gyanoba.kexcel.sheet.BorderSet
 import com.gyanoba.kexcel.sheet.CellIndex
+import com.gyanoba.kexcel.sheet.CellSource
 import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.CellValue
 import com.gyanoba.kexcel.sheet.Element
@@ -49,6 +50,7 @@ public class Parser internal constructor(private val excel: Excel) {
         parseSharedStrings()
         parseContent()
         parseMergedCells()
+        excel.valuesEdited = false
     }
 
     private fun normalizeTable(sheet: Sheet) {
@@ -491,6 +493,7 @@ public class Parser internal constructor(private val excel: Excel) {
                     numberFormat = numFormat
                 )
 
+                cellStyle.xfIndex = excel.cellStyleList.size
                 excel.cellStyleList.add(cellStyle)
             }
         }
@@ -546,9 +549,11 @@ public class Parser internal constructor(private val excel: Excel) {
         // the element's position is implied by document order, so the running index of the
         // previous sibling is threaded through the parse.
         var previousRowIndex = -1
+        val sharedFormulas = SharedFormulas()
         findRows(sheet).forEach { child ->
-            previousRowIndex = parseRow(child, sheetObject, name, previousRowIndex)
+            previousRowIndex = parseRow(child, sheetObject, name, previousRowIndex, sharedFormulas)
         }
+        sharedFormulas.resolveLateFollowers(sheetObject)
 
         parseHeaderFooter(worksheet, sheetObject)
         parseColWidthsRowHeights(worksheet, sheetObject)
@@ -560,14 +565,58 @@ public class Parser internal constructor(private val excel: Excel) {
         normalizeTable(sheetObject)
     }
 
+    /**
+     * The shared formulas of one worksheet (§18.3.1.40). The expression is written once, on
+     * the first cell of the group (`<f t="shared" ref="B1:B3" si="0">A1*2</f>`); every other
+     * cell says only `<f t="shared" si="0"/>` and means "that expression, moved to where I
+     * am". Excel writes a formula this way whenever it is filled down or across.
+     *
+     * The followers are expanded while reading, as POI does
+     * (`XSSFCell.convertSharedFormula`), so each cell holds its own expression and the
+     * group does not have to be kept consistent through later edits.
+     */
+    private class SharedFormulas {
+        class Master(val formula: String, val row: Int, val column: Int)
+        class Follower(val row: Int, val column: Int, val si: Int, val source: CellSource)
+
+        val masters = mutableMapOf<Int, Master>()
+        val lateFollowers = mutableListOf<Follower>()
+
+        fun expand(si: Int, row: Int, column: Int): String? =
+            masters[si]?.let { shiftFormulaReferences(it.formula, row - it.row, column - it.column) }
+
+        /** A follower normally comes after its master in document order; this handles one that did not. */
+        fun resolveLateFollowers(sheet: Sheet) {
+            lateFollowers.forEach { follower ->
+                val formula = expand(follower.si, follower.row, follower.column) ?: return@forEach
+                val data = sheet.sheetData[follower.row]?.get(follower.column) ?: return@forEach
+                data._value = FormulaCellValue(formula).also {
+                    it.source = CellSource(
+                        type = follower.source.type,
+                        rawValue = follower.source.rawValue,
+                        hasFormula = true,
+                        formulaAttributes = follower.source.formulaAttributes - SHARED_GROUP_ATTRIBUTES,
+                        cellAttributes = follower.source.cellAttributes,
+                    )
+                }
+            }
+        }
+    }
+
     /** Parses one `<row>` and returns the row index it occupied. */
-    private fun parseRow(node: Element, sheetObject: Sheet, name: String, previousRowIndex: Int): Int {
+    private fun parseRow(
+        node: Element,
+        sheetObject: Sheet,
+        name: String,
+        previousRowIndex: Int,
+        sharedFormulas: SharedFormulas,
+    ): Int {
         val rowIndex = getRowNumber(node)?.minus(1) ?: (previousRowIndex + 1)
         if (rowIndex < 0) return previousRowIndex
 
         var previousColumnIndex = -1
         findCells(node).forEach { child ->
-            previousColumnIndex = parseCell(child, sheetObject, rowIndex, name, previousColumnIndex)
+            previousColumnIndex = parseCell(child, sheetObject, rowIndex, name, previousColumnIndex, sharedFormulas)
         }
         return rowIndex
     }
@@ -579,6 +628,7 @@ public class Parser internal constructor(private val excel: Excel) {
         rowIndex: Int,
         name: String,
         previousColumnIndex: Int,
+        sharedFormulas: SharedFormulas,
     ): Int {
         val columnIndex = getCellNumber(node) ?: (previousColumnIndex + 1)
 
@@ -594,73 +644,137 @@ public class Parser internal constructor(private val excel: Excel) {
                 excel.cellStyleReferenced[name]!![rC] = s
             }
         }
+        val style = excel.cellStyleList.getOrNull(s)
+            ?: damagedExcel("Cell ${node.attr("r")} uses style $s, but styles.xml has only ${excel.cellStyleList.size}")
 
-        val value: CellValue?
-        val type = node.attr("t")
+        val type = node.attr("t").takeIf { it.isNotEmpty() }
+        val valueNode = node.getElementsByTag("v").firstOrNull()
+        val rawValue = valueNode?.let { parseValue(it) }
+        val cellAttributes = CELL_PASS_THROUGH_ATTRIBUTES
+            .mapNotNull { key -> node.attribute(key)?.let { key to it.value } }
+            .toMap()
 
         // `t` describes the cached result in <v>, not the cell: a boolean-, error- or
         // string-typed cell can still be a formula. The expression is what Kexcel models
-        // (and writes back as <f>), so it wins over the cache whatever the type. Shared and
-        // inline strings cannot carry a formula.
-        val formulaNode = if (type == "s" || type == "inlineStr") null
-        else node.getElementsByTag("f").firstOrNull()
+        // (and writes back as <f>), so it wins over the cache whatever the type.
+        val formulaNode = node.getElementsByTag("f").firstOrNull()
 
-        value = if (formulaNode != null) FormulaCellValue(parseValue(formulaNode)) else when (type) {
+        val value: CellValue? = if (formulaNode != null) {
+            parseFormula(formulaNode, node, type, rawValue, cellAttributes, rowIndex, columnIndex, sharedFormulas)
+        } else when (type) {
             // shared string
             "s" -> {
-                val raw = parseValue(node.getElementsByTag("v").firstOrNull()).trim()
+                val raw = (rawValue ?: "").trim()
                 val index = raw.toIntOrNull()
                     ?: damagedExcel("Cell ${node.attr("r")} has a non-numeric shared string index: `$raw`")
                 val sharedString = excel.sharedStrings.value(index)
                     ?: damagedExcel(
                         "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
                     )
-                TextCellValue.span(sharedString.textSpan).also { it.sourceItem = sharedString.node }
+                TextCellValue.span(sharedString.textSpan).also {
+                    it.sourceItem = sharedString.node
+                    it.source = CellSource(type, rawValue = null, cellAttributes = cellAttributes)
+                }
             }
             // boolean
-            "b" -> BoolCellValue(parseValue(node.getElementsByTag("v").first()) == "1")
+            "b" -> BoolCellValue(rawValue == "1")
+                .also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
             // error. No dedicated error type exists, so the literal is kept as a formula
-            // that evaluates to the same error.
-            "e" -> FormulaCellValue(parseValue(node.getElementsByTag("v").first()))
+            // that evaluates to the same error; its source remembers it had no <f>, and an
+            // untouched cell is written back as the error literal it was.
+            "e" -> FormulaCellValue(rawValue ?: "")
+                .also { it.source = CellSource(type, rawValue, hasFormula = false, cellAttributes = cellAttributes) }
             // A formula's string result without its <f>: all that is left is the text. As a
             // formula it would be written back as <f>text</f>, which Excel shows as #NAME?.
-            "str" -> TextCellValue(parseValue(node.getElementsByTag("v").first()))
+            "str" -> TextCellValue(rawValue ?: "")
+                .also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
             // inline string. <is> shares the CT_Rst content model with a shared string's
             // <si>, so it is read with the same code — otherwise everything after the
             // first run of a rich inline string would be dropped.
-            "inlineStr" -> {
-                val isEl = node.getElementsByTag("is").firstOrNull()
-                if (isEl == null) TextCellValue("")
-                else {
-                    val item = SharedString(Element("si", emptyList(), isEl.childNodesCopy()))
-                    TextCellValue.span(item.textSpan).also { it.sourceItem = item.node }
-                }
-            }
+            "inlineStr" -> inlineString(node)
+                .also { it.source = CellSource(type, rawValue = null, cellAttributes = cellAttributes) }
             // number (default)
-            else -> {
-                val vNode = node.getElementsByTag("v").firstOrNull()
+            else -> when {
                 // An empty <v/> carries no number. Producers emit it for a cell that
                 // has a style but no value; feeding "" to a NumFormat would throw.
-                val raw = vNode?.let { parseValue(it) }
-                when {
-                    raw.isNullOrBlank() -> null
-                    s1 != null -> {
-                        val numFmtId = excel.numFmtIds[s]
-                        val numFormat = excel.numFormats.getByNumFmtId(numFmtId)
-                            ?: NumFormat.defaultNumeric
-                        numFormat.read(raw)
-                    }
-                    else -> NumFormat.defaultNumeric.read(raw)
+                rawValue.isNullOrBlank() -> null
+                else -> {
+                    val numFormat = if (s1 != null) {
+                        excel.numFormats.getByNumFmtId(excel.numFmtIds.getOrElse(s) { 0 }) ?: NumFormat.defaultNumeric
+                    } else NumFormat.defaultNumeric
+                    numFormat.read(rawValue).also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
                 }
             }
         }
 
-        sheetObject.updateCell(
-            CellIndex.indexByColumnRow(columnIndex = columnIndex, rowIndex = rowIndex),
-            value,
-            cellStyle = excel.cellStyleList[s]
-        )
+        sheetObject.putParsed(rowIndex, columnIndex, value, style)
         return columnIndex
+    }
+
+    private fun inlineString(cell: Element): TextCellValue {
+        val isEl = cell.getElementsByTag("is").firstOrNull() ?: return TextCellValue("")
+        val item = SharedString(Element("si", emptyList(), isEl.childNodesCopy()))
+        return TextCellValue.span(item.textSpan).also { it.sourceItem = item.node }
+    }
+
+    private fun parseFormula(
+        formulaNode: Element,
+        cell: Element,
+        type: String?,
+        rawValue: String?,
+        cellAttributes: Map<String, String>,
+        rowIndex: Int,
+        columnIndex: Int,
+        sharedFormulas: SharedFormulas,
+    ): FormulaCellValue {
+        var formula = parseValue(formulaNode)
+        var attributes = formulaNode.attributes().associate { it.key to it.value }
+
+        // The cached result of a string-typed cell is an index into a table that is rebuilt
+        // on save, or sits in <is>; either way it is kept as the text itself (`t="str"`).
+        var cachedType = type
+        var cachedValue = rawValue
+        when (type) {
+            "s" -> {
+                cachedType = "str"
+                cachedValue = rawValue?.trim()?.toIntOrNull()?.let { excel.sharedStrings.value(it)?.stringValue }
+            }
+            "inlineStr" -> {
+                cachedType = "str"
+                cachedValue = inlineString(cell).toString()
+            }
+        }
+
+        var lateFollower: Int? = null
+        if (attributes["t"] == "shared") {
+            val si = attributes["si"]?.trim()?.toIntOrNull()
+            if (si != null) {
+                if (formula.isNotEmpty()) {
+                    // The first cell that spells the expression out is the master. A follower
+                    // may repeat its own expression; it is already the right one.
+                    if (si !in sharedFormulas.masters) {
+                        sharedFormulas.masters[si] = SharedFormulas.Master(formula, rowIndex, columnIndex)
+                    }
+                    attributes = attributes - SHARED_GROUP_ATTRIBUTES
+                } else {
+                    val expanded = sharedFormulas.expand(si, rowIndex, columnIndex)
+                    if (expanded != null) {
+                        formula = expanded
+                        attributes = attributes - SHARED_GROUP_ATTRIBUTES
+                    } else {
+                        // Master not seen yet. The group attributes stay on the source so
+                        // that, should it never turn up, the cell is written back as it was.
+                        lateFollower = si
+                    }
+                }
+            }
+        }
+
+        val source = CellSource(cachedType, cachedValue, hasFormula = true, attributes, cellAttributes)
+        if (lateFollower != null) {
+            sharedFormulas.lateFollowers += SharedFormulas.Follower(rowIndex, columnIndex, lateFollower, source)
+        }
+        return FormulaCellValue(formula).also { it.source = source }
     }
 
 
@@ -862,6 +976,16 @@ public class Parser internal constructor(private val excel: Excel) {
     }
 
     internal companion object {
+        /** `<f>` attributes that describe a shared-formula group rather than the formula. */
+        val SHARED_GROUP_ATTRIBUTES = setOf("t", "si", "ref")
+
+        /**
+         * `<c>` attributes kept for an unedited cell: `cm` and `vm` index the cell and value
+         * metadata that make a formula a dynamic array or a value a rich data type
+         * (§18.3.1.4); `ph` marks phonetic text.
+         */
+        val CELL_PASS_THROUGH_ATTRIBUTES = listOf("cm", "vm", "ph")
+
         fun parseValue(node: Element?): String {
             if (node == null) return ""
             // Dart's _parseValue concatenates only this element's own text nodes

@@ -33,6 +33,13 @@ public class Excel internal constructor(internal var archive: Archive) {
     internal var mergeChanges: Boolean = false
     internal var rtlChanges: Boolean = false
 
+    /**
+     * Set once any cell value, or the shape of any sheet, has been changed after loading.
+     * Until then the cached results of formulas are still right and are written back; after
+     * that they may be stale, so they are dropped and Excel is asked to recalculate.
+     */
+    internal var valuesEdited: Boolean = false
+
     internal val sheets: MutableMap<String, Element> = mutableMapOf()
     internal val xmlFiles: MutableMap<String, Document> = mutableMapOf()
     internal val xmlSheetId: MutableMap<String, String> = mutableMapOf()
@@ -116,6 +123,7 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     public operator fun set(sheet: String, sheetObject: Sheet) {
         availSheet(sheet)
+        valuesEdited = true
         sheetMap[sheet] = Sheet.clone(this, sheet, sheetObject)
     }
 
@@ -178,6 +186,7 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     public fun delete(sheet: String) {
         if (sheetMap.size <= 1) return
+        valuesEdited = true
 
         if (defaultSheet == sheet) {
             defaultSheet = null

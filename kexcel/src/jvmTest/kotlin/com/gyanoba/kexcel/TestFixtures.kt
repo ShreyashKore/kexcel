@@ -131,3 +131,14 @@ internal fun sheetFromRawXml(sheetDataXml: String, beforeSheetData: String = "")
     val patched = replaceZipEntry(base, "xl/worksheets/sheet1.xml", xml.encodeToByteArray())
     return Excel.decodeBytes(patched)["Sheet1"]
 }
+
+/** Like [sheetFromRawXml], but returns the workbook bytes so a test can save it again. */
+internal fun workbookFromRawXml(sheetDataXml: String, beforeSheetData: String = "", afterSheetData: String = ""): ByteArray {
+    val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">$beforeSheetData<sheetData>$sheetDataXml</sheetData>$afterSheetData</worksheet>"""
+    return replaceZipEntry(Excel.createExcel().encode()!!, "xl/worksheets/sheet1.xml", xml.encodeToByteArray())
+}
+
+/** The `<c>` element for [ref] in `xl/worksheets/sheet1.xml`, as written. */
+internal fun rawCell(bytes: ByteArray, ref: String, part: String = "xl/worksheets/sheet1.xml"): com.fleeksoft.ksoup.nodes.Element =
+    Ksoup.parseXml(readZipEntry(bytes, part).decodeToString()).getElementsByTag("c").first { it.attr("r") == ref }
