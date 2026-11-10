@@ -707,6 +707,15 @@ public class Parser internal constructor(private val excel: Excel) {
         }
 
         val sheetNumber = sheetId
+        // `sheetId` and the part name are unrelated (§18.2.19): after a sheet is deleted in
+        // Excel the ids keep their gap while the parts are renumbered. Naming the new part
+        // after the id could therefore land on a part that already holds another sheet.
+        var partNumber = sheetNumber
+        while (excel.archive.findFile("xl/worksheets/sheet$partNumber.xml") != null ||
+            worksheetPaths.containsValue("xl/worksheets/sheet$partNumber.xml")
+        ) {
+            partNumber++
+        }
         val ridNumber = getAvailableRid()
 
         // NOTE: `Element.children()` returns a detached copy of the child list — appending to it
@@ -720,7 +729,7 @@ public class Parser internal constructor(private val excel: Excel) {
                     listOf(
                         Attribute("Id", "rId$ridNumber"),
                         Attribute("Type", "$RELATIONSHIPS/worksheet"),
-                        Attribute("Target", "worksheets/sheet$sheetNumber.xml")
+                        Attribute("Target", "worksheets/sheet$partNumber.xml")
                     )
                 )
             )
@@ -746,7 +755,7 @@ public class Parser internal constructor(private val excel: Excel) {
 
         sheetsNode.appendChild(sheetNode)
 
-        worksheetPaths["rId$ridNumber"] = "xl/worksheets/sheet$sheetNumber.xml"
+        worksheetPaths["rId$ridNumber"] = "xl/worksheets/sheet$partNumber.xml"
 
         val worksheetXml = """
             <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -766,17 +775,17 @@ public class Parser internal constructor(private val excel: Excel) {
 
         excel.archive.addFile(
             ArchiveFile(
-                "xl/worksheets/sheet$sheetNumber.xml",
+                "xl/worksheets/sheet$partNumber.xml",
                 worksheetXml.size,
                 worksheetXml
             )
         )
 
-        val newSheetFile = excel.archive.findFile("xl/worksheets/sheet$sheetNumber.xml")!!
+        val newSheetFile = excel.archive.findFile("xl/worksheets/sheet$partNumber.xml")!!
         newSheetFile.decompress()
         val document = parseXmlPart(newSheetFile.content.decodeToString())
-        excel.xmlFiles["xl/worksheets/sheet$sheetNumber.xml"] = document
-        excel.xmlSheetId[newSheet] = "xl/worksheets/sheet$sheetNumber.xml"
+        excel.xmlFiles["xl/worksheets/sheet$partNumber.xml"] = document
+        excel.xmlSheetId[newSheet] = "xl/worksheets/sheet$partNumber.xml"
 
         excel.xmlFiles["[Content_Types].xml"]
             ?.getElementsByTag("Types")
@@ -789,7 +798,7 @@ public class Parser internal constructor(private val excel: Excel) {
                             "ContentType",
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
                         ),
-                        Attribute("PartName", "/xl/worksheets/sheet$sheetNumber.xml")
+                        Attribute("PartName", "/xl/worksheets/sheet$partNumber.xml")
                     )
                 )
             )

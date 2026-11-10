@@ -333,4 +333,28 @@ class OoxmlPackageTest {
     }
 
     // endregion
+
+
+    @Test
+    fun addingASheetNeverReplacesAnExistingPart() {
+        // `sheetId` and the part name are independent (§18.2.19). Excel leaves a gap in the
+        // ids after a sheet is deleted but renumbers the parts, giving ids 1,3 on
+        // sheet1.xml, sheet2.xml. Naming the new part after the free id 2 overwrote "Two".
+        var source = PoiOracle.workbook { wb ->
+            wb.createSheet("One").createRow(0).createCell(0).setCellValue("one")
+            wb.createSheet("Two").createRow(0).createCell(0).setCellValue("two")
+        }
+        val workbookXml = readZipEntry(source, "xl/workbook.xml").decodeToString()
+        assertTrue("sheetId=\"2\"" in workbookXml)
+        source = replaceZipEntry(source, "xl/workbook.xml", workbookXml.replace("sheetId=\"2\"", "sheetId=\"3\"").encodeToByteArray())
+
+        val bytes = roundTrip(source) { it["New"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new")) }
+
+        val worksheets = zipEntryNames(bytes).filter { it.startsWith("xl/worksheets/sheet") }
+        assertEquals(3, worksheets.toSet().size, "expected three distinct worksheet parts, got $worksheets")
+        PoiOracle.read(bytes) { wb ->
+            assertEquals(listOf("One", "Two", "New"), (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals(listOf("one", "two", "new"), (0 until wb.numberOfSheets).map { wb.getSheetAt(it).getRow(0).getCell(0).stringCellValue })
+        }
+    }
 }
