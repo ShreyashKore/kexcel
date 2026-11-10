@@ -356,4 +356,74 @@ class ForeignWorksheetXmlTest {
     }
 
     // endregion
+
+
+    // region --- Namespace prefixes ---
+
+    /**
+     * Rewrites a part so its namespace is bound to [prefix] instead of being the default:
+     * `<workbook xmlns="…">` becomes `<x:workbook xmlns:x="…">`. Both spell the same document
+     * (XML Namespaces §6.2); the OpenXML SDK writes the prefixed form.
+     */
+    private fun String.withNamespacePrefix(prefix: String): String =
+        replace(Regex("<(/?)([A-Za-z])"), "<$1$prefix:$2").replaceFirst(" xmlns=\"", " xmlns:$prefix=\"")
+
+    private fun ByteArray.withPrefixedPart(name: String, prefix: String): ByteArray =
+        replaceZipEntry(this, name, readZipEntry(this, name).decodeToString().withNamespacePrefix(prefix).encodeToByteArray())
+
+    private fun workbookWithText(): ByteArray = Excel.createExcel().apply {
+        this["Sheet1"].updateCell(CellIndex.indexByString("A1"), TextCellValue("kept"))
+        this["Sheet1"].updateCell(CellIndex.indexByString("B1"), IntCellValue(7))
+    }.encode()!!
+
+    @Test
+    fun aPrefixedWorkbookPartStillListsItsSheets() {
+        // POI corpus 65016.xlsx: only xl/workbook.xml was prefixed. Kexcel read no sheets
+        // and then saved an empty shared-strings table over the real one.
+        val bytes = workbookWithText().withPrefixedPart("xl/workbook.xml", "x")
+
+        val excel = Excel.decodeBytes(bytes)
+        assertEquals(setOf("Sheet1"), excel.tables.keys)
+        assertEquals(TextCellValue("kept"), excel["Sheet1"].cell(CellIndex.indexByString("A1")).value)
+
+        PoiOracle.read(excel.encode()!!) { wb ->
+            assertEquals("kept", wb.getSheet("Sheet1").getRow(0).getCell(0).stringCellValue)
+        }
+    }
+
+    @Test
+    fun everyPartMayBindItsNamespaceToAPrefix() {
+        var bytes = workbookWithText()
+        for (part in listOf("xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/sharedStrings.xml", "xl/styles.xml")) {
+            bytes = bytes.withPrefixedPart(part, "x")
+        }
+        for (part in listOf("xl/_rels/workbook.xml.rels", "[Content_Types].xml")) {
+            bytes = bytes.withPrefixedPart(part, "ns0")
+        }
+
+        val sheet = Excel.decodeBytes(bytes)["Sheet1"]
+        assertEquals(TextCellValue("kept"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(IntCellValue(7), sheet.cell(CellIndex.indexByString("B1")).value)
+
+        // Saved again, POI still reads the same cells and can add nothing to the complaint list.
+        val saved = Excel.decodeBytes(bytes).apply { this["Second"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new")) }.encode()!!
+        PoiOracle.read(saved) { wb ->
+            assertEquals("kept", wb.getSheet("Sheet1").getRow(0).getCell(0).stringCellValue)
+            assertEquals(7.0, wb.getSheet("Sheet1").getRow(0).getCell(1).numericCellValue)
+            assertEquals("new", wb.getSheet("Second").getRow(0).getCell(0).stringCellValue)
+        }
+    }
+
+    @Test
+    fun aWorkbookThatListsNoSheetsIsReportedAsADamagedFile() {
+        // §18.2.20: <sheets> holds at least one <sheet>. An empty model must never be
+        // saved back over a file whose sheets were simply not recognised.
+        val base = workbookWithText()
+        val workbookXml = readZipEntry(base, "xl/workbook.xml").decodeToString().replace(Regex("<sheet [^>]*/>|<sheet [^>]*></sheet>"), "")
+        val bytes = replaceZipEntry(base, "xl/workbook.xml", workbookXml.encodeToByteArray())
+
+        assertFailsWith<IllegalArgumentException> { Excel.decodeBytes(bytes) }
+    }
+
+    // endregion
 }

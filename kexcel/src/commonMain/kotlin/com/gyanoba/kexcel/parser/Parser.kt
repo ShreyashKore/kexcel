@@ -1,6 +1,5 @@
 package com.gyanoba.kexcel.parser
 
-import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Attribute
 import com.fleeksoft.ksoup.nodes.Element
 import com.gyanoba.kexcel.archive.ArchiveFile
@@ -62,7 +61,7 @@ public class Parser internal constructor(private val excel: Excel) {
     private fun putContentXml() {
         val file = excel.archive.findFile("[Content_Types].xml") ?: damagedExcel()
         file.decompress()
-        excel.xmlFiles["[Content_Types].xml"] = Ksoup.parseXml(file.content.decodeToString())
+        excel.xmlFiles["[Content_Types].xml"] = parseXmlPart(file.content.decodeToString())
     }
 
     private fun parseRelations() {
@@ -70,7 +69,7 @@ public class Parser internal constructor(private val excel: Excel) {
             ?: damagedExcel()
 
         relations.decompress()
-        val document = Ksoup.parseXml(relations.content.decodeToString())
+        val document = parseXmlPart(relations.content.decodeToString())
         excel.xmlFiles["xl/_rels/workbook.xml.rels"] = document
 
         document.getElementsByTag("Relationship").forEach { node ->
@@ -162,7 +161,7 @@ public class Parser internal constructor(private val excel: Excel) {
         }
 
         sharedStrings!!.decompress()
-        val document = Ksoup.parseXml(sharedStrings.content.decodeToString())
+        val document = parseXmlPart(sharedStrings.content.decodeToString())
         excel.xmlFiles[excel.sharedStringsPath] = document
 
         document.getElementsByTag("si").forEach { node ->
@@ -180,14 +179,20 @@ public class Parser internal constructor(private val excel: Excel) {
     private fun parseContent(run: Boolean = true) {
         val workbook = excel.archive.findFile("xl/workbook.xml") ?: damagedExcel()
         workbook.decompress()
-        val document = Ksoup.parseXml(workbook.content.decodeToString())
+        val document = parseXmlPart(workbook.content.decodeToString())
         excel.xmlFiles["xl/workbook.xml"] = document
 
-        document.getElementsByTag("sheet").forEach { node ->
+        val sheetNodes = document.getElementsByTag("sheet")
+        // A workbook always has at least one sheet (§18.2.20). Finding none means the part
+        // was not understood, and saving such a model would write an empty workbook over
+        // the real one.
+        if (run && sheetNodes.isEmpty()) damagedExcel(text = "xl/workbook.xml lists no sheets")
+
+        sheetNodes.forEach { node ->
             if (run) {
                 parseTable(node)
             } else {
-                val rid = node.attr("r:id")
+                val rid = relationshipId(node)
                 if (rid != null && !rId.contains(rid)) {
                     rId.add(rid)
                 }
@@ -264,7 +269,7 @@ public class Parser internal constructor(private val excel: Excel) {
             ?: damagedExcel(text = "styles")
 
         styles.decompress()
-        val document = Ksoup.parseXml(styles.content.decodeToString())
+        val document = parseXmlPart(styles.content.decodeToString())
         excel.xmlFiles[stylesPath] = document
 
         excel.fontStyleList = mutableListOf()
@@ -513,7 +518,7 @@ public class Parser internal constructor(private val excel: Excel) {
     internal fun parseTable(node: Element?) {
         node ?: damagedExcel(text = "Missing <sheet> node in workbook.xml")
         val name = node.attr("name")
-        val path = worksheetPaths[node.attr("r:id")]
+        val path = worksheetPaths[relationshipId(node)]
 
         if (excel.sheetMap[name] == null) {
             excel.sheetMap[name] = Sheet(excel, name)
@@ -525,7 +530,7 @@ public class Parser internal constructor(private val excel: Excel) {
             ?: damagedExcel(text = "Missing worksheet part for sheet '$name'")
         file.decompress()
 
-        val content = Ksoup.parseXml(file.content.decodeToString())
+        val content = parseXmlPart(file.content.decodeToString())
         val worksheet = content.getElementsByTag("worksheet").first()
 
         // Check for right-to-left view
@@ -730,7 +735,7 @@ public class Parser internal constructor(private val excel: Excel) {
                 Attribute("state", "visible"),
                 Attribute("name", newSheet),
                 Attribute("sheetId", "$sheetNumber"),
-                Attribute("r:id", "rId$ridNumber")
+                Attribute("${relationshipsPrefix(excel.xmlFiles["xl/workbook.xml"]!!)}:id", "rId$ridNumber")
             )
         )
 
@@ -769,7 +774,7 @@ public class Parser internal constructor(private val excel: Excel) {
 
         val newSheetFile = excel.archive.findFile("xl/worksheets/sheet$sheetNumber.xml")!!
         newSheetFile.decompress()
-        val document = Ksoup.parseXml(newSheetFile.content.decodeToString())
+        val document = parseXmlPart(newSheetFile.content.decodeToString())
         excel.xmlFiles["xl/worksheets/sheet$sheetNumber.xml"] = document
         excel.xmlSheetId[newSheet] = "xl/worksheets/sheet$sheetNumber.xml"
 
