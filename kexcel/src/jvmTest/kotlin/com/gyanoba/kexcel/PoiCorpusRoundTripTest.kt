@@ -33,4 +33,11 @@ class PoiCorpusRoundTripTest {
     // D-01: <ns0:Relationships>, as Python's ElementTree writes it.
     @Test
     fun prefixedRelationshipsSurvive() = assertLossless("58760.xlsx")
+
+    // D-09: header and footer field codes (&C, &P, &"Font,Style", &12).
+    @Test
+    fun headerAndFooterCodesSurvive() = assertLossless(
+        "55640.xlsx",
+        known = setOf("row: hidden", "row: outline level", "row dropped", "column: width"), // F-04, F-05
+    )
 }

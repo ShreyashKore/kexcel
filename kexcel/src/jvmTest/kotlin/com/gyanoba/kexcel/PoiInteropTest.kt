@@ -524,4 +524,43 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- Header and footer ---
+
+    @Test
+    fun poiReadsAKexcelHeaderVerbatim() {
+        // §18.3.1.39: the header string is a format of its own — &L/&C/&R pick a section,
+        // &P is the page number — and `&` must reach the file as a single escaped
+        // ampersand. Hand-escaping it before the XML layer did turned every code into text.
+        val header = "&LSample Company & Sons\nLine 2 \"quoted\" <tag>&RPage &P of &N"
+        val excel = Excel.createExcel()
+        excel["Sheet1"].headerFooter = com.gyanoba.kexcel.sheet.HeaderFooter(
+            null, null, null, null, null, null, null, null, oddFooter = "Stamped &D", oddHeader = header,
+        )
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb ->
+            val headerFooter = (wb.getSheetAt(0) as org.apache.poi.xssf.usermodel.XSSFSheet).ctWorksheet.headerFooter
+            assertEquals(header, headerFooter.oddHeader)
+            assertEquals("Stamped &D", headerFooter.oddFooter)
+        }
+        assertEquals(header, Excel.decodeBytes(bytes)["Sheet1"].headerFooter?.oddHeader)
+    }
+
+    @Test
+    fun aPoiHeaderSurvivesAKexcelRoundTrip() {
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            sheet.createRow(0).createCell(0).setCellValue(1.0)
+            sheet.header.left = "Example & Campaign"
+            sheet.header.center = "two\nlines"
+            sheet.footer.right = "amp stamp &P"
+        }
+
+        assertOnlyDiffers(source, roundTrip(source))
+        assertEquals("&Ctwo\nlines&LExample & Campaign", Excel.decodeBytes(source)["S"].headerFooter?.oddHeader)
+    }
+
+    // endregion
 }
