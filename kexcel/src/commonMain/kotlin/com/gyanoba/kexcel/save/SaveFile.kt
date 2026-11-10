@@ -17,7 +17,7 @@ import com.gyanoba.kexcel.shared_strings.SharedString
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.BorderSet
 import com.gyanoba.kexcel.sheet.CellStyle
-import com.gyanoba.kexcel.sheet.CellValue
+import com.gyanoba.kexcel.sheet.Data
 import com.gyanoba.kexcel.sheet.DateCellValue
 import com.gyanoba.kexcel.sheet.DateTimeCellValue
 import com.gyanoba.kexcel.sheet.DoubleCellValue
@@ -76,8 +76,9 @@ public class Save internal constructor(private val excel: Excel, private val par
         sheet: String,
         columnIndex: Int,
         rowIndex: Int,
-        value: CellValue?,
+        data: Data,
     ): Element {
+        val value = data.value
         // How the cell was stored, when the value is still the object the parser made.
         val source = value?.source
         // A formula's string result whose <f> lives elsewhere — a cell an array or dynamic
@@ -116,8 +117,7 @@ public class Save internal constructor(private val excel: Excel, private val par
             value != null && source?.rawValue != null -> source.type?.let { attributes.add(Attribute("t", it)) }
         }
 
-        val data = excel.sheetMap[sheet]?.sheetData?.get(rowIndex)?.get(columnIndex)
-        val cellStyle = data?.cellStyle
+        val cellStyle = data.cellStyle
 
         if (excel.styleChanges && cellStyle != null) {
             val index = styleIndexOf(cellStyle)
@@ -573,30 +573,18 @@ public class Save internal constructor(private val excel: Excel, private val par
         // style or a flag such as `hidden`: those are properties of the row itself.
         val rowIndexes = (
             sheetObject.sheetData.keys + sheetObject.getRowHeights.keys +
-                sheetObject.rowAttributes.keys + sheetObject.mergedCellStyles.keys
+                sheetObject.rowAttributes.keys + sheetObject.mergedCells.keys
             ).toSortedSet()
 
         for (rowIndex in rowIndexes) {
             val cells = sheetObject.sheetData[rowIndex].orEmpty()
-            val coveredByMerge = sheetObject.mergedCellStyles[rowIndex].orEmpty()
+            // The cells under a merged region, which the model leaves out.
+            val coveredByMerge = sheetObject.mergedCells[rowIndex].orEmpty()
 
             val foundRow = createNewRow(excel.sheets[sheetName]!! as Element, sheetObject, rowIndex)
             for (columnIndex in (cells.keys + coveredByMerge.keys).toSortedSet()) {
-                val data = cells[columnIndex]
-                if (data != null) {
-                    updateCell(sheetName, foundRow, columnIndex, rowIndex, data.value)
-                } else {
-                    // An empty cell under a merged region, kept for the border or fill it carries.
-                    foundRow.appendChild(
-                        Element(
-                            "c",
-                            listOf(
-                                Attribute("r", getCellId(columnIndex, rowIndex)),
-                                Attribute("s", styleIndexOf(coveredByMerge.getValue(columnIndex)).toString()),
-                            ),
-                        )
-                    )
-                }
+                val data = cells[columnIndex] ?: coveredByMerge.getValue(columnIndex)
+                updateCell(sheetName, foundRow, columnIndex, rowIndex, data)
             }
         }
     }
@@ -861,9 +849,9 @@ public class Save internal constructor(private val excel: Excel, private val par
         row: Element,
         columnIndex: Int,
         rowIndex: Int,
-        value: CellValue?,
+        data: Data,
     ): Element {
-        val cell = createCell(sheet, columnIndex, rowIndex, value)
+        val cell = createCell(sheet, columnIndex, rowIndex, data)
         row.appendChild(cell)
         return cell
     }

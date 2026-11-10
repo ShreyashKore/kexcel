@@ -50,12 +50,13 @@ public class Sheet internal constructor(
     internal var columnsDirty: Boolean = false
 
     /**
-     * The styles of the empty cells under a merged region. Reading a merge keeps only its
-     * top-left cell in [sheetData], but Excel stores the region's borders and fill on the
-     * cells beneath it, so their styles are kept here and written back while the sheet's
-     * layout is unchanged. Row index → column index → style.
+     * The cells a merged region covers, other than its top-left one. Reading a merge keeps
+     * only that anchor in [sheetData], which is what the API has always shown. But the file
+     * has cells beneath a merge — Excel stores the region's borders and fill on them — so
+     * they are kept here and written back for as long as the sheet's layout is unchanged.
+     * Row index → column index → cell.
      */
-    internal val mergedCellStyles: MutableMap<Int, MutableMap<Int, CellStyle>> = mutableMapOf()
+    internal val mergedCells: MutableMap<Int, MutableMap<Int, Data>> = mutableMapOf()
 
     /** A `<col>` element: a zero-based, inclusive column range and its other attributes. */
     internal class ColumnSpec(val min: Int, val max: Int, val attributes: Map<String, String>)
@@ -321,7 +322,7 @@ public class Sheet internal constructor(
             return
         }
         excel.valuesEdited = true
-        mergedCellStyles.clear()
+        mergedCells.clear()
 
         var updateSpanCell = false
 
@@ -409,7 +410,7 @@ public class Sheet internal constructor(
             )
         }
         excel.valuesEdited = true
-        mergedCellStyles.clear()
+        mergedCells.clear()
 
         var updateSpanCell = false
 
@@ -492,7 +493,7 @@ public class Sheet internal constructor(
         }
         checkMaxRow(rowIndex)
         excel.valuesEdited = true
-        mergedCellStyles.clear()
+        mergedCells.clear()
 
         var updateSpanCell = false
 
@@ -573,7 +574,7 @@ public class Sheet internal constructor(
             )
         }
         excel.valuesEdited = true
-        mergedCellStyles.clear()
+        mergedCells.clear()
 
         var updateSpanCell = false
 
@@ -713,7 +714,7 @@ public class Sheet internal constructor(
 
         excel.mergeChanges = true
         excel.valuesEdited = true
-        mergedCellStyles.clear()
+        mergedCells.clear()
 
         startColumn = gotPosition[0]
         startRow = gotPosition[1]
@@ -786,7 +787,7 @@ public class Sheet internal constructor(
                 }
             }
             _spannedItems.remove(unmergeCells)
-            mergedCellStyles.clear()
+            mergedCells.clear()
             // Like merge(), the save path only rewrites <mergeCells> when this flag is set.
             excel.mergeChanges = true
             excel.addMergeChangeLookup(sheetName)

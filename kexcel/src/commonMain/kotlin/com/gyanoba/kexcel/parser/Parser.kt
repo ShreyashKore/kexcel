@@ -260,12 +260,10 @@ public class Parser internal constructor(private val excel: Excel) {
             for (rowI in rowSpanStart..rowSpanEnd) {
                 val isTopLeft = columnI == columnSpanStart && rowI == rowSpanStart
                 if (isTopLeft) continue
-                // An empty cell under a merge exists only for its style: the region's
-                // borders and fill live on these cells. Remember it for the save path.
-                val covered = sheet.sheetData[rowI]?.get(columnI)
-                val style = covered?.cellStyle
-                if (covered != null && covered.value == null && style != null && style.xfIndex > 0) {
-                    sheet.mergedCellStyles.getOrPut(rowI) { mutableMapOf() }[columnI] = style
+                // The cell stays in the file even though the model shows only the anchor:
+                // remember it for the save path.
+                sheet.sheetData[rowI]?.get(columnI)?.let { covered ->
+                    sheet.mergedCells.getOrPut(rowI) { mutableMapOf() }[columnI] = covered
                 }
                 sheet.removeCell(rowI, columnI)
             }
