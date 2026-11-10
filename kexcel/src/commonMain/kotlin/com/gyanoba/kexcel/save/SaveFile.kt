@@ -92,8 +92,13 @@ public class Save internal constructor(private val excel: Excel, private val par
     ): Element {
         var sharedString: SharedString? = null
         if (value is TextCellValue) {
-            // Pass the whole span, not its flattened text, so rich-text runs are kept.
-            sharedString = excel.sharedStrings.addFromSpan(value.value)
+            // A string read from a file goes back as the <si> it came from, which keeps run
+            // properties the model does not cover. The check catches a span whose styles
+            // were mutated in place after parsing; that one is rebuilt from the model.
+            val source = value.sourceItem?.takeIf { SharedString(it).textSpan == value.value }
+            // Otherwise pass the whole span, not its flattened text, so rich-text runs are kept.
+            sharedString = if (source != null) excel.sharedStrings.addFromItem(source)
+            else excel.sharedStrings.addFromSpan(value.value)
         }
 
         val rC = getCellId(columnIndex, rowIndex)
@@ -584,6 +589,8 @@ public class Save internal constructor(private val excel: Excel, private val par
         }
 
         if (position == -1 || elementFound == null) return false
+
+        selectOnly(sheetName)
         if (position == 0) return true
 
         val sheets = excel.xmlFiles["xl/workbook.xml"]!!.getElementsByTag("sheets").first()
@@ -591,6 +598,27 @@ public class Save internal constructor(private val excel: Excel, private val par
         sheets?.prependChildren(listOf(elementFound))
 
         return excel.getDefaultSheetInternal() == sheetName
+    }
+
+    /**
+     * Makes [sheetName] the only selected sheet once it has been moved to the front.
+     *
+     * `<sheetView>` is patched in place rather than rebuilt (see [setRTL]), so the
+     * `tabSelected` of whichever sheet was selected in the source file survives. Left
+     * alone, Excel opens with that sheet *and* the new default grouped, and every edit
+     * lands on both. `activeTab` is reset for the same reason: it is a position, and the
+     * default sheet is now at position 0.
+     */
+    private fun selectOnly(sheetName: String) {
+        excel.xmlFiles["xl/workbook.xml"]!!.getElementsByTag("workbookView").forEach {
+            it.removeAttr("activeTab")
+        }
+        excel.sheetMap.keys.forEach { name ->
+            val sheetView = excel.xmlFiles[excel.xmlSheetId[name]]
+                ?.getElementsByTag("sheetView")?.firstOrNull() ?: return@forEach
+            if (name == sheetName) sheetView.attr("tabSelected", "1")
+            else sheetView.removeAttr("tabSelected")
+        }
     }
 
     private fun setHeaderFooter(sheetName: String) {
@@ -609,7 +637,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         // worksheet whose children are out of order.
         val followers = setOf(
             "rowBreaks", "colBreaks", "customProperties", "cellWatches", "ignoredErrors",
-            "smartTags", "drawing", "legacyDrawing", "legacyDrawingHF", "picture",
+            "smartTags", "drawing", "legacyDrawing", "legacyDrawingHF", "drawingHF", "picture",
             "oleObjects", "controls", "webPublishItems", "tableParts", "extLst",
         )
         val firstFollower = worksheetEl.children().firstOrNull { it.tagName() in followers }

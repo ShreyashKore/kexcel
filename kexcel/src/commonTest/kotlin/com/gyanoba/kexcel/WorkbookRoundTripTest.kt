@@ -157,6 +157,27 @@ class WorkbookRoundTripTest {
     }
 
     @Test
+    fun namingADifferentFontFamilyDetachesTheStyleFromTheThemeFont() {
+        // While a scheme is set Excel renders the theme font, so a new family name
+        // would never show. Styles read from a file almost always carry Minor.
+        val themed = CellStyle(fontFamily = "Calibri", fontScheme = FontScheme.Minor)
+
+        assertEquals(FontScheme.Unset, themed.copyWith(fontFamilyVal = "Arial").fontScheme)
+        assertEquals(FontScheme.Minor, themed.copyWith(fontFamilyVal = "Calibri").fontScheme)
+        assertEquals(FontScheme.Minor, themed.copyWith(boldVal = true).fontScheme)
+        assertEquals(
+            FontScheme.Major,
+            themed.copyWith(fontFamilyVal = "Arial", fontSchemeVal = FontScheme.Major).fontScheme,
+        )
+
+        val mutated = CellStyle(fontFamily = "Calibri", fontScheme = FontScheme.Minor)
+        mutated.fontFamily = "Calibri"
+        assertEquals(FontScheme.Minor, mutated.fontScheme)
+        mutated.fontFamily = "Arial"
+        assertEquals(FontScheme.Unset, mutated.fontScheme)
+    }
+
+    @Test
     fun alignmentAndRotationSurviveASave() {
         val excel = Excel.createExcel()
         val sheet = excel["Sheet1"]

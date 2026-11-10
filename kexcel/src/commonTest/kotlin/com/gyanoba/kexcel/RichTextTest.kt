@@ -157,6 +157,42 @@ class RichTextTest {
         assertEquals(true, back.value.children!!.single().style?.isBold)
     }
 
+    @Test
+    fun aStyleOnRootTextIsKept() {
+        // A bare <t> has nowhere to put formatting, so styled root text is written as a run.
+        val back = roundTrip(TextSpan(text = "headline", style = CellStyle(bold = true, fontSize = 14)))
+
+        assertEquals("headline", back.toString())
+        val run = back.value.children!!.single()
+        assertEquals("headline", run.text)
+        assertEquals(true, run.style?.isBold)
+        assertEquals(14, run.style?.fontSize)
+    }
+
+    @Test
+    fun styledRootTextComesBeforeItsChildrenAndSharesItsStyleWithThem() {
+        val back = roundTrip(
+            TextSpan(
+                text = "lead:",
+                style = CellStyle(italic = true),
+                children = listOf(TextSpan(text = "inherits"), TextSpan(text = "own", style = CellStyle(bold = true))),
+            ),
+        )
+
+        assertEquals("lead:inheritsown", back.toString())
+        val runs = back.value.children!!
+        assertEquals(listOf("lead:", "inherits", "own"), runs.map { it.text })
+        assertEquals(listOf(true, true, false), runs.map { it.style?.isItalic })
+        assertEquals(true, runs[2].style?.isBold)
+    }
+
+    @Test
+    fun rootTextWithADefaultStyleStaysPlain() {
+        val back = roundTrip(TextSpan(text = "plain", style = CellStyle()))
+        assertEquals("plain", back.value.text)
+        assertNull(back.value.children)
+    }
+
     // endregion
 
     // region --- Interaction with plain strings and the shared-string pool ---
@@ -232,6 +268,23 @@ class RichTextTest {
         assertEquals(true, children[0].style?.isBold)
         assertEquals(16, children[0].style?.fontSize)
         assertEquals(ExcelColor.blue, children[1].style?.fontColor)
+    }
+
+    @Test
+    fun findAndReplaceLeavesCellsWithoutAMatchUntouched() {
+        val excel = Excel.createExcel()
+        val rich = TextCellValue.span(
+            TextSpan(children = listOf(TextSpan(text = "keep me", style = CellStyle(bold = true)))),
+        )
+        excel["Sheet1"].updateCell(CellIndex.indexByString("A1"), rich)
+        excel["Sheet1"].updateCell(CellIndex.indexByString("A2"), TextCellValue("target"))
+
+        assertEquals(1, excel.findAndReplace("Sheet1", Regex("target"), "replaced"))
+
+        val reread = Excel.decodeBytes(excel.encode()!!)["Sheet1"]
+        assertEquals(rich, reread.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(true, (reread.cell(CellIndex.indexByString("A1")).value as TextCellValue).value.children!!.single().style?.isBold)
+        assertEquals(TextCellValue("replaced"), reread.cell(CellIndex.indexByString("A2")).value)
     }
 
     @Test

@@ -298,6 +298,30 @@ class PoiInteropTest {
     }
 
     @Test
+    fun formulasWithNonNumericResultsSurviveAKexcelRoundTrip() {
+        // Once evaluated, POI caches these as t="str" / t="b" / t="e" next to the <f>.
+        val bytes = poiWorkbook { wb ->
+            val row = wb.createSheet("F").createRow(0)
+            row.createCell(0).cellFormula = """CONCATENATE("a","b")"""
+            row.createCell(1).cellFormula = "1>0"
+            row.createCell(2).cellFormula = "1/0"
+            wb.creationHelper.createFormulaEvaluator().evaluateAll()
+        }
+
+        val excel = Excel.decodeBytes(bytes)
+        assertEquals(FormulaCellValue("""CONCATENATE("a","b")"""), excel["F"].rows[0][0]?.value)
+        assertEquals(FormulaCellValue("1>0"), excel["F"].rows[0][1]?.value)
+        assertEquals(FormulaCellValue("1/0"), excel["F"].rows[0][2]?.value)
+
+        readWithPoi(excel.encode()!!) { wb ->
+            val row = wb.getSheetAt(0).getRow(0)
+            assertEquals("""CONCATENATE("a","b")""", row.getCell(0).cellFormula)
+            assertEquals("1>0", row.getCell(1).cellFormula)
+            assertEquals("1/0", row.getCell(2).cellFormula)
+        }
+    }
+
+    @Test
     fun kexcelReadsAnErrorCellPoiWrote() {
         val bytes = poiWorkbook { wb ->
             wb.createSheet("E").createRow(0).createCell(0)
@@ -415,6 +439,70 @@ class PoiInteropTest {
 
         readWithPoi(excel.encode()!!) { wb ->
             assertEquals(15.0f, wb.getSheetAt(0).defaultRowHeightInPoints)
+        }
+    }
+
+    @Test
+    fun aFontWithAnExplicitlyOffBoldIsNotReadAsBold() {
+        // <b val="false"/> is a valid "not bold"; only a bare <b/> or val="1"/"true" is on.
+        val bytes = poiWorkbook { wb ->
+            wb as XSSFWorkbook
+            val font = wb.createFont()
+            font.ctFont.addNewB().setVal(false)
+            font.ctFont.addNewI().setVal(true)
+            val style = wb.createCellStyle().apply { setFont(font) }
+            wb.createSheet("S").createRow(0).createCell(0).apply {
+                setCellValue("a")
+                cellStyle = style
+            }
+        }
+
+        val style = Excel.decodeBytes(bytes)["S"].cell(CellIndex.indexByString("A1")).cellStyle!!
+        assertEquals(false, style.isBold)
+        assertEquals(true, style.isItalic)
+    }
+
+    @Test
+    fun aNewFontFamilyOnAPoiStyleIsNotOverriddenByTheThemeFont() {
+        // POI's default font is <name val="Calibri"/><scheme val="minor"/>. Keeping the
+        // scheme after renaming the family makes Excel keep rendering Calibri.
+        val bytes = poiWorkbook { wb -> wb.createSheet("S").createRow(0).createCell(0).setCellValue("a") }
+
+        val excel = Excel.decodeBytes(bytes)
+        val cell = excel["S"].cell(CellIndex.indexByString("A1"))
+        cell.cellStyle = cell.cellStyle!!.copyWith(fontFamilyVal = "Arial")
+
+        readWithPoi(excel.encode()!!) { wb ->
+            wb as XSSFWorkbook
+            val font = wb.getFontAt(wb.getSheetAt(0).getRow(0).getCell(0).cellStyle.fontIndex)
+            assertEquals("Arial", font.fontName)
+            assertEquals(null, font.ctFont.schemeList.firstOrNull())
+        }
+    }
+
+    @Test
+    fun changingTheDefaultSheetLeavesOnlyThatSheetSelected() {
+        // POI marks the first sheet tabSelected. <sheetView> is patched in place on save,
+        // so that flag survives; unless it is cleared, Excel opens the old and the new
+        // default sheet grouped together.
+        val bytes = poiWorkbook { wb ->
+            wb.createSheet("First").createRow(0).createCell(0).setCellValue("a")
+            wb.createSheet("Second").createRow(0).createCell(0).setCellValue("b")
+            wb.createSheet("Third").createRow(0).createCell(0).setCellValue("c")
+            wb.setActiveSheet(2)
+            wb.getSheetAt(0).isSelected = true
+            wb.getSheetAt(2).isSelected = true
+        }
+
+        val excel = Excel.decodeBytes(bytes)
+        excel.setDefaultSheet("Second")
+
+        readWithPoi(excel.encode()!!) { wb ->
+            assertEquals("Second", wb.getSheetName(wb.activeSheetIndex))
+            val selected = (0 until wb.numberOfSheets)
+                .filter { wb.getSheetAt(it).isSelected }
+                .map { wb.getSheetName(it) }
+            assertEquals(listOf("Second"), selected)
         }
     }
 

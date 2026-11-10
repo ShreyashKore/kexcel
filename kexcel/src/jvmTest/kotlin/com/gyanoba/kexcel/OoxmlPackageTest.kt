@@ -37,7 +37,7 @@ class OoxmlPackageTest {
         "conditionalFormatting", "dataValidations", "hyperlinks", "printOptions",
         "pageMargins", "pageSetup", "headerFooter", "rowBreaks", "colBreaks",
         "customProperties", "cellWatches", "ignoredErrors", "smartTags", "drawing",
-        "legacyDrawing", "legacyDrawingHF", "picture", "oleObjects", "controls",
+        "legacyDrawing", "legacyDrawingHF", "drawingHF", "picture", "oleObjects", "controls",
         "webPublishItems", "tableParts", "extLst",
     )
 
@@ -279,6 +279,34 @@ class OoxmlPackageTest {
             Excel.decodeBytes(bytes).encode()!!,
             "xl/worksheets/sheet1.xml",
         )
+    }
+
+    @Test
+    fun aHeaderFooterIsPlacedBeforeAnExistingDrawingHF() {
+        // <drawingHF> (header/footer images) has to follow <headerFooter>. With nothing else
+        // after <headerFooter> in the part, it is the only element that fixes the position.
+        val sheetXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><drawingHF r:id="rId9"/></worksheet>"""
+        val base = Excel.createExcel().encode()!!
+        val excel = Excel.decodeBytes(replaceZipEntry(base, "xl/worksheets/sheet1.xml", sheetXml.encodeToByteArray()))
+        excel["Sheet1"].headerFooter = com.gyanoba.kexcel.sheet.HeaderFooter(
+            alignWithMargins = true,
+            differentFirst = false,
+            differentOddEven = false,
+            scaleWithDoc = true,
+            evenFooter = null,
+            evenHeader = null,
+            firstFooter = null,
+            firstHeader = null,
+            oddFooter = null,
+            oddHeader = "&CTitle",
+        )
+
+        val bytes = excel.encode()!!
+        assertWorksheetChildrenAreInSchemaOrder(bytes, "xl/worksheets/sheet1.xml")
+        val names = bytes.part("xl/worksheets/sheet1.xml").getElementsByTag("worksheet").first()!!
+            .children().map { it.tagName() }
+        assertTrue(names.indexOf("headerFooter") in 0 until names.indexOf("drawingHF"), "order was $names")
     }
 
     @Test

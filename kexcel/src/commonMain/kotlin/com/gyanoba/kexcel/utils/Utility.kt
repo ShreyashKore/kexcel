@@ -76,6 +76,15 @@ internal fun getCellNumber(cell: Element): Int? {
     return if (column < 0) null else column
 }
 
+/**
+ * Reads an ST_OnOff `val` attribute (`<b val="0"/>`, `<i val="false"/>`, …). An absent or
+ * empty attribute means "on" — a bare `<b/>` is bold — so only an explicit off value is off.
+ */
+internal fun isOnOff(value: String?): Boolean = when (value?.trim()?.lowercase()) {
+    "0", "false", "off" -> false
+    else -> true
+}
+
 internal fun getRowNumber(row: Element?): Int? {
     return row?.attr("r")?.toIntOrNull()
 }
