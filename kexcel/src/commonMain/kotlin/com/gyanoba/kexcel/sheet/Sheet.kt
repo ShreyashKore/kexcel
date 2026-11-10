@@ -617,6 +617,15 @@ public class Sheet internal constructor(
             newColumnIndex = nc
         }
 
+        // Read before [putData], which resets the style to the bare default for the new
+        // value. Reading it afterwards — as this used to — always saw that default, so
+        // changing a value discarded the cell's font, fill, border and number format.
+        val cellBefore = sheetData[newRowIndex]?.get(newColumnIndex)
+        val styleBefore = cellBefore?.cellStyle
+            // A style [putData] assigned on its own carries no intent; the new value gets
+            // its own default (an Int's "0" must not stick to a Double written later).
+            ?.takeUnless { it == CellStyle(numberFormat = NumFormat.defaultFor(cellBefore.value)) }
+
         putData(newRowIndex, newColumnIndex, value)
 
         var cellStyleToUse = cellStyle
@@ -625,10 +634,15 @@ public class Sheet internal constructor(
             if (!numberFormat.accepts(value)) {
                 cellStyleToUse = cellStyle.copyWith(numberFormat = NumFormat.defaultFor(value))
             }
-        } else {
-            val cellStyleBefore = sheetData[cellIndex.rowIndex]?.get(cellIndex.columnIndex)?.cellStyle
-            if (cellStyleBefore != null && !cellStyleBefore.numberFormat.accepts(value)) {
-                cellStyleToUse = cellStyleBefore.copyWith(numberFormat = NumFormat.defaultFor(value))
+        } else if (styleBefore != null) {
+            // The font, fill, border and alignment stay. So does a specific number format
+            // that can show the new value; `General` gives way to the default for the
+            // value's type, as it always has (a Double written over a General cell gets
+            // "0.00"), and clearing a cell clears its number format with it.
+            val format = styleBefore.numberFormat
+            cellStyleToUse = if (value != null && format != NumFormat.standard_0 && format.accepts(value)) styleBefore
+            else NumFormat.defaultFor(value).let { default ->
+                if (default == format) styleBefore else styleBefore.copyWith(numberFormat = default)
             }
         }
 

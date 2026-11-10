@@ -695,5 +695,28 @@ class PoiInteropTest {
         readWithPoi(saved) { wb -> assertEquals(values.map { it.second }, values.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).numericCellValue }) }
     }
 
+    @Test
+    fun changingAValueKeepsTheCellsFormatting() {
+        // updateCell without a style used to reset the cell to the bare default style.
+        val source = poiWorkbook { wb ->
+            val style = wb.createCellStyle().apply {
+                dataFormat = 10 // 0.00%
+                setFont(wb.createFont().apply { bold = true })
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
+                fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.YELLOW.index
+            }
+            val sheet = wb.createSheet("S")
+            for (r in 0..2) sheet.createRow(r).createCell(0).apply { setCellValue(0.25); cellStyle = style }
+        }
+
+        val saved = roundTrip(source) { excel ->
+            excel["S"].updateCell(CellIndex.indexByString("A1"), DoubleCellValue(0.5))
+            excel["S"].cell(CellIndex.indexByString("A2")).value = DoubleCellValue(0.75)
+        }
+
+        assertOnlyDiffers(source, saved, expected = setOf("number"))
+        readWithPoi(saved) { wb -> assertEquals(listOf(0.5, 0.75, 0.25), (0..2).map { wb.getSheetAt(0).getRow(it).getCell(0).numericCellValue }) }
+    }
+
     // endregion
 }
