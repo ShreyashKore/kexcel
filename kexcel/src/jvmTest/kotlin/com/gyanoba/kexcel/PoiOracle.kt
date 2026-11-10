@@ -1,0 +1,294 @@
+package com.gyanoba.kexcel
+
+import org.apache.poi.ss.usermodel.CellType
+import org.apache.poi.xssf.usermodel.XSSFCell
+import org.apache.poi.xssf.usermodel.XSSFCellStyle
+import org.apache.poi.xssf.usermodel.XSSFColor
+import org.apache.poi.xssf.usermodel.XSSFRow
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import kotlin.test.fail
+
+/**
+ * Apache POI as an independent reader: what a workbook *is*, according to an implementation
+ * that shares no code with Kexcel.
+ *
+ * [differences] reduces two workbooks to the set of ways they differ — "formula", "cached
+ * result", "style: fill", "row: hidden", … — which is what a fidelity test wants to assert
+ * on: a no-edit save must produce the empty set, and an edit must change only what it meant to.
+ */
+internal object PoiOracle {
+
+    fun workbook(build: (XSSFWorkbook) -> Unit): ByteArray {
+        val out = ByteArrayOutputStream()
+        XSSFWorkbook().use { wb ->
+            build(wb)
+            wb.write(out)
+        }
+        return out.toByteArray()
+    }
+
+    fun <T> read(bytes: ByteArray, block: (XSSFWorkbook) -> T): T =
+        XSSFWorkbook(ByteArrayInputStream(bytes)).use(block)
+
+    /** Everything POI can say about one cell style, as comparable `name=value` parts. */
+    fun styleSignature(style: XSSFCellStyle): List<String> {
+        val font = style.font
+        return listOf(
+            "number format=${style.dataFormat}:${style.dataFormatString}",
+            "font=${font.fontName},${font.fontHeight},bold=${font.bold},italic=${font.italic}," +
+                "strike=${font.strikeout},underline=${font.underline},colour=${colour(font.xssfColor)},offset=${font.typeOffset}",
+            "fill=${style.fillPattern},${colour(style.fillForegroundColorColor)},${colour(style.fillBackgroundColorColor)}",
+            "border=${style.borderLeft},${style.borderRight},${style.borderTop},${style.borderBottom}",
+            "alignment=${style.alignment},${style.verticalAlignment},wrap=${style.wrapText}," +
+                "rotation=${style.rotation},indent=${style.indention},shrink=${style.shrinkToFit}",
+            "protection=locked:${style.locked},hidden:${style.hidden}",
+        )
+    }
+
+    private fun colour(c: XSSFColor?): String = if (c == null) "-" else
+        "${c.argbHex}/theme:${if (c.isThemed) c.theme else -1}/indexed:${if (c.isIndexed) c.indexed.toInt() else -1}/tint:${c.tint}"
+
+    private class CellFacts(
+        val type: CellType, val value: String, val formula: String?, val rawValue: String?,
+        val style: List<String>, val styled: Boolean,
+    )
+
+    private class SheetFacts(
+        val cells: Map<String, CellFacts>,
+        val rows: Map<Int, List<String>>,
+        val columns: List<List<String>>,
+        val facts: Map<String, String>,
+    )
+
+    private class Facts(val workbook: Map<String, String>, val sheets: Map<String, SheetFacts>)
+
+    private val rowsAsArea = Regex("""\$?A\$?([0-9]{1,7}):\$?XFD\$?([0-9]{1,7})""")
+    private val columnsAsArea = Regex("""\$?([A-Za-z]{1,3})\$?1:\$?([A-Za-z]{1,3})\$?1048576""")
+    private val wholeColumns = Regex("""(?<![A-Za-z0-9$])\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})(?![A-Za-z0-9(!])""")
+    private val wholeRows = Regex("""(?<![A-Za-z0-9$.])\$?([0-9]{1,7}):\$?([0-9]{1,7})(?![A-Za-z0-9.])""")
+
+    /**
+     * A formula as POI would print it. For the followers of a shared formula POI does not
+     * return stored text: it re-renders the expression from tokens, which drops the
+     * author's spacing and the `$` anchors of whole-column and whole-row references
+     * (`$D:$E` prints as `D:E`). Neither changes what the formula means.
+     */
+    fun normalised(formula: String?): String? = formula
+        ?.filterNot(Char::isWhitespace)
+        // After a shift POI spells a whole-row reference out as an area over every column
+        // (`3:4` becomes `$A3:$XFD4`), and a whole-column one over every row.
+        ?.replace(rowsAsArea, "$1:$2")
+        ?.replace(columnsAsArea, "$1:$2")
+        ?.replace(wholeColumns, "$1:$2")
+        ?.replace(wholeRows, "$1:$2")
+
+    private fun <T> safe(default: T, f: () -> T): T = try { f() } catch (_: Throwable) { default }
+
+    private fun facts(bytes: ByteArray): Facts = read(bytes) { wb ->
+        val signatures = HashMap<Int, List<String>>()
+        fun signature(style: XSSFCellStyle) = signatures.getOrPut(style.index.toInt()) { styleSignature(style) }
+
+        val sheets = LinkedHashMap<String, SheetFacts>()
+        for (i in 0 until wb.numberOfSheets) {
+            val sheet = wb.getSheetAt(i)
+            val cells = LinkedHashMap<String, CellFacts>()
+            val rows = LinkedHashMap<Int, List<String>>()
+            var lastColumn = 0
+            for (row in sheet) {
+                row as XSSFRow
+                rows[row.rowNum] = listOf(
+                    "hidden=${row.zeroHeight}",
+                    "height=${if (row.ctRow.isSetHt) row.ctRow.ht.toString() else "-"}",
+                    "outline level=${row.outlineLevel}",
+                    "style=${if (row.isFormatted) signature(row.rowStyle).toString() else "-"}",
+                )
+                for (cell in row) {
+                    cell as XSSFCell
+                    lastColumn = maxOf(lastColumn, cell.columnIndex)
+                    var formula: String? = null
+                    val value = when (cell.cellType) {
+                        CellType.STRING -> cell.richStringCellValue.string
+                        CellType.NUMERIC -> cell.numericCellValue.toString()
+                        CellType.BOOLEAN -> cell.booleanCellValue.toString()
+                        CellType.ERROR -> cell.errorCellString
+                        CellType.FORMULA -> { formula = safe("?") { cell.cellFormula }; "" }
+                        else -> ""
+                    }
+                    cells[cell.address.formatAsString()] = CellFacts(
+                        cell.cellType, value, formula,
+                        if (cell.ctCell.isSetV) cell.ctCell.v else null,
+                        signature(cell.cellStyle), cell.cellStyle.index.toInt() != 0,
+                    )
+                }
+            }
+            val columns = (0..minOf(lastColumn + 2, 80)).map { c ->
+                listOf(
+                    "width=${sheet.getColumnWidth(c)}",
+                    "hidden=${sheet.isColumnHidden(c)}",
+                    "outline level=${sheet.getColumnOutlineLevel(c)}",
+                    "style=${safe("-") { (sheet.getColumnStyle(c) as XSSFCellStyle).let { if (it.index.toInt() == 0) "-" else signature(it).toString() } }}",
+                )
+            }
+            val ct = sheet.ctWorksheet
+            val sheetFacts = linkedMapOf(
+                "merged regions" to sheet.mergedRegions.map { it.formatAsString() }.sorted().toString(),
+                "hyperlinks" to safe("?") { sheet.hyperlinkList.map { it.cellRef }.toString() },
+                "comments" to safe("?") { sheet.cellComments.keys.map { it.formatAsString() }.sorted().toString() },
+                "data validations" to safe("?") { sheet.dataValidations.map { v -> v.regions.cellRangeAddresses.joinToString(" ") { it.formatAsString() } }.toString() },
+                "conditional formatting" to safe("?") {
+                    val formatting = sheet.sheetConditionalFormatting
+                    (0 until formatting.numConditionalFormattings).map { i ->
+                        val entry = formatting.getConditionalFormattingAt(i)
+                        entry.formattingRanges.joinToString(" ") { it.formatAsString() } + " => " +
+                            (0 until entry.numberOfRules).map { r -> listOf(entry.getRule(r).formula1, entry.getRule(r).formula2) }
+                    }.toString()
+                },
+                "tables" to safe("?") { sheet.tables.size.toString() },
+                "drawing shapes" to safe("?") { (sheet.drawingPatriarch?.shapes?.size ?: 0).toString() },
+                "pane" to safe("?") { sheet.paneInformation?.let { "${it.verticalSplitPosition},${it.horizontalSplitPosition},${it.isFreezePane}" } ?: "-" },
+                "autofilter" to safe("?") { if (ct.isSetAutoFilter) ct.autoFilter.ref else "-" },
+                "protection" to safe("?") { sheet.protect.toString() },
+                "default column width" to safe("?") { if (ct.isSetSheetFormatPr && ct.sheetFormatPr.isSetDefaultColWidth) ct.sheetFormatPr.defaultColWidth.toString() else "-" },
+                "default row height" to safe("?") { if (ct.isSetSheetFormatPr) ct.sheetFormatPr.defaultRowHeight.toString() else "-" },
+                "header and footer" to safe("?") {
+                    if (ct.isSetHeaderFooter) ct.headerFooter.let { h ->
+                        listOf(h.oddHeader, h.oddFooter, h.evenHeader, h.evenFooter, h.firstHeader, h.firstFooter).toString()
+                    } else "-"
+                },
+            )
+            sheets[wb.getSheetName(i)] = SheetFacts(cells, rows, columns, sheetFacts)
+        }
+        Facts(
+            linkedMapOf(
+                "sheet order" to sheets.keys.toString(),
+                "defined names" to safe("?") { wb.allNames.map { "${it.nameName}|scope=${it.sheetIndex}|${safe("?") { it.refersToFormula }}" }.sorted().toString() },
+                "active sheet" to wb.activeSheetIndex.toString(),
+                "sheet visibility" to (0 until wb.numberOfSheets).map { wb.getSheetVisibility(it) }.toString(),
+                "date1904" to wb.isDate1904.toString(),
+            ),
+            sheets,
+        )
+    }
+
+    /**
+     * The ways [after] differs from [before], keyed by kind of difference, each with one
+     * example. Sheets are matched by name; a sheet present on one side only shows up under
+     * "workbook: sheet order".
+     */
+    fun differences(before: ByteArray, after: ByteArray): Map<String, String> {
+        val a = facts(before)
+        val b = facts(after)
+        val found = LinkedHashMap<String, String>()
+        fun hit(kind: String, example: String) { found.getOrPut(kind) { example } }
+
+        for ((k, v) in a.workbook) if (b.workbook[k] != v) hit("workbook: $k", "$v -> ${b.workbook[k]}")
+        for ((name, sa) in a.sheets) {
+            val sb = b.sheets[name] ?: continue
+            for ((ref, ca) in sa.cells) {
+                val at = "$name!$ref"
+                val cb = sb.cells[ref]
+                if (cb == null) {
+                    if (ca.type == CellType.BLANK) { if (ca.styled) hit("styled blank cell dropped", at) } else hit("cell lost", "$at ${ca.type} '${ca.value}${ca.formula ?: ""}'")
+                    continue
+                }
+                if (ca.type != cb.type) hit("cell type", "$at ${ca.type} -> ${cb.type}")
+                else when (ca.type) {
+                    CellType.STRING -> if (ca.value != cb.value) hit("string", "$at '${ca.value}' -> '${cb.value}'")
+                    CellType.NUMERIC -> if (ca.value != cb.value) hit("number", "$at ${ca.value} -> ${cb.value}")
+                    CellType.BOOLEAN -> if (ca.value != cb.value) hit("boolean", at)
+                    CellType.ERROR -> if (ca.value != cb.value) hit("error", "$at ${ca.value} -> ${cb.value}")
+                    CellType.FORMULA -> {
+                        if (normalised(ca.formula) != normalised(cb.formula)) hit("formula", "$at '${ca.formula}' -> '${cb.formula}'")
+                        if (!ca.rawValue.isNullOrEmpty() && ca.rawValue != cb.rawValue) hit("cached result", "$at '${ca.rawValue}' -> '${cb.rawValue}'")
+                    }
+                    else -> Unit
+                }
+                ca.style.zip(cb.style).filter { it.first != it.second }.forEach { (x, y) -> hit("style: ${x.substringBefore('=')}", "$at $x -> $y") }
+            }
+            for ((ref, cb) in sb.cells) if (ref !in sa.cells && cb.type != CellType.BLANK) hit("cell appeared", "$name!$ref")
+            for ((r, ra) in sa.rows) {
+                val rb = sb.rows[r]
+                if (rb == null) {
+                    if (ra != listOf("hidden=false", "height=-", "outline level=0", "style=-")) hit("row dropped", "$name row ${r + 1} $ra")
+                    continue
+                }
+                ra.zip(rb).filter { it.first != it.second }.forEach { (x, y) -> hit("row: ${x.substringBefore('=')}", "$name row ${r + 1}: $x -> $y") }
+            }
+            sa.columns.zip(sb.columns).forEachIndexed { c, (x, y) ->
+                x.zip(y).filter { it.first != it.second }.forEach { (p, q) -> hit("column: ${p.substringBefore('=')}", "$name column ${c + 1}: $p -> $q") }
+            }
+            for ((k, v) in sa.facts) if (sb.facts[k] != v) hit("sheet: $k", "$name: $v -> ${sb.facts[k]}")
+        }
+        return found
+    }
+}
+
+/**
+ * Asserts that Kexcel reads the same value as POI from every cell of [bytes]: text,
+ * numbers, booleans, formulas, and — for the cells POI considers date-formatted — the
+ * same calendar date and time. This is the reader's counterpart of [assertOnlyDiffers].
+ *
+ * Cells POI sees but the model does not hold are skipped: those under a merged region,
+ * blank ones, and error literals, which the model surfaces as formulas.
+ */
+internal fun assertReadsLikePoi(bytes: ByteArray, what: String = "workbook") {
+    val excel = Excel.decodeBytes(bytes)
+    val problems = mutableListOf<String>()
+    PoiOracle.read(bytes) { wb ->
+        for (i in 0 until wb.numberOfSheets) {
+            val poiSheet = wb.getSheetAt(i)
+            val sheet = excel.tables[poiSheet.sheetName] ?: continue
+            for (row in poiSheet) for (cell in row) {
+                if (poiSheet.mergedRegions.any { it.isInRange(cell) && !(it.firstRow == cell.rowIndex && it.firstColumn == cell.columnIndex) }) continue
+                val value = sheet.sheetData[cell.rowIndex]?.get(cell.columnIndex)?.value
+                val at = "${poiSheet.sheetName}!${cell.address}"
+                fun differs(expected: Any?) { problems += "$at POI=$expected Kexcel=${value?.let { it::class.simpleName + "(" + it + ")" }}" }
+                when (cell.cellType) {
+                    CellType.STRING -> if (value?.toString() != cell.stringCellValue) differs(cell.stringCellValue)
+                    CellType.BOOLEAN -> if ((value as? com.gyanoba.kexcel.sheet.BoolCellValue)?.value != cell.booleanCellValue) differs(cell.booleanCellValue)
+                    CellType.FORMULA -> if (PoiOracle.normalised((value as? com.gyanoba.kexcel.sheet.FormulaCellValue)?.formula) != PoiOracle.normalised(cell.cellFormula)) differs(cell.cellFormula)
+                    CellType.NUMERIC -> {
+                        val number = cell.numericCellValue
+                        val expected = if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell) && org.apache.poi.ss.usermodel.DateUtil.isValidExcelDate(number)) cell.localDateTimeCellValue else null
+                        val matches = when (value) {
+                            is com.gyanoba.kexcel.sheet.IntCellValue -> expected == null && value.value.toDouble() == number
+                            is com.gyanoba.kexcel.sheet.DoubleCellValue -> expected == null && value.value == number
+                            is com.gyanoba.kexcel.sheet.DateCellValue -> expected == java.time.LocalDateTime.of(value.year, value.month, value.day, 0, 0)
+                            is com.gyanoba.kexcel.sheet.DateTimeCellValue -> expected != null && java.time.Duration.between(
+                                java.time.LocalDateTime.of(value.year, value.month, value.day, value.hour, value.minute, value.second, value.millisecond * 1_000_000), expected,
+                            ).abs().toMillis() <= 1
+                            is com.gyanoba.kexcel.sheet.TimeCellValue -> expected != null && number < 1.0 &&
+                                kotlin.math.abs(expected.toLocalTime().toNanoOfDay() / 1_000_000 - (((value.hour * 60L + value.minute) * 60 + value.second) * 1000 + value.millisecond)) <= 1
+                            else -> false
+                        }
+                        if (!matches) differs(expected ?: number)
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+    if (problems.isNotEmpty()) fail("Kexcel reads $what differently from POI in ${problems.size} cells:\n  " + problems.take(12).joinToString("\n  "))
+}
+
+/** Shorthand for the common Kexcel-side step: read, optionally edit, save. */
+internal fun roundTrip(bytes: ByteArray, edit: (Excel) -> Unit = {}): ByteArray =
+    Excel.decodeBytes(bytes).also(edit).encode()!!
+
+/**
+ * Asserts that POI sees no difference between [before] and [after] apart from the kinds
+ * named in [expected] — and that every kind in [expected] really does differ, so an entry
+ * cannot outlive the defect it was excusing.
+ */
+internal fun assertOnlyDiffers(before: ByteArray, after: ByteArray, expected: Set<String> = emptySet(), what: String = "workbook") {
+    val found = PoiOracle.differences(before, after)
+    val unexpected = found.filterKeys { it !in expected }
+    if (unexpected.isNotEmpty()) {
+        fail("$what changed in ways it should not have:\n" + unexpected.entries.joinToString("\n") { "  ${it.key}: ${it.value}" })
+    }
+    val stale = expected - found.keys
+    if (stale.isNotEmpty()) fail("$what no longer differs in $stale — remove them from the expected set")
+}
+

@@ -6,6 +6,7 @@ import com.gyanoba.kexcel.utils.twoDigits
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.number
+import kotlin.math.roundToLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.microseconds
@@ -22,7 +23,14 @@ public class Data private constructor(
     internal var _value: CellValue? = null,
     internal var _cellStyle: CellStyle? = null,
 ) {
-    private var _sheetName: String = sheet.sheetName
+
+    /**
+     * Set when the cell was read without an `s` attribute: the style object it was given
+     * for the API's sake. Such a cell takes its look from its row or column (§18.3.1.4),
+     * so while it still holds this very object, unchanged, it is written without `s` again
+     * — an explicit `s="0"` would override the row and column styles.
+     */
+    internal var implicitStyle: CellStyle? = null
 
     public companion object {
         /**
@@ -41,7 +49,7 @@ public class Data private constructor(
                 _columnIndex = dataObject.columnIndex,
                 _value = dataObject.value,
                 _cellStyle = dataObject.cellStyle,
-            )
+            ).also { it.implicitStyle = dataObject.implicitStyle }
     }
 
     /** Returns the row index. */
@@ -51,7 +59,7 @@ public class Data private constructor(
     public val columnIndex: Int get() = _columnIndex
 
     /** Returns the sheet name. */
-    public val sheetName: String get() = _sheetName
+    public val sheetName: String get() = sheet.sheetName
 
     /** Returns the cell index as a [CellIndex] (e.g. A1, Z5). */
     public val cellIndex: CellIndex
@@ -63,6 +71,7 @@ public class Data private constructor(
      * val cell = sheet.cell(CellIndex.indexByString("E5"))
      * cell.setFormula("=SUM(1,2)")
      * ```
+     * The leading `=` is optional; the saved file holds the expression without it.
      */
     public fun setFormula(formula: String) {
         sheet.updateCell(cellIndex, FormulaCellValue(formula))
@@ -88,7 +97,7 @@ public class Data private constructor(
 
     // Equatable-equivalent component list
     private fun props(): List<Any?> =
-        listOf(_value, _columnIndex, _rowIndex, _cellStyle, _sheetName)
+        listOf(_value, _columnIndex, _rowIndex, _cellStyle, sheetName)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -103,7 +112,35 @@ public class Data private constructor(
 
 // region --- CellValue sealed hierarchy ---
 
-public sealed class CellValue
+public sealed class CellValue {
+    /**
+     * How this value was stored in the file it was read from, or `null` for a value made
+     * in code. Values are immutable, so as long as a cell still holds the object the
+     * parser put there, the save path can write the cell back exactly as it was — the raw
+     * `<v>` text, the attributes of `<f>`, the cached result of a formula. Not part of
+     * equality.
+     */
+    internal var source: CellSource? = null
+}
+
+/**
+ * The stored form of one `<c>` element (§18.3.1.4).
+ *
+ * @property type the `t` attribute, `null` when absent
+ * @property rawValue the text of `<v>`, `null` when the cell has none
+ * @property hasFormula whether the cell carried an `<f>`; an error literal reads as a
+ *   [FormulaCellValue] without one
+ * @property formulaAttributes the attributes of `<f>` — `t="array"`, `ref`, `ca`, … — minus
+ *   the ones that only describe a shared-formula group once it has been expanded
+ * @property cellAttributes attributes of `<c>` that the model has no place for (`cm`, `vm`, `ph`)
+ */
+internal class CellSource(
+    val type: String?,
+    val rawValue: String?,
+    val hasFormula: Boolean = false,
+    val formulaAttributes: Map<String, String> = emptyMap(),
+    val cellAttributes: Map<String, String> = emptyMap(),
+)
 
 // endregion
 
@@ -125,6 +162,12 @@ public class IntCellValue(public val value: Long) : CellValue() {
 }
 
 public class DoubleCellValue(public val value: Double) : CellValue() {
+    init {
+        // A cell cannot hold NaN or an infinity: Excel has no such numbers, and `<v>NaN</v>`
+        // is a workbook neither Excel nor Kexcel itself can read back.
+        require(value.isFinite()) { "A cell value must be a finite number, was $value" }
+    }
+
     override fun toString(): String = value.toString()
     override fun hashCode(): Int = 31 * this::class.hashCode() + value.hashCode()
     override fun equals(other: Any?): Boolean = other is DoubleCellValue && other.value == value
@@ -222,7 +265,9 @@ public class TimeCellValue(
          * [fractionOfDay] = 1.0 is 24 hours, 0.5 is 12 hours, etc.
          */
         public fun fromFractionOfDay(fractionOfDay: Double): TimeCellValue {
-            val totalMs = (fractionOfDay * 24 * 3600 * 1000).toLong()
+            // Rounded, not truncated: 11 seconds is stored as 1.273148148148148E-4, which
+            // is 10999.99… ms. Truncating read 13% of all whole-second times a millisecond short.
+            val totalMs = (fractionOfDay * 24 * 3600 * 1000).roundToLong()
             return fromDuration(totalMs.milliseconds)
         }
 

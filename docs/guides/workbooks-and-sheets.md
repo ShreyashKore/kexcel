@@ -68,6 +68,19 @@ Renames a sheet. The old name must exist and the new name must not:
 excel.rename(oldSheetName = "Backup", newSheetName = "Archive")
 ```
 
+The sheet keeps its position among the tabs and everything on it. Formulas and
+defined names that refer to the sheet by name are updated to the new one.
+
+### Sheet names
+
+A name given to a new or renamed sheet must follow Excel's rules, or an
+`IllegalArgumentException` is thrown:
+
+- 1 to 31 characters;
+- none of `/ \ ? * [ ] :`;
+- no apostrophe at the start or the end;
+- unique in the workbook, ignoring case (`Sheet1` and `sheet1` are the same name).
+
 ### Delete
 
 Deletes a sheet. A workbook always keeps **at least one** sheet, so a delete that

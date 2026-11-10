@@ -1,20 +1,29 @@
 package com.gyanoba.kexcel.parser
 
-import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Attribute
 import com.fleeksoft.ksoup.nodes.Element
 import com.gyanoba.kexcel.archive.ArchiveFile
 import com.gyanoba.kexcel.Excel
 import com.gyanoba.kexcel.number_format.CustomNumFormat
+import com.gyanoba.kexcel.number_format.DateTimeNumFormat
 import com.gyanoba.kexcel.number_format.NumFormat
+import com.gyanoba.kexcel.number_format.TimeNumFormat
+import com.gyanoba.kexcel.number_format.serialFrom1904
 import com.gyanoba.kexcel.shared_strings.SharedString
 import com.gyanoba.kexcel.shared_strings.itemKey
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.Border
 import com.gyanoba.kexcel.sheet.BorderSet
 import com.gyanoba.kexcel.sheet.CellIndex
+import com.gyanoba.kexcel.sheet.CellSource
 import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.CellValue
+import com.gyanoba.kexcel.sheet.DateCellValue
+import com.gyanoba.kexcel.sheet.DateTimeCellValue
+import com.gyanoba.kexcel.sheet.TimeCellValue
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import com.gyanoba.kexcel.sheet.Element
 import com.gyanoba.kexcel.sheet.FontStyle
 import com.gyanoba.kexcel.sheet.FormulaCellValue
@@ -34,7 +43,6 @@ import com.gyanoba.kexcel.utils.findRows
 import com.gyanoba.kexcel.utils.*
 import com.gyanoba.kexcel.utils.getCellNumber
 import com.gyanoba.kexcel.utils.getRowNumber
-import com.gyanoba.kexcel.utils.normalizeNewLine
 import com.gyanoba.kexcel.utils.toExcelColor
 
 public class Parser internal constructor(private val excel: Excel) {
@@ -42,6 +50,8 @@ public class Parser internal constructor(private val excel: Excel) {
     private val rId: MutableList<String> = mutableListOf()
     // rId -> archive entry name of the worksheet part, e.g. `xl/worksheets/sheet1.xml`.
     private val worksheetPaths: MutableMap<String, String> = mutableMapOf()
+    // rId -> relationship type, for every relationship of the workbook part.
+    private val relationshipTypes: MutableMap<String, String> = mutableMapOf()
 
     internal fun startParsing() {
         putContentXml()
@@ -50,6 +60,7 @@ public class Parser internal constructor(private val excel: Excel) {
         parseSharedStrings()
         parseContent()
         parseMergedCells()
+        excel.valuesEdited = false
     }
 
     private fun normalizeTable(sheet: Sheet) {
@@ -62,7 +73,7 @@ public class Parser internal constructor(private val excel: Excel) {
     private fun putContentXml() {
         val file = excel.archive.findFile("[Content_Types].xml") ?: damagedExcel()
         file.decompress()
-        excel.xmlFiles["[Content_Types].xml"] = Ksoup.parseXml(file.content.decodeToString())
+        excel.xmlFiles["[Content_Types].xml"] = parseXmlPart(file.content.decodeToString())
     }
 
     private fun parseRelations() {
@@ -70,12 +81,13 @@ public class Parser internal constructor(private val excel: Excel) {
             ?: damagedExcel()
 
         relations.decompress()
-        val document = Ksoup.parseXml(relations.content.decodeToString())
+        val document = parseXmlPart(relations.content.decodeToString())
         excel.xmlFiles["xl/_rels/workbook.xml.rels"] = document
 
         document.getElementsByTag("Relationship").forEach { node ->
             val id = node.attr("Id")
             val target = node.attr("Target")
+            if (id != null) relationshipTypes[id] = node.attr("Type")
             if (target != null) {
                 when (node.attr("Type")) {
                     RELATIONSHIPS_STYLES -> excel.stylesPath = resolveWorkbookRelTarget(target)
@@ -162,7 +174,7 @@ public class Parser internal constructor(private val excel: Excel) {
         }
 
         sharedStrings!!.decompress()
-        val document = Ksoup.parseXml(sharedStrings.content.decodeToString())
+        val document = parseXmlPart(sharedStrings.content.decodeToString())
         excel.xmlFiles[excel.sharedStringsPath] = document
 
         document.getElementsByTag("si").forEach { node ->
@@ -180,14 +192,30 @@ public class Parser internal constructor(private val excel: Excel) {
     private fun parseContent(run: Boolean = true) {
         val workbook = excel.archive.findFile("xl/workbook.xml") ?: damagedExcel()
         workbook.decompress()
-        val document = Ksoup.parseXml(workbook.content.decodeToString())
+        val document = parseXmlPart(workbook.content.decodeToString())
         excel.xmlFiles["xl/workbook.xml"] = document
+        excel.date1904 = document.getElementsByTag("workbookPr").firstOrNull()?.attr("date1904")
+            ?.trim()?.lowercase().let { it == "1" || it == "true" || it == "on" }
 
-        document.getElementsByTag("sheet").forEach { node ->
+        val sheetNodes = document.getElementsByTag("sheet")
+        // A workbook always has at least one sheet (§18.2.20). Finding none means the part
+        // was not understood, and saving such a model would write an empty workbook over
+        // the real one.
+        if (run && sheetNodes.isEmpty()) damagedExcel(text = "xl/workbook.xml lists no sheets")
+
+        sheetNodes.forEach { node ->
             if (run) {
+                // <sheets> also lists chart sheets, macro sheets and dialog sheets
+                // (§18.2.19). Their parts are not worksheets and have no cells; they stay
+                // in the package as they are and simply have no Sheet in the model.
+                // An entry with no relationship id at all (POI corpus 60825.xlsx) names no
+                // part; POI skips it too. An id whose part is missing is still damage.
+                val id = relationshipId(node) ?: return@forEach
+                val type = relationshipTypes[id]
+                if (type != null && type != RELATIONSHIPS_WORKSHEET) return@forEach
                 parseTable(node)
             } else {
-                val rid = node.attr("r:id")
+                val rid = relationshipId(node)
                 if (rid != null && !rId.contains(rid)) {
                     rId.add(rid)
                 }
@@ -202,41 +230,33 @@ public class Parser internal constructor(private val excel: Excel) {
      * region except for the top-left cell, preserving its content.
      */
     private fun parseMergedCells() {
-        val spannedCells = mutableMapOf<String, MutableList<String>>()
-
         excel.sheets.forEach { (sheetName, node) ->
             excel.availSheet(sheetName)
             val sheetDataNode = node as Element
-            val spanList = mutableListOf<String>()
             val sheet = excel.sheetMap[sheetName]!!
+
+            // Membership is checked in a set: against the list it was a linear scan per
+            // merge, and with it a rebuild of the sheet's reference list, which made a
+            // sheet with 50,000 merges (POI corpus 57893-many-merges.xlsx) take minutes.
+            val known = HashSet<Span>(sheet.spanList.filterNotNull())
 
             val worksheetNode = sheetDataNode.parent()
             worksheetNode?.getElementsByTag("mergeCell")?.forEach { element ->
-                val ref = element.attr("ref")
-                if (ref != null && ref.contains(':') && ref.split(':').size == 2) {
-                    if (!sheet.spannedItems.contains(ref)) {
-                        sheet.addSpannedItem(ref)
-                    }
-
-                    val startCell = ref.split(':')[0]
-                    val endCell = ref.split(':')[1]
-
-                    if (!spanList.contains(startCell)) {
-                        spanList.add(startCell)
-                    }
-                    spannedCells[sheetName] = spanList
-
-                    val startIndex = CellIndex.indexByString(startCell)
-                    val endIndex = CellIndex.indexByString(endCell)
-                    val spanObj = Span.fromCellIndex(start = startIndex, end = endIndex)
-
-                    if (!sheet.spanList.contains(spanObj)) {
+                val corners = element.attr("ref").split(':')
+                if (corners.size == 2) {
+                    val spanObj = Span.fromCellIndex(
+                        start = CellIndex.indexByString(corners[0]),
+                        end = CellIndex.indexByString(corners[1]),
+                    )
+                    if (known.add(spanObj)) {
                         sheet.spanList.add(spanObj)
                         deleteAllButTopLeftCellsOfSpanObj(spanObj, sheet)
                     }
                     excel.addMergeChangeLookup(sheetName)
                 }
             }
+            // Derives the sheet's list of merge references from the spans just read.
+            sheet.spannedItems
         }
     }
 
@@ -253,40 +273,87 @@ public class Parser internal constructor(private val excel: Excel) {
             for (rowI in rowSpanStart..rowSpanEnd) {
                 val isTopLeft = columnI == columnSpanStart && rowI == rowSpanStart
                 if (isTopLeft) continue
+                // The cell stays in the file even though the model shows only the anchor:
+                // remember it for the save path.
+                sheet.sheetData[rowI]?.get(columnI)?.let { covered ->
+                    sheet.mergedCells.getOrPut(rowI) { mutableMapOf() }[columnI] = covered
+                }
                 sheet.removeCell(rowI, columnI)
             }
         }
     }
 
     // Reads the styles from the Excel file.
-    private fun parseStyles(stylesPath: String) {
+    private fun parseStyles(declaredPath: String) {
+        var stylesPath = declaredPath
+        if (stylesPath.isEmpty()) {
+            // The styles part is optional (§18.8): a workbook without one is unformatted,
+            // not damaged, and minimal writers leave it out. Give it the default one so
+            // that styling such a workbook works like any other.
+            stylesPath = "xl/styles.xml"
+            excel.stylesPath = stylesPath
+            val content = DEFAULT_STYLES.encodeToByteArray()
+            excel.archive.addFile(ArchiveFile(stylesPath, content.size, content))
+
+            val rIdNumber = getAvailableRid()
+            excel.xmlFiles["xl/_rels/workbook.xml.rels"]?.getElementsByTag("Relationships")?.firstOrNull()?.appendChild(
+                Element(
+                    "Relationship",
+                    listOf(Attribute("Id", "rId$rIdNumber"), Attribute("Type", RELATIONSHIPS_STYLES), Attribute("Target", "styles.xml")),
+                )
+            )
+            rId.add("rId$rIdNumber")
+
+            val contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"
+            val types = excel.xmlFiles["[Content_Types].xml"]
+            if (types?.getElementsByTag("Override")?.none { it.attr("ContentType") == contentType } == true) {
+                types.getElementsByTag("Types").firstOrNull()?.appendChild(
+                    Element("Override", listOf(Attribute("PartName", "/xl/styles.xml"), Attribute("ContentType", contentType)))
+                )
+            }
+        }
+
         val styles = excel.archive.findFile(stylesPath)
             ?: damagedExcel(text = "styles")
 
         styles.decompress()
-        val document = Ksoup.parseXml(styles.content.decodeToString())
+        val document = parseXmlPart(styles.content.decodeToString())
         excel.xmlFiles[stylesPath] = document
 
         excel.fontStyleList = mutableListOf()
         excel.patternFill = mutableListOf()
         excel.cellStyleList = mutableListOf()
+        excel.cellStylePristine = mutableListOf()
         excel.borderSetList = mutableListOf()
 
-        val fontList = document.getElementsByTag("font").toList()
+        // `fontId`, `fillId` and `borderId` (§18.8.45) count the direct children of
+        // <fonts>, <fills> and <borders>, and nothing else. The same element names occur
+        // under <dxfs> for conditional formats; taking every <font>, <patternFill> and
+        // <border> in the document made the three lists longer than the tables, and the
+        // ids of every style added later pointed past the end.
+        fun tableEntries(table: String, entry: String): List<Element> =
+            document.getElementsByTag(table).firstOrNull()?.children()?.filter { it.tagName() == entry }
+                ?: emptyList()
 
-        document.getElementsByTag("patternFill").forEach { node ->
-            val patternType = node.attr("patternType") ?: ""
-            if (node.children().isNotEmpty()) {
-                node.getElementsByTag("fgColor").forEach { child ->
-                    val rgb = child.attr("rgb") ?: ""
-                    excel.patternFill.add(rgb)
+        tableEntries("fonts", "font").forEach { excel.fontStyleList.add(parseFont(it)) }
+
+        tableEntries("fills", "fill").forEach { fill ->
+            val pattern = fill.children().firstOrNull { it.tagName() == "patternFill" }
+            val foreground = pattern?.children()?.firstOrNull { it.tagName() == "fgColor" }
+            excel.patternFill.add(
+                when {
+                    // A gradient, or a pattern without a colour Kexcel can express: the
+                    // entry still takes its place in the list, and reads as "no colour".
+                    pattern == null -> UNMODELLED_FILL
+                    // "" for a theme or indexed colour.
+                    foreground != null -> foreground.attr("rgb")
+                    pattern.children().isEmpty() -> pattern.attr("patternType").ifEmpty { "none" }
+                    else -> UNMODELLED_FILL
                 }
-            } else {
-                excel.patternFill.add(patternType)
-            }
+            )
         }
 
-        document.getElementsByTag("border").forEach { node ->
+        tableEntries("borders", "border").forEach { node ->
             val diagonalUp = node.attr("diagonalUp").trim()
                 .let { it.isNotEmpty() && it != "0" && it != "false" }
             val diagonalDown = node.attr("diagonalDown").trim()
@@ -325,9 +392,8 @@ public class Parser internal constructor(private val excel: Excel) {
             node1.getElementsByTag("numFmt").forEach { node ->
                 val numFmtId = node.attr("numFmtId")!!.toInt()
                 val formatCode = node.attr("formatCode")!!
-                if (numFmtId >= 164) {
-                    excel.numFormats.add(numFmtId, NumFormat.custom(formatCode) as CustomNumFormat)
-                }
+                // What the file declares is what its cells mean, also for an id below 164.
+                excel.numFormats.declare(numFmtId, NumFormat.custom(formatCode))
             }
         }
 
@@ -351,61 +417,15 @@ public class Parser internal constructor(private val excel: Excel) {
                 var textWrapping: TextWrapping? = null
                 var rotation = 0
 
-                val fontId = getFontIndex(node, "fontId")
-                val fontStyle = FontStyle()
-
-                if (fontId < fontList.size) {
-                    val font = fontList[fontId]
-
-                    val clr = nodeChildren(font, "color", attribute = "rgb")
-                    if (clr != null && clr !is Boolean) {
-                        fontColor = clr.toString()
-                    }
-
-                    val size = nodeChildren(font, "sz", attribute = "val")
-                    if (size != null) {
-                        fontSize = size.toString().toDouble().toInt()
-                    }
-
-                    // Presence alone is not enough: <b val="0"/> is an explicit "not bold".
-                    if (nodeChildren(font, "b") != null) {
-                        isBold = isOnOff(nodeChildren(font, "b", attribute = "val") as String?)
-                    }
-
-                    if (nodeChildren(font, "i") != null) {
-                        isItalic = isOnOff(nodeChildren(font, "i", attribute = "val") as String?)
-                    }
-
-                    // <u/> is a single underline, <u val="double"/> a double one. A missing
-                    // attribute reads back as "", so only an explicit "double" counts.
-                    if (nodeChildren(font, "u") != null) {
-                        underline = if (nodeChildren(font, "u", attribute = "val") == "double") {
-                            Underline.Double
-                        } else {
-                            Underline.Single
-                        }
-                    }
-
-                    val family = nodeChildren(font, "name", attribute = "val")
-                    if (family != null && family != true) {
-                        fontFamily = family.toString()
-                    }
-
-                    val scheme = nodeChildren(font, "scheme", attribute = "val")
-                    if (scheme != null) {
-                        fontScheme = if (scheme == "major") FontScheme.Major else FontScheme.Minor
-                    }
-
-                    fontStyle.isBold = isBold
-                    fontStyle.isItalic = isItalic
-                    fontStyle.fontSize = fontSize
-                    fontStyle.fontFamily = fontFamily
-                    fontStyle.fontScheme = fontScheme
-                    fontStyle.fontColorHex = fontColor.toExcelColor()
-                }
-
-                if (fontStyleIndex(excel.fontStyleList, fontStyle) == -1) {
-                    excel.fontStyleList.add(fontStyle)
+                val font = excel.fontStyleList.getOrNull(getFontIndex(node, "fontId"))
+                if (font != null) {
+                    fontColor = font.fontColorHex.colorHex
+                    fontSize = font.fontSize ?: 12
+                    isBold = font.isBold
+                    isItalic = font.isItalic
+                    underline = font.underline
+                    fontFamily = font.fontFamily
+                    fontScheme = font.fontScheme
                 }
 
                 val fillId = getFontIndex(node, "fillId")
@@ -470,8 +490,9 @@ public class Parser internal constructor(private val excel: Excel) {
                     bold = isBold,
                     italic = isItalic,
                     underline = underline,
-                    backgroundColorHex = if (backgroundColor == "none" || backgroundColor.isEmpty())
-                        ExcelColor.none else backgroundColor.toExcelColor(),
+                    // A pattern name ("gray125") is not a colour either.
+                    backgroundColorHex = if (assertHexString(backgroundColor))
+                        backgroundColor.toExcelColor() else ExcelColor.none,
                     horizontalAlign = horizontalAlign,
                     verticalAlign = verticalAlign,
                     textWrapping = textWrapping,
@@ -486,22 +507,37 @@ public class Parser internal constructor(private val excel: Excel) {
                     numberFormat = numFormat
                 )
 
+                excel.cellStylePristine.add(cellStyle.copyWith())
+                cellStyle.xfIndex = excel.cellStyleList.size
+                cellStyle.owner = excel
                 excel.cellStyleList.add(cellStyle)
             }
         }
     }
 
-    /**
-     * Returns the attribute value of [attribute] on the first [child] element found under [node],
-     * returns `true` if the child exists but has no [attribute], or `null` if [child] is absent.
-     */
-    private fun nodeChildren(node: Element, child: String, attribute: String? = null): Any? {
-        val elements = node.getElementsByTag(child)
-        if (elements.isEmpty()) return null
-        if (attribute != null) {
-            return elements.first()?.attr(attribute)
-        }
-        return true // child present — used as a signal for bold/italic
+    /** One `<font>` of the styles part (§18.8.22), reduced to what [CellStyle] models. */
+    private fun parseFont(font: Element): FontStyle {
+        fun child(name: String) = font.children().firstOrNull { it.tagName() == name }
+
+        return FontStyle(
+            // A theme or indexed colour has no `rgb` and reads as the default black.
+            fontColorHex = (child("color")?.attr("rgb")?.takeIf { it.isNotEmpty() } ?: ExcelColor.black.colorHex).toExcelColor(),
+            fontSize = child("sz")?.attr("val")?.toDoubleOrNull()?.toInt() ?: 12,
+            fontFamily = child("name")?.attr("val")?.takeIf { it.isNotEmpty() },
+            fontScheme = child("scheme")?.let { if (it.attr("val") == "major") FontScheme.Major else FontScheme.Minor }
+                ?: FontScheme.Unset,
+            // Presence alone is not enough: <b val="0"/> is an explicit "not bold".
+            isBold = child("b")?.let { isOnOff(it.attr("val")) } ?: false,
+            isItalic = child("i")?.let { isOnOff(it.attr("val")) } ?: false,
+            // <u/> is a single underline, <u val="double"/> a double one.
+            underline = child("u")?.let {
+                when (it.attr("val")) {
+                    "double" -> Underline.Double
+                    "none" -> Underline.None
+                    else -> Underline.Single
+                }
+            } ?: Underline.None,
+        )
     }
 
     private fun getFontIndex(node: Element, text: String): Int {
@@ -513,7 +549,7 @@ public class Parser internal constructor(private val excel: Excel) {
     internal fun parseTable(node: Element?) {
         node ?: damagedExcel(text = "Missing <sheet> node in workbook.xml")
         val name = node.attr("name")
-        val path = worksheetPaths[node.attr("r:id")]
+        val path = worksheetPaths[relationshipId(node)]
 
         if (excel.sheetMap[name] == null) {
             excel.sheetMap[name] = Sheet(excel, name)
@@ -525,7 +561,7 @@ public class Parser internal constructor(private val excel: Excel) {
             ?: damagedExcel(text = "Missing worksheet part for sheet '$name'")
         file.decompress()
 
-        val content = Ksoup.parseXml(file.content.decodeToString())
+        val content = parseXmlPart(file.content.decodeToString())
         val worksheet = content.getElementsByTag("worksheet").first()
 
         // Check for right-to-left view
@@ -541,9 +577,11 @@ public class Parser internal constructor(private val excel: Excel) {
         // the element's position is implied by document order, so the running index of the
         // previous sibling is threaded through the parse.
         var previousRowIndex = -1
+        val sharedFormulas = SharedFormulas()
         findRows(sheet).forEach { child ->
-            previousRowIndex = parseRow(child, sheetObject, name, previousRowIndex)
+            previousRowIndex = parseRow(child, sheetObject, name, previousRowIndex, sharedFormulas)
         }
+        sharedFormulas.resolveLateFollowers(sheetObject)
 
         parseHeaderFooter(worksheet, sheetObject)
         parseColWidthsRowHeights(worksheet, sheetObject)
@@ -555,14 +593,61 @@ public class Parser internal constructor(private val excel: Excel) {
         normalizeTable(sheetObject)
     }
 
+    /**
+     * The shared formulas of one worksheet (§18.3.1.40). The expression is written once, on
+     * the first cell of the group (`<f t="shared" ref="B1:B3" si="0">A1*2</f>`); every other
+     * cell says only `<f t="shared" si="0"/>` and means "that expression, moved to where I
+     * am". Excel writes a formula this way whenever it is filled down or across.
+     *
+     * The followers are expanded while reading, as POI does
+     * (`XSSFCell.convertSharedFormula`), so each cell holds its own expression and the
+     * group does not have to be kept consistent through later edits.
+     */
+    private class SharedFormulas {
+        class Master(val formula: String, val row: Int, val column: Int)
+        class Follower(val row: Int, val column: Int, val si: Int, val source: CellSource)
+
+        val masters = mutableMapOf<Int, Master>()
+        val lateFollowers = mutableListOf<Follower>()
+
+        fun expand(si: Int, row: Int, column: Int): String? =
+            masters[si]?.let { shiftFormulaReferences(it.formula, row - it.row, column - it.column) }
+
+        /** A follower normally comes after its master in document order; this handles one that did not. */
+        fun resolveLateFollowers(sheet: Sheet) {
+            lateFollowers.forEach { follower ->
+                val formula = expand(follower.si, follower.row, follower.column) ?: return@forEach
+                val data = sheet.sheetData[follower.row]?.get(follower.column) ?: return@forEach
+                data._value = FormulaCellValue(formula).also {
+                    it.source = CellSource(
+                        type = follower.source.type,
+                        rawValue = follower.source.rawValue,
+                        hasFormula = true,
+                        formulaAttributes = follower.source.formulaAttributes - SHARED_GROUP_ATTRIBUTES,
+                        cellAttributes = follower.source.cellAttributes,
+                    )
+                }
+            }
+        }
+    }
+
     /** Parses one `<row>` and returns the row index it occupied. */
-    private fun parseRow(node: Element, sheetObject: Sheet, name: String, previousRowIndex: Int): Int {
+    private fun parseRow(
+        node: Element,
+        sheetObject: Sheet,
+        name: String,
+        previousRowIndex: Int,
+        sharedFormulas: SharedFormulas,
+    ): Int {
         val rowIndex = getRowNumber(node)?.minus(1) ?: (previousRowIndex + 1)
         if (rowIndex < 0) return previousRowIndex
 
+        val attributes = node.attributes().filter { it.key != "r" }.associate { it.key to it.value }
+        if (attributes.isNotEmpty()) sheetObject.rowAttributes[rowIndex] = attributes
+
         var previousColumnIndex = -1
         findCells(node).forEach { child ->
-            previousColumnIndex = parseCell(child, sheetObject, rowIndex, name, previousColumnIndex)
+            previousColumnIndex = parseCell(child, sheetObject, rowIndex, name, previousColumnIndex, sharedFormulas)
         }
         return rowIndex
     }
@@ -574,6 +659,7 @@ public class Parser internal constructor(private val excel: Excel) {
         rowIndex: Int,
         name: String,
         previousColumnIndex: Int,
+        sharedFormulas: SharedFormulas,
     ): Int {
         val columnIndex = getCellNumber(node) ?: (previousColumnIndex + 1)
 
@@ -589,84 +675,186 @@ public class Parser internal constructor(private val excel: Excel) {
                 excel.cellStyleReferenced[name]!![rC] = s
             }
         }
+        val style = excel.cellStyleList.getOrNull(s)
+            ?: damagedExcel("Cell ${node.attr("r")} uses style $s, but styles.xml has only ${excel.cellStyleList.size}")
 
-        val value: CellValue?
-        val type = node.attr("t")
+        val type = node.attr("t").takeIf { it.isNotEmpty() }
+        val valueNode = node.getElementsByTag("v").firstOrNull()
+        val rawValue = valueNode?.let { parseValue(it) }
+        val cellAttributes = CELL_PASS_THROUGH_ATTRIBUTES
+            .mapNotNull { key -> node.attribute(key)?.let { key to it.value } }
+            .toMap()
 
         // `t` describes the cached result in <v>, not the cell: a boolean-, error- or
         // string-typed cell can still be a formula. The expression is what Kexcel models
-        // (and writes back as <f>), so it wins over the cache whatever the type. Shared and
-        // inline strings cannot carry a formula.
-        val formulaNode = if (type == "s" || type == "inlineStr") null
-        else node.getElementsByTag("f").firstOrNull()
+        // (and writes back as <f>), so it wins over the cache whatever the type.
+        val formulaNode = node.getElementsByTag("f").firstOrNull()
 
-        value = if (formulaNode != null) FormulaCellValue(parseValue(formulaNode)) else when (type) {
+        val value: CellValue? = if (formulaNode != null) {
+            parseFormula(formulaNode, node, type, rawValue, cellAttributes, rowIndex, columnIndex, sharedFormulas)
+        } else when (type) {
             // shared string
             "s" -> {
-                val raw = parseValue(node.getElementsByTag("v").firstOrNull()).trim()
-                val index = raw.toIntOrNull()
-                    ?: damagedExcel("Cell ${node.attr("r")} has a non-numeric shared string index: `$raw`")
-                val sharedString = excel.sharedStrings.value(index)
-                    ?: damagedExcel(
-                        "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
-                    )
-                TextCellValue.span(sharedString.textSpan).also { it.sourceItem = sharedString.node }
+                val raw = (rawValue ?: "").trim()
+                // No index at all is a string cell with nothing in it; POI reads it as an
+                // empty string. Only an index that is *wrong* means damage.
+                if (raw.isEmpty()) TextCellValue("").also {
+                    it.source = CellSource(type, rawValue = null, cellAttributes = cellAttributes)
+                } else {
+                    val index = raw.toIntOrNull()
+                        ?: damagedExcel("Cell ${node.attr("r")} has a non-numeric shared string index: `$raw`")
+                    val sharedString = excel.sharedStrings.value(index)
+                        ?: damagedExcel(
+                            "Cell ${node.attr("r")} references shared string $index, which is not in sharedStrings.xml"
+                        )
+                    TextCellValue.span(sharedString.textSpan).also {
+                        it.sourceItem = sharedString.node
+                        it.source = CellSource(type, rawValue = null, cellAttributes = cellAttributes)
+                    }
+                }
+            }
+            // A date in ISO 8601 form (§18.18.11, ST_CellType `d`), which is how the Strict
+            // conformance class stores dates and what some exporters write.
+            "d" -> if (rawValue.isNullOrBlank()) null else {
+                isoDateTime(rawValue.trim(), node.attr("r"))
+                    .also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
             }
             // boolean
-            "b" -> BoolCellValue(parseValue(node.getElementsByTag("v").first()) == "1")
+            "b" -> BoolCellValue(rawValue == "1")
+                .also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
             // error. No dedicated error type exists, so the literal is kept as a formula
-            // that evaluates to the same error.
-            "e" -> FormulaCellValue(parseValue(node.getElementsByTag("v").first()))
+            // that evaluates to the same error; its source remembers it had no <f>, and an
+            // untouched cell is written back as the error literal it was.
+            "e" -> FormulaCellValue(rawValue ?: "")
+                .also { it.source = CellSource(type, rawValue, hasFormula = false, cellAttributes = cellAttributes) }
             // A formula's string result without its <f>: all that is left is the text. As a
             // formula it would be written back as <f>text</f>, which Excel shows as #NAME?.
-            "str" -> TextCellValue(parseValue(node.getElementsByTag("v").first()))
+            "str" -> TextCellValue(decodeXmlString(rawValue ?: ""))
+                .also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
             // inline string. <is> shares the CT_Rst content model with a shared string's
             // <si>, so it is read with the same code — otherwise everything after the
             // first run of a rich inline string would be dropped.
-            "inlineStr" -> {
-                val isEl = node.getElementsByTag("is").firstOrNull()
-                if (isEl == null) TextCellValue("")
-                else {
-                    val item = SharedString(Element("si", emptyList(), isEl.childNodesCopy()))
-                    TextCellValue.span(item.textSpan).also { it.sourceItem = item.node }
-                }
-            }
+            "inlineStr" -> inlineString(node)
+                .also { it.source = CellSource(type, rawValue = null, cellAttributes = cellAttributes) }
             // number (default)
-            else -> {
-                val vNode = node.getElementsByTag("v").firstOrNull()
+            else -> when {
                 // An empty <v/> carries no number. Producers emit it for a cell that
                 // has a style but no value; feeding "" to a NumFormat would throw.
-                val raw = vNode?.let { parseValue(it) }
-                when {
-                    raw.isNullOrBlank() -> null
-                    s1 != null -> {
-                        val numFmtId = excel.numFmtIds[s]
-                        val numFormat = excel.numFormats.getByNumFmtId(numFmtId)
-                            ?: NumFormat.defaultNumeric
-                        numFormat.read(raw)
+                rawValue.isNullOrBlank() -> null
+                else -> {
+                    val numFormat = if (s1 != null) {
+                        excel.numFormats.getByNumFmtId(excel.numFmtIds.getOrElse(s) { 0 }) ?: NumFormat.defaultNumeric
+                    } else NumFormat.defaultNumeric
+                    // Pretty-printed XML puts whitespace around the number.
+                    val number = rawValue.trim()
+                    val isDateFormat = numFormat is DateTimeNumFormat || numFormat is TimeNumFormat
+                    val read = try {
+                        numFormat.read(if (excel.date1904 && isDateFormat) serialFrom1904(number) else number)
+                    } catch (e: NumberFormatException) {
+                        damagedExcel("Cell ${node.attr("r")} holds `$number`, which is not a number")
                     }
-                    else -> NumFormat.defaultNumeric.read(raw)
+                    read.also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
                 }
             }
         }
 
-        sheetObject.updateCell(
-            CellIndex.indexByColumnRow(columnIndex = columnIndex, rowIndex = rowIndex),
-            value,
-            cellStyle = excel.cellStyleList[s]
-        )
+        sheetObject.putParsed(rowIndex, columnIndex, value, style, styleIsImplicit = s1 == null)
         return columnIndex
+    }
+
+    /** Reads `2024-01-15`, `2024-01-15T10:30:00`, `2024-01-15T10:30:00.250Z` or `10:30:00`. */
+    private fun isoDateTime(text: String, cellRef: String): CellValue {
+        val value = text.removeSuffix("Z")
+        return try {
+            when {
+                'T' in value -> DateTimeCellValue.fromLocalDateTime(LocalDateTime.parse(value))
+                '-' in value -> DateCellValue.fromLocalDate(LocalDate.parse(value))
+                else -> LocalTime.parse(value).let { TimeCellValue(it.hour, it.minute, it.second, it.nanosecond / 1_000_000, (it.nanosecond / 1_000) % 1_000) }
+            }
+        } catch (e: IllegalArgumentException) {
+            damagedExcel("Cell $cellRef holds `$text`, which is not an ISO 8601 date")
+        }
+    }
+
+    private fun inlineString(cell: Element): TextCellValue {
+        val isEl = cell.getElementsByTag("is").firstOrNull() ?: return TextCellValue("")
+        val item = SharedString(Element("si", emptyList(), isEl.childNodesCopy()))
+        return TextCellValue.span(item.textSpan).also { it.sourceItem = item.node }
+    }
+
+    private fun parseFormula(
+        formulaNode: Element,
+        cell: Element,
+        type: String?,
+        rawValue: String?,
+        cellAttributes: Map<String, String>,
+        rowIndex: Int,
+        columnIndex: Int,
+        sharedFormulas: SharedFormulas,
+    ): FormulaCellValue {
+        var formula = parseValue(formulaNode)
+        var attributes = formulaNode.attributes().associate { it.key to it.value }
+
+        // The cached result of a string-typed cell is an index into a table that is rebuilt
+        // on save, or sits in <is>; either way it is kept as the text itself (`t="str"`).
+        var cachedType = type
+        var cachedValue = rawValue
+        when (type) {
+            "s" -> {
+                cachedType = "str"
+                cachedValue = rawValue?.trim()?.toIntOrNull()?.let { excel.sharedStrings.value(it)?.stringValue }
+            }
+            "inlineStr" -> {
+                cachedType = "str"
+                cachedValue = inlineString(cell).toString()
+            }
+        }
+
+        var lateFollower: Int? = null
+        if (attributes["t"] == "shared") {
+            val si = attributes["si"]?.trim()?.toIntOrNull()
+            if (si != null) {
+                if (formula.isNotEmpty()) {
+                    // The first cell that spells the expression out is the master. A follower
+                    // may repeat its own expression; it is already the right one.
+                    if (si !in sharedFormulas.masters) {
+                        sharedFormulas.masters[si] = SharedFormulas.Master(formula, rowIndex, columnIndex)
+                    }
+                    attributes = attributes - SHARED_GROUP_ATTRIBUTES
+                } else {
+                    val expanded = sharedFormulas.expand(si, rowIndex, columnIndex)
+                    if (expanded != null) {
+                        formula = expanded
+                        attributes = attributes - SHARED_GROUP_ATTRIBUTES
+                    } else {
+                        // Master not seen yet. The group attributes stay on the source so
+                        // that, should it never turn up, the cell is written back as it was.
+                        lateFollower = si
+                    }
+                }
+            }
+        }
+
+        val source = CellSource(cachedType, cachedValue, hasFormula = true, attributes, cellAttributes)
+        if (lateFollower != null) {
+            sharedFormulas.lateFollowers += SharedFormulas.Follower(rowIndex, columnIndex, lateFollower, source)
+        }
+        return FormulaCellValue(formula).also { it.source = source }
     }
 
 
 
+    /**
+     * A number N such that `rIdN` is not yet a relationship id of the workbook.
+     *
+     * Ids are opaque strings (OPC §9.2); `rId1`, `rId2`, … is only Excel's habit. The
+     * OpenXML SDK writes ids such as `R856eb3046363446b`, and parsing those as numbers
+     * threw, which made such a workbook impossible to open or to add a sheet to.
+     */
     private fun getAvailableRid(): Int {
-        rId.sortWith(Comparator { a, b ->
-            a.substring(3).toInt().compareTo(b.substring(3).toInt())
-        })
-        val lastRid = rId.last()
-        val digits = lastRid.filter { it.isDigit() }
-        return digits.toInt() + 1
+        val pattern = Regex("""^rId(\d+)$""")
+        val highest = rId.mapNotNull { pattern.find(it)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
+        return highest + 1
     }
 
     /**
@@ -702,6 +890,15 @@ public class Parser internal constructor(private val excel: Excel) {
         }
 
         val sheetNumber = sheetId
+        // `sheetId` and the part name are unrelated (§18.2.19): after a sheet is deleted in
+        // Excel the ids keep their gap while the parts are renumbered. Naming the new part
+        // after the id could therefore land on a part that already holds another sheet.
+        var partNumber = sheetNumber
+        while (excel.archive.findFile("xl/worksheets/sheet$partNumber.xml") != null ||
+            worksheetPaths.containsValue("xl/worksheets/sheet$partNumber.xml")
+        ) {
+            partNumber++
+        }
         val ridNumber = getAvailableRid()
 
         // NOTE: `Element.children()` returns a detached copy of the child list — appending to it
@@ -715,7 +912,7 @@ public class Parser internal constructor(private val excel: Excel) {
                     listOf(
                         Attribute("Id", "rId$ridNumber"),
                         Attribute("Type", "$RELATIONSHIPS/worksheet"),
-                        Attribute("Target", "worksheets/sheet$sheetNumber.xml")
+                        Attribute("Target", "worksheets/sheet$partNumber.xml")
                     )
                 )
             )
@@ -730,7 +927,7 @@ public class Parser internal constructor(private val excel: Excel) {
                 Attribute("state", "visible"),
                 Attribute("name", newSheet),
                 Attribute("sheetId", "$sheetNumber"),
-                Attribute("r:id", "rId$ridNumber")
+                Attribute("${relationshipsPrefix(excel.xmlFiles["xl/workbook.xml"]!!)}:id", "rId$ridNumber")
             )
         )
 
@@ -741,7 +938,7 @@ public class Parser internal constructor(private val excel: Excel) {
 
         sheetsNode.appendChild(sheetNode)
 
-        worksheetPaths["rId$ridNumber"] = "xl/worksheets/sheet$sheetNumber.xml"
+        worksheetPaths["rId$ridNumber"] = "xl/worksheets/sheet$partNumber.xml"
 
         val worksheetXml = """
             <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -761,17 +958,17 @@ public class Parser internal constructor(private val excel: Excel) {
 
         excel.archive.addFile(
             ArchiveFile(
-                "xl/worksheets/sheet$sheetNumber.xml",
+                "xl/worksheets/sheet$partNumber.xml",
                 worksheetXml.size,
                 worksheetXml
             )
         )
 
-        val newSheetFile = excel.archive.findFile("xl/worksheets/sheet$sheetNumber.xml")!!
+        val newSheetFile = excel.archive.findFile("xl/worksheets/sheet$partNumber.xml")!!
         newSheetFile.decompress()
-        val document = Ksoup.parseXml(newSheetFile.content.decodeToString())
-        excel.xmlFiles["xl/worksheets/sheet$sheetNumber.xml"] = document
-        excel.xmlSheetId[newSheet] = "xl/worksheets/sheet$sheetNumber.xml"
+        val document = parseXmlPart(newSheetFile.content.decodeToString())
+        excel.xmlFiles["xl/worksheets/sheet$partNumber.xml"] = document
+        excel.xmlSheetId[newSheet] = "xl/worksheets/sheet$partNumber.xml"
 
         excel.xmlFiles["[Content_Types].xml"]
             ?.getElementsByTag("Types")
@@ -784,7 +981,7 @@ public class Parser internal constructor(private val excel: Excel) {
                             "ContentType",
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
                         ),
-                        Attribute("PartName", "/xl/worksheets/sheet$sheetNumber.xml")
+                        Attribute("PartName", "/xl/worksheets/sheet$partNumber.xml")
                     )
                 )
             )
@@ -812,22 +1009,25 @@ public class Parser internal constructor(private val excel: Excel) {
                 ?.let { sheetObject.setDefaultRowHeight(it) }
         }
 
-        // Parse custom column widths
-        // e.g. <col min="2" max="2" width="71.83" customWidth="1"/>
-        worksheet?.getElementsByTag("col")?.forEach { element ->
-            val colAttr = element.attr("min")
-            val widthAttr = element.attr("width")
-            if (colAttr != null && widthAttr != null) {
-                val col = colAttr.toIntOrNull()
-                val width = widthAttr.toDoubleOrNull()
-                if (col != null && width != null) {
-                    val colIndex = col - 1 // convert to 0-based index
-                    if (colIndex >= 0) {
-                        sheetObject._columnWidths[colIndex] = width
-                    }
-                }
-            }
+        // Parse the column definitions.
+        // e.g. <col min="2" max="4" width="71.83" customWidth="1" hidden="1" style="3"/>
+        // One <col> covers every column from `min` to `max` (§18.3.1.13). Reading only `min`
+        // gave the width to the first column of a range and lost it for the others.
+        worksheet?.getElementsByTag("cols")?.firstOrNull()?.children()?.filter { it.tagName() == "col" }?.forEach { element ->
+            val min = element.attr("min").trim().toIntOrNull() ?: return@forEach
+            val max = (element.attr("max").trim().toIntOrNull() ?: min).coerceAtMost(16384)
+            if (min < 1 || max < min) return@forEach
+            sheetObject.columnSpecs.add(
+                Sheet.ColumnSpec(
+                    min = min - 1,
+                    max = max - 1,
+                    attributes = element.attributes().filter { it.key != "min" && it.key != "max" }.associate { it.key to it.value },
+                )
+            )
+            val width = element.attr("width").toDoubleOrNull() ?: return@forEach
+            for (columnIndex in (min - 1)..(max - 1)) sheetObject._columnWidths[columnIndex] = width
         }
+        sheetObject.columnsDirty = false
 
         // Parse custom row heights
         // e.g. <row r="1" ht="44" customHeight="1" ...>
@@ -848,13 +1048,41 @@ public class Parser internal constructor(private val excel: Excel) {
     }
 
     internal companion object {
+        /**
+         * What a workbook with no styles part is given: the two fills every workbook has, one
+         * border, one `<xf>`, and the default font POI assumes for such a workbook
+         * (`StylesTable.createDefaultFont`).
+         */
+        const val DEFAULT_STYLES =
+            """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""" +
+                """<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""" +
+                """<fonts count="1"><font><sz val="11"/><color indexed="8"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>""" +
+                """<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>""" +
+                """<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>""" +
+                """<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>""" +
+                """<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>""" +
+                """</styleSheet>"""
+
+        /** Takes the place, in the fill list, of a `<fill>` that has no ARGB colour. */
+        const val UNMODELLED_FILL = ""
+
+        /** `<f>` attributes that describe a shared-formula group rather than the formula. */
+        val SHARED_GROUP_ATTRIBUTES = setOf("t", "si", "ref")
+
+        /**
+         * `<c>` attributes kept for an unedited cell: `cm` and `vm` index the cell and value
+         * metadata that make a formula a dynamic array or a value a rich data type
+         * (§18.3.1.4); `ph` marks phonetic text.
+         */
+        val CELL_PASS_THROUGH_ATTRIBUTES = listOf("cm", "vm", "ph")
+
         fun parseValue(node: Element?): String {
             if (node == null) return ""
             // Dart's _parseValue concatenates only this element's own text nodes
             // (ignoring descendant elements), preserving whitespace. Ksoup's
             // wholeOwnText() is the exact equivalent; children() would exclude
             // text nodes entirely and yield "".
-            return normalizeNewLine(node.wholeOwnText())
+            return node.wholeOwnText()
         }
     }
 }

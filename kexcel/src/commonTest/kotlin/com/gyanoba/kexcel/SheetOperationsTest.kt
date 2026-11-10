@@ -1,5 +1,8 @@
 package com.gyanoba.kexcel
 
+import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
+import com.gyanoba.kexcel.sheet.FormulaCellValue
 import com.gyanoba.kexcel.sheet.Border
 import com.gyanoba.kexcel.sheet.BorderStyle
 import com.gyanoba.kexcel.sheet.CellIndex
@@ -64,7 +67,11 @@ class SheetOperationsTest {
             if (Random.nextBoolean()) {
                 // Rename test
                 element.rename(element.getDefaultSheet()!!, newName)
-                assertNull(element.getDefaultSheet())
+                // The Dart original expects null here: its rename is a copy followed by a
+                // delete, and deleting the default sheet clears the default. Renaming a
+                // sheet does not change which sheet opens first in Excel, nor in POI
+                // (XSSFWorkbook.setSheetName leaves the active sheet alone).
+                assertEquals(newName, element.getDefaultSheet())
                 element.setDefaultSheet(newName)
                 assertEquals(newName, element.getDefaultSheet())
             } else {
@@ -170,4 +177,49 @@ class SheetOperationsTest {
     }
 
     // endregion
+
+
+    @Test
+    fun sheetNamesMustFollowExcelsRules() {
+        // The rules POI enforces in WorkbookUtil.validateSheetName. A workbook that breaks
+        // them is one Excel refuses to open or silently repairs.
+        val excel = Excel.createExcel()
+        for (bad in listOf("", "x".repeat(32), "a/b", "a\\b", "a?b", "a*b", "a[b", "a]b", "a:b", "'quoted'")) {
+            assertFailsWith<IllegalArgumentException>("`$bad` should be refused") { excel[bad] }
+            assertFailsWith<IllegalArgumentException>("`$bad` should be refused") { excel.rename("Sheet1", bad) }
+        }
+        // Names that differ only by case are the same name to Excel.
+        assertFailsWith<IllegalArgumentException> { excel["sheet1"] }
+        excel["Other"]
+        assertFailsWith<IllegalArgumentException> { excel.rename("Other", "SHEET1") }
+        assertEquals(setOf("Sheet1", "Other"), excel.tables.keys)
+
+        for (good in listOf("x".repeat(31), "A&B <1> \"q\"", "It's fine", " leading space", "Données")) {
+            excel[good].updateCell(CellIndex.indexByString("A1"), TextCellValue(good))
+        }
+        val reread = Excel.decodeBytes(excel.encode()!!)
+        assertEquals(TextCellValue("It's fine"), reread["It's fine"].cell(CellIndex.indexByString("A1")).value)
+        // Renaming a sheet to a different spelling of its own name is allowed.
+        excel.rename("Sheet1", "SHEET1")
+        assertTrue("SHEET1" in excel.tables.keys)
+    }
+
+    @Test
+    fun renamingASheetKeepsItsPlaceAndItsCells() {
+        val excel = Excel.createExcel()
+        excel["Sheet1"].updateCell(CellIndex.indexByString("A1"), TextCellValue("first"))
+        excel["Second"].updateCell(CellIndex.indexByString("A1"), FormulaCellValue("Sheet1!A1&\"!\""))
+        excel["Third"].updateCell(CellIndex.indexByString("A1"), TextCellValue("third"))
+
+        excel.rename("Sheet1", "Start Here")
+
+        assertEquals(listOf("Start Here", "Second", "Third"), excel.tables.keys.toList())
+        assertEquals("Start Here", excel["Start Here"].sheetName)
+        assertEquals("Start Here", excel["Start Here"].cell(CellIndex.indexByString("A1")).sheetName)
+        assertEquals(FormulaCellValue("'Start Here'!A1&\"!\""), excel["Second"].cell(CellIndex.indexByString("A1")).value)
+
+        val reread = Excel.decodeBytes(excel.encode()!!)
+        assertEquals(listOf("Start Here", "Second", "Third"), reread.tables.keys.toList())
+        assertEquals(TextCellValue("first"), reread["Start Here"].cell(CellIndex.indexByString("A1")).value)
+    }
 }

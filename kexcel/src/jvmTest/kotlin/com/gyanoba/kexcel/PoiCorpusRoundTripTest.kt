@@ -1,0 +1,123 @@
+package com.gyanoba.kexcel
+
+import kotlin.test.Test
+
+/**
+ * Real workbooks from the Apache POI test data, saved by Kexcel **without an edit** and
+ * compared with the original by POI.
+ *
+ * A round trip through Kexcel's own reader cannot see a property Kexcel does not model:
+ * if the reader drops it, the writer never knew it was there, and both agree. POI can see
+ * it. Each fixture was chosen because it caught a defect (the finding is named beside it,
+ * from `AUDIT-FINDINGS.md`); the `known` sets list what a file still loses, and
+ * [assertOnlyDiffers] fails when an entry there stops being true, so they can only shrink.
+ */
+class PoiCorpusRoundTripTest {
+
+    private fun assertLossless(name: String, known: Set<String> = emptySet()) {
+        val original = fixture("poi/$name")
+        assertOnlyDiffers(original, roundTrip(original), expected = known, what = name)
+    }
+
+    // D-01: <x:workbook>, <x:sst>, <x:worksheet> — the main namespace bound to a prefix.
+    @Test
+    fun aWorkbookWithPrefixedPartsSurvives() = assertLossless("59746_NoRowNums.xlsx")
+
+    // D-01: <x:worksheet> with a rich inline string.
+    @Test
+    fun aPrefixedWorksheetWithInlineStringsSurvives() = assertLossless("InlineString.xlsx")
+
+    // D-01: <ns0:Relationships>, as Python's ElementTree writes it.
+    @Test
+    fun prefixedRelationshipsSurvive() = assertLossless("58760.xlsx")
+
+    // D-09: header and footer field codes (&C, &P, &"Font,Style", &12).
+    // F-04: hidden and grouped rows, and a row that has a height but no cells.
+    @Test
+    fun headerAndFooterCodesSurvive() = assertLossless("55640.xlsx")
+
+    // D-02: shared formulas — every follower must keep the expression POI derives for it.
+    @Test
+    fun sharedFormulasSurvive() = assertLossless("shared_formulas.xlsx")
+
+    @Test
+    fun sharedFormulasFilledAcrossSurvive() = assertLossless("50096.xlsx")
+
+    // D-02: followers whose references are whole columns (`VLOOKUP(A85,D:E,2,0)`).
+    @Test
+    fun sharedFormulasWithWholeColumnReferencesSurvive() = assertLossless("VLookupFullColumn.xlsx")
+
+    @Test
+    fun sharedFormulasNextToShiftedRowsSurvive() = assertLossless("TestShiftRowSharedFormula.xlsx")
+
+    // D-03: a dynamic-array formula (`cm`) and the values it spills.
+    @Test
+    fun aDynamicArrayFormulaSurvives() = assertLossless("xlookup.xlsx")
+
+    // F-01: cell protection, theme fills and fonts that differ only in unmodelled properties.
+    // F-04, F-05, F-07: hidden rows and columns, row and column styles, styled cells under merges.
+    @Test
+    fun protectionAndThemeColoursSurvive() = assertLossless("FillWithoutColor.xlsx")
+
+    // D-15: a workbook with a calculation chain.
+    @Test
+    fun aWorkbookWithACalculationChainSurvives() = assertLossless("56822-Countifs.xlsx")
+
+    @Test
+    fun theCalculationChainIsRemovedOnceAValueChanges() {
+        // xl/calcChain.xml lists the formula cells. An entry for a cell that is no longer a
+        // formula makes Excel offer to repair the workbook; the part is optional, and POI
+        // removes entries the same way (XSSFWorkbook.onDeleteFormula).
+        val original = fixture("poi/56822-Countifs.xlsx")
+        kotlin.test.assertTrue("xl/calcChain.xml" in zipEntryNames(original))
+
+        val saved = roundTrip(original) { excel -> excel[excel.tables.keys.first()].updateCell(com.gyanoba.kexcel.sheet.CellIndex.indexByString("Z99"), com.gyanoba.kexcel.sheet.IntCellValue(1)) }
+
+        kotlin.test.assertFalse("xl/calcChain.xml" in zipEntryNames(saved))
+        kotlin.test.assertFalse("calcChain" in readZipEntry(saved, "[Content_Types].xml").decodeToString())
+        kotlin.test.assertFalse("calcChain" in readZipEntry(saved, "xl/_rels/workbook.xml.rels").decodeToString())
+        PoiOracle.read(saved) { kotlin.test.assertTrue(it.forceFormulaRecalculation) }
+    }
+
+    // R-01: a chart sheet beside the worksheets.
+    @Test
+    fun aWorkbookWithAChartSheetSurvives() = assertLossless("chart_sheet.xlsx")
+
+    // R-02: no styles part and no shared strings part.
+    @Test
+    fun aWorkbookWithoutAStylesPartSurvives() = assertLossless("56278.xlsx")
+
+    // R-03: `<c t="s"><v/></c>`.
+    @Test
+    fun aStringCellWithoutAnIndexSurvives() = assertLossless("64508.xlsx")
+
+    // R-04: a negative number in a date-formatted cell.
+    @Test
+    fun aNegativeDateSurvives() = assertLossless("bug60858.xlsx")
+
+    // R-05: relationship ids that are not `rId<number>`, in workbooks with no shared strings part.
+    @Test
+    fun opaqueRelationshipIdsSurvive() {
+        assertLossless("60825.xlsx")
+        assertLossless("52348.xlsx")
+    }
+
+    // D-06: a workbook in the 1904 date system; every date must match POI's reading.
+    @Test
+    fun a1904WorkbookIsReadLikePoiAndSurvives() {
+        assertReadsLikePoi(fixture("poi/DateFormatTests.xlsx"), "DateFormatTests.xlsx")
+        assertLossless("DateFormatTests.xlsx")
+    }
+
+    // F-03: a date format declared under an id below 164.
+    @Test
+    fun aCustomFormatBelow164Survives() = assertLossless("bug66675.xlsx")
+
+    // D-02: the expanded followers of shared formulas read exactly as POI reads them.
+    @Test
+    fun sharedFormulasAreReadLikePoi() {
+        for (name in listOf("shared_formulas.xlsx", "50096.xlsx", "VLookupFullColumn.xlsx", "TestShiftRowSharedFormula.xlsx")) {
+            assertReadsLikePoi(fixture("poi/$name"), name)
+        }
+    }
+}

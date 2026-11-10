@@ -1,0 +1,4 @@
+[submodule "reference/poi"]
+	path = reference/poi
+	url = https://github.com/apache/poi.git
+	shallow = true

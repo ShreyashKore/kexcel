@@ -53,6 +53,18 @@ public class NumFormatMaintainer {
         }
     }
 
+    /**
+     * Registers a format a styles part declares under [numFmtId], whatever the id. Ids
+     * below 164 are reserved for the built-in formats, but files do declare their own
+     * there — POI corpus bug66675.xlsx defines 82 as `[$-010409]dd-mmm-yyyy` — and a file's
+     * declaration is what its cells mean. Ignoring it read those dates as plain numbers.
+     */
+    internal fun declare(numFmtId: Int, format: NumFormat) {
+        map[numFmtId] = format
+        if (!inverseMap.containsKey(format)) inverseMap[format] = numFmtId
+        if (numFmtId >= nextFmtId) nextFmtId = numFmtId + 1
+    }
+
     public fun findOrAdd(format: CustomNumFormat): Int {
         inverseMap[format]?.let { return it }
         val fmtId = nextFmtId++
@@ -106,16 +118,16 @@ public interface NumFormat {
         public val standard_18: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 18, formatCode = "h:mm AM/PM")
         public val standard_19: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 19, formatCode = "h:mm:ss AM/PM")
         public val standard_20: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 20, formatCode = "h:mm")
-        public val standard_21: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 21, formatCode = "h:mm:dd")
+        public val standard_21: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 21, formatCode = "h:mm:ss")
         public val standard_22: StandardDateTimeNumFormat = StandardDateTimeNumFormat(numFmtId = 22, formatCode = "m/d/yy h:mm")
         public val standard_37: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 37, formatCode = "#,##0 ;(#,##0)")
         public val standard_38: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 38, formatCode = "#,##0 ;[Red](#,##0)")
         public val standard_39: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 39, formatCode = "#,##0.00;(#,##0.00)")
-        public val standard_40: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 40, formatCode = "#,##0.00;[Red](#,#)")
+        public val standard_40: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 40, formatCode = "#,##0.00;[Red](#,##0.00)")
         public val standard_45: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 45, formatCode = "mm:ss")
         public val standard_46: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 46, formatCode = "[h]:mm:ss")
         public val standard_47: StandardTimeNumFormat = StandardTimeNumFormat(numFmtId = 47, formatCode = "mmss.0")
-        public val standard_48: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 48, formatCode = "##0.0")
+        public val standard_48: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 48, formatCode = "##0.0E+0")
         public val standard_49: StandardNumericNumFormat = StandardNumericNumFormat(numFmtId = 49, formatCode = "@")
 
         public fun custom(formatCode: String): CustomNumFormat {
@@ -173,11 +185,13 @@ public interface CustomNumFormat: NumFormat {
 public sealed class NumericNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
 
     override fun read(v: String): CellValue {
-        val eIdx = v.indexOf('E')
+        // xsd:double allows either case for the exponent; Excel writes `E`, others `e`.
+        val eIdx = v.indexOfFirst { it == 'E' || it == 'e' }
         val decimalIdx = v.indexOf('.')
 
         if (decimalIdx == -1 && eIdx == -1) {
-            return IntCellValue(v.toLong())
+            // More digits than a Long holds is still a number.
+            return v.toLongOrNull()?.let { IntCellValue(it) } ?: DoubleCellValue(v.toDouble())
         }
 
         // treat .0 or .00 as int
@@ -189,7 +203,7 @@ public sealed class NumericNumFormat(override val formatCode: String) : BaseNumF
             }
         }
         if (noActualDecimalPlaces) {
-            return IntCellValue(v.substring(0, decimalIdx).toLong())
+            v.substring(0, decimalIdx).toLongOrNull()?.let { return IntCellValue(it) }
         }
 
         return DoubleCellValue(v.toDouble())
@@ -250,6 +264,41 @@ private val DATE_OFFSET_MILLIS: Long by lazy {
         .toEpochMilliseconds()
 }
 
+/**
+ * Whether [serial] is a date Excel can show: from day 0 to 31 December 9999 (serial
+ * 2958465). A negative number, or a larger one, in a date-formatted cell is displayed as
+ * `####` and has no date or time to read, so it is surfaced as the number it is — as POI
+ * does (`DateUtil.isValidExcelDate`). Reading it as a time used to throw, and one such
+ * cell made the whole workbook impossible to open.
+ */
+internal fun isDateSerial(serial: Double): Boolean = serial >= 0.0 && serial < 2958466.0
+
+/**
+ * Days between 30 December 1899 and the date a 1900-system [serial] stands for.
+ *
+ * From 1 March 1900 the two are equal, which is why that date is used as the epoch. Before
+ * it they differ by one: Excel counts a 29 February 1900 that never existed (serial 60), so
+ * serial 1 is 1 January 1900, not 31 December 1899. POI makes the same correction
+ * (`DateUtil.getJavaDate`, `wholeDays < 61`); serial 60 itself reads as 1 March.
+ */
+internal fun daysSinceEpoch(serial: Double): Double = if (serial >= 1.0 && serial < 61.0) serial + 1.0 else serial
+
+/** The inverse of [daysSinceEpoch]: the serial to store for a date [days] after 30 December 1899. */
+internal fun serialOf(days: Double): Double = if (days >= 1.0 && days < 61.0) days - 1.0 else days
+
+/** Serials in the 1904 date system (§18.2.28, `date1904`) start 1,462 days later. */
+internal const val DATE_1904_OFFSET_DAYS: Int = 1462
+
+/**
+ * The 1900-system serial for a number stored in a 1904-system workbook. A value below 1
+ * is a time of day and has no date to move.
+ */
+internal fun serialFrom1904(v: String): String {
+    val value = v.toDoubleOrNull() ?: return v
+    if (value < 1.0) return v
+    return v.toLongOrNull()?.let { (it + DATE_1904_OFFSET_DAYS).toString() } ?: (value + DATE_1904_OFFSET_DAYS).toString()
+}
+
 public sealed class DateTimeNumFormat(override val formatCode: String) : BaseNumFormat(formatCode) {
 
     override fun read(v: String): CellValue {
@@ -257,10 +306,11 @@ public sealed class DateTimeNumFormat(override val formatCode: String) : BaseNum
             return TimeCellValue(hour = 0, minute = 0, second = 0, millisecond = 0, microsecond = 0)
         }
         val value = v.toDouble()
+        if (!isDateSerial(value)) return NumFormat.defaultNumeric.read(v)
         if (value < 1.0) {
             return TimeCellValue.fromFractionOfDay(value)
         }
-        val deltaMs = (value * 24 * 3600 * 1000).roundToLong()
+        val deltaMs = (daysSinceEpoch(value) * 24 * 3600 * 1000).roundToLong()
         val utcDate = Instant.fromEpochMilliseconds(DATE_OFFSET_MILLIS + deltaMs)
             .toLocalDateTime(TimeZone.UTC)
         return if (!v.contains('.') || v.endsWith(".0")) {
@@ -273,13 +323,13 @@ public sealed class DateTimeNumFormat(override val formatCode: String) : BaseNum
     public fun writeDate(value: DateCellValue): String {
         val epochMs = value.asDateTimeUtc().toInstant(TimeZone.UTC).toEpochMilliseconds()
         val dayFractions = (epochMs - DATE_OFFSET_MILLIS).toDouble() / (1000 * 3600 * 24)
-        return dayFractions.toString()
+        return serialOf(dayFractions).toString()
     }
 
     public fun writeDateTime(value: DateTimeCellValue): String {
         val epochMs = value.asDateTimeUtc().toInstant(TimeZone.UTC).toEpochMilliseconds()
         val dayFractions = (epochMs - DATE_OFFSET_MILLIS).toDouble() / (1000 * 3600 * 24)
-        return dayFractions.toString()
+        return serialOf(dayFractions).toString()
     }
 
     override fun accepts(value: CellValue?): Boolean = when (value) {
@@ -319,6 +369,7 @@ public sealed class TimeNumFormat(override val formatCode: String) : BaseNumForm
             return TimeCellValue(hour = 0, minute = 0, second = 0, millisecond = 0, microsecond = 0)
         }
         val value = v.toDouble()
+        if (!isDateSerial(value)) return NumFormat.defaultNumeric.read(v)
         if (value < 1.0) {
             val deltaMs = (value * 24 * 3600 * 1000).roundToLong()
             val duration = deltaMs.milliseconds
@@ -335,7 +386,7 @@ public sealed class TimeNumFormat(override val formatCode: String) : BaseNumForm
                 microsecond = 0
             )
         }
-        val deltaMs = (value * 24 * 3600 * 1000).roundToLong()
+        val deltaMs = (daysSinceEpoch(value) * 24 * 3600 * 1000).roundToLong()
         val utcDate = Instant.fromEpochMilliseconds(DATE_OFFSET_MILLIS + deltaMs)
             .toLocalDateTime(TimeZone.UTC)
         return if (!v.contains('.') || v.endsWith(".0")) {
@@ -389,7 +440,23 @@ public class CustomTimeNumFormat(
 
 // region --- Standard formats map ---
 
-internal val standardNumFormats: Map<Int, NumFormat> = mapOf(
+/**
+ * The built-in formats that have no named constant on [NumFormat]: currency (5-8) and
+ * accounting (41-44), with the format codes of ECMA-376 §18.8.30. Without them a cell in one
+ * of these formats — accounting is the default for money in Excel — read as `General`.
+ */
+private val unnamedStandardNumFormats: Map<Int, NumFormat> = mapOf(
+    5 to StandardNumericNumFormat(5, "\"$\"#,##0_);(\"$\"#,##0)"),
+    6 to StandardNumericNumFormat(6, "\"$\"#,##0_);[Red](\"$\"#,##0)"),
+    7 to StandardNumericNumFormat(7, "\"$\"#,##0.00_);(\"$\"#,##0.00)"),
+    8 to StandardNumericNumFormat(8, "\"$\"#,##0.00_);[Red](\"$\"#,##0.00)"),
+    41 to StandardNumericNumFormat(41, "_(* #,##0_);_(* (#,##0);_(* \"-\"_);_(@_)"),
+    42 to StandardNumericNumFormat(42, "_(\"$\"* #,##0_);_(\"$\"* (#,##0);_(\"$\"* \"-\"_);_(@_)"),
+    43 to StandardNumericNumFormat(43, "_(* #,##0.00_);_(* (#,##0.00);_(* \"-\"??_);_(@_)"),
+    44 to StandardNumericNumFormat(44, "_(\"$\"* #,##0.00_);_(\"$\"* (#,##0.00);_(\"$\"* \"-\"??_);_(@_)"),
+)
+
+internal val standardNumFormats: Map<Int, NumFormat> = unnamedStandardNumFormats + mapOf(
     0  to NumFormat.standard_0,
     1  to NumFormat.standard_1,
     2  to NumFormat.standard_2,
@@ -424,31 +491,53 @@ internal val standardNumFormats: Map<Int, NumFormat> = mapOf(
 
 // region --- formatCodeLooksLikeDateTime ---
 
+private val ELAPSED_TIME = Regex("h+|m+|s+", RegexOption.IGNORE_CASE)
+private val FRACTIONAL_SECONDS = Regex("""\.0+""")
+
+/**
+ * Whether [formatCode] formats a number as a date or a time (§18.8.31).
+ *
+ * Only the first section — the one for positive numbers — is examined, with everything
+ * that is not a format code taken out first: text in quotes, a character after `\`, `_`
+ * or `*`, and bracketed parts such as a colour (`[Red]`), a condition (`[>100]`) or a
+ * locale (`[$-409]`). What is left is a date format if it has a date or time letter, in
+ * either case, and no digit placeholder; an elapsed-time code (`[h]`, `[mm]`, `[ss]`) makes
+ * it one outright.
+ *
+ * This follows POI's `DateUtil.isADateFormat`, with two deliberate differences where POI
+ * goes against the specification: an escaped letter (`\d0`) is a literal, not a day code,
+ * and quoted text may contain anything (`h"时"mm"分"`, `dd "de" mmmm`).
+ *
+ * The scan used to stop at the first of `y m d h s` found anywhere outside quotes, so the
+ * `d` of `[Red]` or the `h` of `[White]` made a number format a date format, and it was
+ * case-sensitive, so `DD/MM/YYYY` was not one.
+ */
 internal fun formatCodeLooksLikeDateTime(formatCode: String): Boolean {
-    var inEscape = false
-    var inQuotes = false
-    for (c in formatCode) {
-        when {
-            inEscape -> {
-                inEscape = false
+    val codes = StringBuilder()
+    var i = 0
+    while (i < formatCode.length) {
+        val c = formatCode[i]
+        when (c) {
+            ';' -> break
+            '\\', '_', '*' -> i += 2
+            '"' -> {
+                val close = formatCode.indexOf('"', i + 1)
+                i = if (close == -1) formatCode.length else close + 1
             }
-            c == '\\' -> {
-                inEscape = true
+            '[' -> {
+                val close = formatCode.indexOf(']', i + 1)
+                if (close == -1) { i = formatCode.length } else {
+                    if (ELAPSED_TIME.matches(formatCode.substring(i + 1, close))) return true
+                    i = close + 1
+                }
             }
-            inQuotes -> {
-                if (c == '"') inQuotes = false
-            }
-            c == '"' -> {
-                inQuotes = true
-            }
-            else -> when (c) {
-                'y', 'm', 'd', 'h', 's' -> return true
-                ';' -> return false  // separator only exists for decimal formats
-                else -> { /* continue */ }
-            }
+            else -> { codes.append(c); i++ }
         }
     }
-    return false
+    // `0` is a digit placeholder, except as fractional seconds: `ss.000`.
+    val section = codes.toString().replace(FRACTIONAL_SECONDS, "")
+    if (section.any { it == '0' || it == '#' || it == '?' }) return false
+    return section.any { it in "yYmMdDhHsS" }
 }
 
 // endregion

@@ -11,6 +11,7 @@ import com.gyanoba.kexcel.sheet.CellIndex
 import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.CellValue
 import com.gyanoba.kexcel.sheet.FontStyle
+import com.gyanoba.kexcel.sheet.FormulaCellValue
 import com.gyanoba.kexcel.sheet.Sheet
 import com.gyanoba.kexcel.archive.Archive
 import com.gyanoba.kexcel.archive.ArchiveFile
@@ -20,6 +21,9 @@ import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.readZipArchive
 import com.gyanoba.kexcel.utils.resolveWorkbookRelTarget
+import com.gyanoba.kexcel.utils.renameSheetReferences
+import com.gyanoba.kexcel.utils.serializeXml
+import com.gyanoba.kexcel.utils.setAttribute
 import no.synth.kmpzip.io.ByteArrayInputStream
 import no.synth.kmpzip.io.InputStream
 import kotlin.io.encoding.Base64
@@ -33,6 +37,19 @@ public class Excel internal constructor(internal var archive: Archive) {
     internal var mergeChanges: Boolean = false
     internal var rtlChanges: Boolean = false
 
+    /**
+     * Set once any cell value, or the shape of any sheet, has been changed after loading.
+     * Until then the cached results of formulas are still right and are written back; after
+     * that they may be stale, so they are dropped and Excel is asked to recalculate.
+     */
+    internal var valuesEdited: Boolean = false
+
+    /**
+     * Whether the workbook counts dates from 1 January 1904 (`<workbookPr date1904="1">`,
+     * §18.2.28) instead of 1900. Workbooks that began on a Mac often do.
+     */
+    internal var date1904: Boolean = false
+
     internal val sheets: MutableMap<String, Element> = mutableMapOf()
     internal val xmlFiles: MutableMap<String, Document> = mutableMapOf()
     internal val xmlSheetId: MutableMap<String, String> = mutableMapOf()
@@ -40,6 +57,16 @@ public class Excel internal constructor(internal var archive: Archive) {
     internal val sheetMap: MutableMap<String, Sheet> = mutableMapOf()
 
     internal var cellStyleList: MutableList<CellStyle> = mutableListOf()
+
+    /**
+     * One untouched copy per `<xf>` of what the parser read, parallel to [cellStyleList].
+     * The instances in [cellStyleList] are handed to callers and can be mutated; these
+     * cannot, so they say what each `<xf>` in the file really is.
+     */
+    internal var cellStylePristine: MutableList<CellStyle> = mutableListOf()
+
+    /** `<xf>` entries added for styles made or changed in code, so a second save reuses them. */
+    internal val derivedXf: MutableMap<Any, Int> = mutableMapOf()
     internal var patternFill: MutableList<String> = mutableListOf()
     internal val mergeChangeLook: MutableList<String> = mutableListOf()
     internal val rtlChangeLook: MutableList<String> = mutableListOf()
@@ -116,6 +143,7 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     public operator fun set(sheet: String, sheetObject: Sheet) {
         availSheet(sheet)
+        valuesEdited = true
         sheetMap[sheet] = Sheet.clone(this, sheet, sheetObject)
     }
 
@@ -164,13 +192,65 @@ public class Excel internal constructor(internal var archive: Archive) {
      * [oldSheetName] must exist and [newSheetName] must not exist.
      */
     public fun rename(oldSheetName: String, newSheetName: String) {
-        if (sheetMap[oldSheetName] != null && sheetMap[newSheetName] == null) {
-            if (defaultSheet == oldSheetName) {
-                defaultSheet = newSheetName
-            }
-            copy(oldSheetName, newSheetName)
-            delete(oldSheetName)
+        val sheet = sheetMap[oldSheetName] ?: return
+        if (oldSheetName == newSheetName || sheetMap[newSheetName] != null) return
+        requireValidSheetName(newSheetName, except = oldSheetName)
+
+        valuesEdited = true
+        if (defaultSheet == oldSheetName) {
+            defaultSheet = newSheetName
         }
+
+        // The sheet keeps its place among the tabs and everything it holds. This used to
+        // be a copy followed by a delete: the name then went to a brand-new worksheet part
+        // at the end of the tab list, and the freeze panes, data validations, conditional
+        // formats, hyperlinks and column settings of the old part were left behind.
+        val entries = sheetMap.entries.map { it.key to it.value }
+        sheetMap.clear()
+        entries.forEach { (name, value) -> sheetMap[if (name == oldSheetName) newSheetName else name] = value }
+        if (sheet.sheetName == oldSheetName) sheet.renameTo(newSheetName)
+
+        sheets.remove(oldSheetName)?.let { sheets[newSheetName] = it }
+        xmlSheetId.remove(oldSheetName)?.let { xmlSheetId[newSheetName] = it }
+        cellStyleReferenced.remove(oldSheetName)?.let { cellStyleReferenced[newSheetName] = it }
+        for (names in listOf(mergeChangeLook, rtlChangeLook)) {
+            for (i in names.indices) if (names[i] == oldSheetName) names[i] = newSheetName
+        }
+
+        val workbook = xmlFiles["xl/workbook.xml"]
+        workbook?.getElementsByTag("sheet")?.firstOrNull { it.attr("name") == oldSheetName }
+            ?.setAttribute("name", newSheetName)
+
+        // What refers to the sheet by name follows it, as in POI's XSSFWorkbook.setSheetName:
+        // formulas in every sheet, and defined names (print areas, named ranges).
+        sheetMap.values.toSet().forEach { other ->
+            other.sheetData.values.forEach { row ->
+                row.values.forEach { data ->
+                    val value = data.value as? FormulaCellValue ?: return@forEach
+                    val renamed = renameSheetReferences(value.formula, oldSheetName, newSheetName)
+                    if (renamed != value.formula) data._value = FormulaCellValue(renamed).also { it.source = value.source }
+                }
+            }
+        }
+        workbook?.getElementsByTag("definedName")?.forEach { definedName ->
+            val text = definedName.wholeOwnText()
+            val renamed = renameSheetReferences(text, oldSheetName, newSheetName)
+            if (renamed != text) definedName.text(renamed)
+        }
+    }
+
+    /**
+     * Excel's rules for a sheet name (the same ones POI enforces in
+     * `WorkbookUtil.validateSheetName`): 1 to 31 characters, none of `/ \ ? * [ ] :`, no
+     * apostrophe at either end, and unique without regard to case. A workbook that breaks
+     * them is one Excel refuses to open or repairs.
+     */
+    private fun requireValidSheetName(name: String, except: String? = null) {
+        require(name.isNotEmpty() && name.length <= 31) { "A sheet name must have 1 to 31 characters, was ${name.length}: `$name`" }
+        require(name.none { it in "/\\?*[]:" }) { "A sheet name must not contain any of / \\ ? * [ ] : — was `$name`" }
+        require(!name.startsWith('\'') && !name.endsWith('\'')) { "A sheet name must not begin or end with an apostrophe: `$name`" }
+        val clash = sheetMap.keys.firstOrNull { it != except && it.equals(name, ignoreCase = true) }
+        require(clash == null) { "A sheet named `$clash` already exists; sheet names differ by more than case" }
     }
 
     /**
@@ -178,6 +258,7 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     public fun delete(sheet: String) {
         if (sheetMap.size <= 1) return
+        valuesEdited = true
 
         if (defaultSheet == sheet) {
             defaultSheet = null
@@ -203,7 +284,7 @@ public class Excel internal constructor(internal var archive: Archive) {
             archive = cloneArchive(
                 archive,
                 xmlFiles.map { (k, v) ->
-                    val encoded = v.toString().encodeToByteArray()
+                    val encoded = serializeXml(v).encodeToByteArray()
                     k to ArchiveFile(k, encoded.size, encoded)
                 }.toMap(),
                 excludedFile = xmlSheetId[sheet]
@@ -213,16 +294,42 @@ public class Excel internal constructor(internal var archive: Archive) {
         }
 
         if (sheets[sheet] != null) {
-            xmlFiles["xl/workbook.xml"]
-                ?.getElementsByTag("sheets")
-                ?.firstOrNull()
-                ?.children()
-                ?.filter { element -> element.attr("name") == sheet }
-                ?.forEach { it.remove() }
+            val workbook = xmlFiles["xl/workbook.xml"]
+            val sheetElements = workbook?.getElementsByTag("sheets")?.firstOrNull()?.children().orEmpty()
+            val position = sheetElements.indexOfFirst { element -> element.attr("name") == sheet }
+            sheetElements.filter { element -> element.attr("name") == sheet }.forEach { it.remove() }
             sheets.remove(sheet)
+            if (workbook != null && position >= 0) forgetSheetPosition(workbook, position, sheetElements.size - 1)
         }
 
         cellStyleReferenced.remove(sheet)
+    }
+
+    /**
+     * Brings what refers to sheets by *position* in line after the sheet at [position] has
+     * gone, leaving [remaining] sheets. `localSheetId` scopes a defined name to a sheet
+     * (§18.2.5) and `activeTab` / `firstSheet` name tabs (§18.2.30); all three are indexes
+     * into `<sheets>`. Left alone, a print area ended up attached to the next sheet, or
+     * pointed past the end of the list.
+     */
+    private fun forgetSheetPosition(workbook: Document, position: Int, remaining: Int) {
+        workbook.getElementsByTag("definedName").toList().forEach { definedName ->
+            val scope = definedName.attr("localSheetId").trim().toIntOrNull() ?: return@forEach
+            when {
+                scope == position -> definedName.remove()
+                scope > position -> definedName.setAttribute("localSheetId", (scope - 1).toString())
+            }
+        }
+        // <definedNames> may not be empty.
+        workbook.getElementsByTag("definedNames").toList().filter { it.children().isEmpty() }.forEach { it.remove() }
+
+        workbook.getElementsByTag("workbookView").forEach { view ->
+            for (attribute in listOf("activeTab", "firstSheet")) {
+                val tab = view.attr(attribute).trim().toIntOrNull() ?: continue
+                val moved = if (tab > position) tab - 1 else tab
+                view.setAttribute(attribute, moved.coerceIn(0, maxOf(remaining - 1, 0)).toString())
+            }
+        }
     }
 
     /**
@@ -245,7 +352,8 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     internal fun getDefaultSheetInternal(): String? {
         val elements = xmlFiles["xl/workbook.xml"]?.getElementsByTag("sheet")
-        val sheet = elements?.firstOrNull()
+        // The first worksheet: a chart sheet may come first, but it is not in the model.
+        val sheet = elements?.firstOrNull { sheetMap.containsKey(it.attr("name")) } ?: elements?.firstOrNull()
 
         return if (sheet != null) {
             val name = sheet.attribute("name")?.value
@@ -374,6 +482,7 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     internal fun availSheet(sheet: String) {
         if (sheetMap[sheet] == null) {
+            requireValidSheetName(sheet)
             sheetMap[sheet] = Sheet(this, sheet)
         }
     }

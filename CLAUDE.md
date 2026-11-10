@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Kexcel is a **Kotlin Multiplatform** library for reading and writing Excel (`.xlsx`) files, written in **pure Kotlin** with no platform-specific dependencies. It is a Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel) library by justkawal.
+Kexcel is a **Kotlin Multiplatform** library for reading and writing Excel (`.xlsx`) files, written in **pure Kotlin** with no platform-specific dependencies. It began as a Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel) library by justkawal and has since diverged: Kexcel fixes bugs and adds features that upstream does not have, so the Dart library is history, not a behavioural reference (see *Reference libraries*).
 
 The library lives in the `:kexcel` module. Everything under `sample/` is demo apps that consume it and is not part of the published artifact.
 
@@ -30,7 +30,7 @@ Note `commonTest` runs on every target; `jvmTest` runs only on the JVM (it reads
 The suite has four layers, and a change usually belongs in one of them:
 
 - **Model and round trip (`commonTest`)** — the API and its behaviour, plus `encode()` → `decodeBytes()` round trips. Runs on every target.
-- **Fixture tests (`jvmTest`)** — real `.xlsx` files under `src/commonTest/kotlin/com/gyanoba/kexcel/test_resources/`, read through `fixture(name)`. Most are ports of the Dart `excel` suite and carry a `// Dart: '...'` comment naming the original.
+- **Fixture tests (`jvmTest`)** — real `.xlsx` files under `src/commonTest/kotlin/com/gyanoba/kexcel/test_resources/`, read through `fixture(name)`. Most started as ports of the Dart `excel` suite and carry a `// Dart: '...'` comment naming the original. That comment records where the test came from, not that Kexcel must match Dart; when a test's expectation deliberately differs from the Dart original, its comment should say why and cite POI or the spec.
 - **Reader conformance (`ForeignWorksheetXmlTest`)** — hand-written worksheet XML that Kexcel would never emit but other producers do: omitted `r` references, `inlineStr`, error cells, cached formula results, empty `<v/>`. Built with `sheetFromRawXml(...)`. A round-trip test cannot catch a reader and writer that agree on a private dialect; this layer can.
 - **Package structure and interop (`OoxmlPackageTest`, `PoiInteropTest`)** — assertions about the bytes themselves (content types, relationships, `s`/`t="s"` index ranges, CT_Worksheet child order) and cross-validation against **Apache POI** as an independent oracle, in both directions. POI is a `jvmTest`-only dependency (`libs.poi.ooxml`) and is deliberately absent from the published POM — never move it to `commonTest` or `commonMain`.
 
@@ -50,6 +50,23 @@ When adding a feature, the read and write paths must stay symmetric (see *Archit
 - Generate the API reference (Dokka HTML → `kexcel/build/dokka/html`): `./gradlew :kexcel:dokkaGenerate`
 - Preview the guides (needs `pip install -r requirements.txt`): `mkdocs serve`
 - Full-site build the way CI does it: `./gradlew :kexcel:dokkaGenerate && mkdir -p docs/api && cp -r kexcel/build/dokka/html/. docs/api/ && mkdocs build --strict`
+
+## Reference libraries (read-only)
+
+`reference/poi` is a git submodule that serves as the ground truth for OOXML behaviour. It is not part of the build.
+
+- `reference/poi` — Apache POI source at the tag matching `poi` in `gradle/libs.versions.toml` (currently `REL_5_4_1`). This is the same version as the `poi-ooxml` jar that `PoiInteropTest` runs against. Read the readers and writers under `poi-ooxml/src/main/java/org/apache/poi/xssf/` (for example `usermodel/XSSFCell.java` with `convertSharedFormula`, and `model/SharedStringsTable.java`). It also has about 340 real `.xlsx` files under `test-data/spreadsheet/` that can be copied into `test_resources/` as fixtures.
+
+A fresh clone doesn't fetch it. Run `scripts/reference.sh init` to get it.
+
+The Dart `excel` library is deliberately **not** a reference. Kexcel has moved past it, so "Dart does it differently" is never evidence of a Kexcel bug. When deciding behaviour, the order of authority is: the ECMA-376 spec, then Excel's actual behaviour, then POI. Upstream source on GitHub is useful only for history, such as why ported code is shaped the way it is.
+
+Rules for agents:
+- **Consult before deciding.** For a question about what Kexcel should read or write (element order, attribute defaults, cell types, shared formulas, string escaping), read the POI implementation and the spec first. Cite the file or spec section in the test comment.
+- **Never "restore parity" with Dart `excel`.** Don't change Kexcel's behaviour, or a test's expected value, to match the Dart library.
+- **Never modify `reference/`, `.gitmodules`, `scripts/reference.sh`, or `.claude/`.** `.claude/settings.json` denies those edits, and `.claude/hooks/check-reference-untouched.sh` reports any change to the checkouts after every tool call. Only a human bumps a reference, with `scripts/reference.sh update`, and then commits the new pointer.
+- **Never build, run or depend on reference sources** (no `includeBuild`, source sets, or running their scripts). The executable oracle is the `poi-ooxml` jar from Maven Central in `jvmTest`.
+- **Don't bend tests to fit the code.** Change an existing test's expected value only when the spec, POI, or Excel's behaviour backs the new value. Name that evidence in the test comment and the commit message. If Kexcel disagrees with POI, assume Kexcel is wrong until shown otherwise.
 
 ## API conventions
 

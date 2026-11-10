@@ -333,4 +333,197 @@ class OoxmlPackageTest {
     }
 
     // endregion
+
+
+    @Test
+    fun addingASheetNeverReplacesAnExistingPart() {
+        // `sheetId` and the part name are independent (§18.2.19). Excel leaves a gap in the
+        // ids after a sheet is deleted but renumbers the parts, giving ids 1,3 on
+        // sheet1.xml, sheet2.xml. Naming the new part after the free id 2 overwrote "Two".
+        var source = PoiOracle.workbook { wb ->
+            wb.createSheet("One").createRow(0).createCell(0).setCellValue("one")
+            wb.createSheet("Two").createRow(0).createCell(0).setCellValue("two")
+        }
+        val workbookXml = readZipEntry(source, "xl/workbook.xml").decodeToString()
+        assertTrue("sheetId=\"2\"" in workbookXml)
+        source = replaceZipEntry(source, "xl/workbook.xml", workbookXml.replace("sheetId=\"2\"", "sheetId=\"3\"").encodeToByteArray())
+
+        val bytes = roundTrip(source) { it["New"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new")) }
+
+        val worksheets = zipEntryNames(bytes).filter { it.startsWith("xl/worksheets/sheet") }
+        assertEquals(3, worksheets.toSet().size, "expected three distinct worksheet parts, got $worksheets")
+        PoiOracle.read(bytes) { wb ->
+            assertEquals(listOf("One", "Two", "New"), (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals(listOf("one", "two", "new"), (0 until wb.numberOfSheets).map { wb.getSheetAt(it).getRow(0).getCell(0).stringCellValue })
+        }
+    }
+
+
+    // region --- Style table integrity ---
+
+    /**
+     * Every index a `<xf>` holds points inside the table it indexes, and every `count`
+     * says how many entries its table has (§18.8.45, §18.8.10). An index past the end is
+     * what Excel reports as a damaged workbook.
+     */
+    private fun assertStyleTablesAreConsistent(bytes: ByteArray) {
+        val styles = bytes.part("xl/styles.xml")
+        fun entries(table: String, entry: String) = styles.getElementsByTag(table).first()!!.children().filter { it.tagName() == entry }
+        val sizes = mapOf("fontId" to entries("fonts", "font").size, "fillId" to entries("fills", "fill").size, "borderId" to entries("borders", "border").size)
+
+        for ((table, entry) in listOf("fonts" to "font", "fills" to "fill", "borders" to "border", "cellXfs" to "xf")) {
+            assertEquals(entries(table, entry).size.toString(), styles.getElementsByTag(table).first()!!.attr("count"), "<$table count>")
+        }
+        entries("cellXfs", "xf").forEachIndexed { index, xf ->
+            for ((attribute, size) in sizes) {
+                assertTrue(xf.attr(attribute).toInt() in 0 until size, "cellXfs[$index] $attribute=${xf.attr(attribute)} but the table has $size entries")
+            }
+        }
+    }
+
+    private fun workbookWithConditionalFormatAndUnusedFonts(): ByteArray = PoiOracle.workbook { wb ->
+        repeat(3) { wb.createFont().apply { fontName = "Unused $it" } }
+        val sheet = wb.createSheet("S")
+        sheet.createRow(0).createCell(0).setCellValue(10.0)
+        val formatting = sheet.sheetConditionalFormatting
+        val rule = formatting.createConditionalFormattingRule(org.apache.poi.ss.usermodel.ComparisonOperator.GT, "5")
+        rule.createPatternFormatting().fillBackgroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+        rule.createFontFormatting().setFontStyle(true, true)
+        rule.createBorderFormatting().borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN
+        formatting.addConditionalFormatting(arrayOf(org.apache.poi.ss.util.CellRangeAddress.valueOf("A1:A5")), rule)
+    }
+
+    @Test
+    fun styleIndexesStayInsideTheirTablesWhenTheWorkbookHasDifferentialFormats() {
+        val bytes = roundTrip(workbookWithConditionalFormatAndUnusedFonts()) { excel ->
+            excel["S"].updateCell(
+                CellIndex.indexByString("C1"), TextCellValue("c"),
+                CellStyle(
+                    bold = true, backgroundColorHex = ExcelColor.fromHexString("FF00FF00"),
+                    leftBorder = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Thick),
+                ),
+            )
+        }
+
+        assertStyleTablesAreConsistent(bytes)
+    }
+
+    @Test
+    fun aNoEditSaveLeavesTheStyleTablesAlone() {
+        // Every style a cell used was appended to cellXfs again on each save, and `count`
+        // was written from lists that did not match the tables: after a load and save,
+        // <fonts count> was wrong in 134 of 301 POI corpus files.
+        for (name in listOf("example.xlsx", "dataTypesUsingMsExcel365Desktop.xlsx", "borders.xlsx", "poi/FillWithoutColor.xlsx")) {
+            val original = fixture(name)
+            val saved = roundTrip(roundTrip(original))
+
+            assertStyleTablesAreConsistent(saved)
+            for (table in listOf("fonts", "fills", "borders", "cellXfs")) {
+                assertEquals(
+                    original.part("xl/styles.xml").getElementsByTag(table).first()!!.children().size,
+                    saved.part("xl/styles.xml").getElementsByTag(table).first()!!.children().size,
+                    "$name: <$table> grew",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun savingTwiceWritesTheSameWorkbook() {
+        // encode() appended the new fonts, fills and <xf> to the styles part every time it
+        // was called, while the counts stayed at their first value.
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+        sheet.updateCell(CellIndex.indexByString("A1"), TextCellValue("a"), CellStyle(bold = true, backgroundColorHex = ExcelColor.fromHexString("FFFF0000")))
+        sheet.updateCell(CellIndex.indexByString("A2"), DoubleCellValue(1.5), CellStyle(italic = true, numberFormat = com.gyanoba.kexcel.number_format.NumFormat.custom("0.000")))
+        sheet.updateCell(CellIndex.indexByString("A3"), com.gyanoba.kexcel.sheet.DateCellValue(2024, 1, 1))
+
+        val first = excel.encode()!!
+        val second = excel.encode()!!
+        val third = excel.encode()!!
+
+        assertStyleTablesAreConsistent(third)
+        for (part in listOf("xl/styles.xml", "xl/worksheets/sheet1.xml", "xl/sharedStrings.xml", "xl/workbook.xml")) {
+            assertEquals(readZipEntry(first, part).decodeToString(), readZipEntry(second, part).decodeToString(), part)
+            assertEquals(readZipEntry(first, part).decodeToString(), readZipEntry(third, part).decodeToString(), part)
+        }
+    }
+
+    // endregion
+
+
+    // region --- Dimension ---
+
+    private fun dimensionOf(bytes: ByteArray, part: String) = bytes.part(part).getElementsByTag("dimension").first()?.attr("ref")
+
+    @Test
+    fun theDimensionFollowsTheCellsOnceTheyChange() {
+        // §18.3.1.35: <dimension> is the used range. Readers that trust it — openpyxl in
+        // read-only mode, streaming readers — stop at its edge, so a stale one hides data.
+        val source = PoiOracle.workbook { wb ->
+            val sheet = wb.createSheet("S")
+            for (r in 0 until 3) sheet.createRow(r).createCell(0).setCellValue(1.0)
+        }
+        assertEquals("A1:A3", dimensionOf(source, "xl/worksheets/sheet1.xml"))
+
+        val saved = roundTrip(source) { excel ->
+            excel["S"].updateCell(CellIndex.indexByString("F20"), IntCellValue(9))
+            excel["New"].updateCell(CellIndex.indexByString("C5"), IntCellValue(1))
+            excel["New"].updateCell(CellIndex.indexByString("E9"), IntCellValue(2))
+        }
+
+        assertEquals("A1:F20", dimensionOf(saved, "xl/worksheets/sheet1.xml"))
+        assertEquals("C5:E9", dimensionOf(saved, "xl/worksheets/sheet2.xml"))
+        assertEquals("A1:A3", dimensionOf(roundTrip(source), "xl/worksheets/sheet1.xml"), "untouched when nothing changed")
+    }
+
+    // endregion
+
+
+    // region --- Element order on sheets that are not the built-in template ---
+
+    private fun assertInOrderAfter(source: ByteArray, sheet: String, part: String = "xl/worksheets/sheet1.xml", edit: (com.gyanoba.kexcel.sheet.Sheet) -> Unit) {
+        assertWorksheetChildrenAreInSchemaOrder(source, part)
+        assertWorksheetChildrenAreInSchemaOrder(roundTrip(source) { edit(it[sheet]) }, part)
+    }
+
+    @Test
+    fun aNewMergeGoesAfterProtectionAndAutoFilter() {
+        // CT_Worksheet puts sheetProtection, autoFilter and sortState between sheetData and
+        // mergeCells. A new <mergeCells> used to be placed right after <sheetData>.
+        val source = PoiOracle.workbook { wb ->
+            val sheet = wb.createSheet("S")
+            for (r in 0 until 3) sheet.createRow(r).apply { createCell(0).setCellValue("h$r"); createCell(1).setCellValue(r.toDouble()) }
+            sheet.setAutoFilter(org.apache.poi.ss.util.CellRangeAddress.valueOf("A1:B3"))
+            sheet.protectSheet("x")
+        }
+        assertInOrderAfter(source, "S") { it.merge(CellIndex.indexByString("A5"), CellIndex.indexByString("B5"), TextCellValue("m")) }
+    }
+
+    @Test
+    fun aSheetViewAddedForRightToLeftGoesBeforeTheSheetData() {
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c></row>""",
+            afterSheetData = """<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>""",
+        )
+        assertInOrderAfter(source, "Sheet1") { it.isRTL = true }
+    }
+
+    @Test
+    fun aSheetFormatElementAddedForDefaultSizesGoesAfterTheSheetViews() {
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c></row>""",
+            beforeSheetData = """<sheetPr/><dimension ref="A1"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>""",
+        )
+        assertInOrderAfter(source, "Sheet1") { it.setDefaultColumnWidth(12.0) }
+
+        // and on a sheet Kexcel creates itself
+        val excel = Excel.createExcel()
+        excel["Second"].updateCell(CellIndex.indexByString("A1"), IntCellValue(1))
+        excel["Second"].setDefaultRowHeight(20.0)
+        excel["Second"].setColumnWidth(0, 30.0)
+        assertWorksheetChildrenAreInSchemaOrder(excel.encode()!!, "xl/worksheets/sheet2.xml")
+    }
+
+    // endregion
 }

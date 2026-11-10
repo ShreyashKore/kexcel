@@ -1,5 +1,9 @@
 package com.gyanoba.kexcel
 
+import com.gyanoba.kexcel.sheet.TimeCellValue
+import com.gyanoba.kexcel.sheet.DateTimeCellValue
+import com.gyanoba.kexcel.sheet.DateCellValue
+import kotlin.test.assertFalse
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.CellIndex
 import com.gyanoba.kexcel.sheet.DoubleCellValue
@@ -223,17 +227,32 @@ class ForeignWorksheetXmlTest {
     }
 
     @Test
-    fun theHostOfASharedFormulaKeepsItsExpression() {
-        // A shared formula gives the expression once on the host cell; followers carry
-        // only `si`. Kexcel does not expand them, so a follower comes back empty — pinned
-        // here so implementing expansion is a visible change.
+    fun aSharedFormulaIsExpandedForEveryCellThatSharesIt() {
+        // §18.3.1.40: a shared formula gives the expression once, on the master cell; a
+        // follower carries only `si` and means "that expression, moved to my position".
+        // This used to assert that the follower came back empty. POI expands it
+        // (XSSFCell.convertSharedFormula) and reads `B2*2` for A2, and so does Excel; an
+        // empty follower was then saved as an empty <f>, which destroyed the formula.
         val sheet = sheetFromRawXml(
-            """<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">B1*2</f><v>4</v></c></row>""" +
-                """<row r="2"><c r="A2"><f t="shared" si="0"/><v>6</v></c></row>"""
+            """<row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1*2+${'$'}C${'$'}1</f><v>4</v></c></row>""" +
+                """<row r="2"><c r="A2"><f t="shared" si="0"/><v>6</v></c></row>""" +
+                """<row r="3"><c r="A3"><f t="shared" si="0"></f><v>8</v></c></row>"""
         )
 
-        assertEquals(FormulaCellValue("B1*2"), sheet.cell(CellIndex.indexByString("A1")).value)
-        assertEquals(FormulaCellValue(""), sheet.cell(CellIndex.indexByString("A2")).value)
+        assertEquals(FormulaCellValue("B1*2+\$C\$1"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(FormulaCellValue("B2*2+\$C\$1"), sheet.cell(CellIndex.indexByString("A2")).value)
+        assertEquals(FormulaCellValue("B3*2+\$C\$1"), sheet.cell(CellIndex.indexByString("A3")).value)
+    }
+
+    @Test
+    fun aSharedFormulaFollowerMayComeBeforeItsMaster() {
+        // Legal, if unusual: the group is identified by `si`, not by document order.
+        val sheet = sheetFromRawXml(
+            """<row r="1"><c r="B1"><f t="shared" si="3"/><v>1</v></c><c r="C1"><f t="shared" ref="B1:C1" si="3">C5+1</f><v>2</v></c></row>"""
+        )
+
+        assertEquals(FormulaCellValue("B5+1"), sheet.cell(CellIndex.indexByString("B1")).value)
+        assertEquals(FormulaCellValue("C5+1"), sheet.cell(CellIndex.indexByString("C1")).value)
     }
 
     @Test
@@ -353,6 +372,325 @@ class ForeignWorksheetXmlTest {
     @Test
     fun decodingSomethingThatIsNotAZipFails() {
         assertFailsWith<Exception> { Excel.decodeBytes("not a spreadsheet".encodeToByteArray()) }
+    }
+
+    // endregion
+
+
+    // region --- Namespace prefixes ---
+
+    /**
+     * Rewrites a part so its namespace is bound to [prefix] instead of being the default:
+     * `<workbook xmlns="…">` becomes `<x:workbook xmlns:x="…">`. Both spell the same document
+     * (XML Namespaces §6.2); the OpenXML SDK writes the prefixed form.
+     */
+    private fun String.withNamespacePrefix(prefix: String): String =
+        replace(Regex("<(/?)([A-Za-z])"), "<$1$prefix:$2").replaceFirst(" xmlns=\"", " xmlns:$prefix=\"")
+
+    private fun ByteArray.withPrefixedPart(name: String, prefix: String): ByteArray =
+        replaceZipEntry(this, name, readZipEntry(this, name).decodeToString().withNamespacePrefix(prefix).encodeToByteArray())
+
+    private fun workbookWithText(): ByteArray = Excel.createExcel().apply {
+        this["Sheet1"].updateCell(CellIndex.indexByString("A1"), TextCellValue("kept"))
+        this["Sheet1"].updateCell(CellIndex.indexByString("B1"), IntCellValue(7))
+    }.encode()!!
+
+    @Test
+    fun aPrefixedWorkbookPartStillListsItsSheets() {
+        // POI corpus 65016.xlsx: only xl/workbook.xml was prefixed. Kexcel read no sheets
+        // and then saved an empty shared-strings table over the real one.
+        val bytes = workbookWithText().withPrefixedPart("xl/workbook.xml", "x")
+
+        val excel = Excel.decodeBytes(bytes)
+        assertEquals(setOf("Sheet1"), excel.tables.keys)
+        assertEquals(TextCellValue("kept"), excel["Sheet1"].cell(CellIndex.indexByString("A1")).value)
+
+        PoiOracle.read(excel.encode()!!) { wb ->
+            assertEquals("kept", wb.getSheet("Sheet1").getRow(0).getCell(0).stringCellValue)
+        }
+    }
+
+    @Test
+    fun everyPartMayBindItsNamespaceToAPrefix() {
+        var bytes = workbookWithText()
+        for (part in listOf("xl/workbook.xml", "xl/worksheets/sheet1.xml", "xl/sharedStrings.xml", "xl/styles.xml")) {
+            bytes = bytes.withPrefixedPart(part, "x")
+        }
+        for (part in listOf("xl/_rels/workbook.xml.rels", "[Content_Types].xml")) {
+            bytes = bytes.withPrefixedPart(part, "ns0")
+        }
+
+        val sheet = Excel.decodeBytes(bytes)["Sheet1"]
+        assertEquals(TextCellValue("kept"), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(IntCellValue(7), sheet.cell(CellIndex.indexByString("B1")).value)
+
+        // Saved again, POI still reads the same cells and can add nothing to the complaint list.
+        val saved = Excel.decodeBytes(bytes).apply { this["Second"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new")) }.encode()!!
+        PoiOracle.read(saved) { wb ->
+            assertEquals("kept", wb.getSheet("Sheet1").getRow(0).getCell(0).stringCellValue)
+            assertEquals(7.0, wb.getSheet("Sheet1").getRow(0).getCell(1).numericCellValue)
+            assertEquals("new", wb.getSheet("Second").getRow(0).getCell(0).stringCellValue)
+        }
+    }
+
+    @Test
+    fun aWorkbookThatListsNoSheetsIsReportedAsADamagedFile() {
+        // §18.2.20: <sheets> holds at least one <sheet>. An empty model must never be
+        // saved back over a file whose sheets were simply not recognised.
+        val base = workbookWithText()
+        val workbookXml = readZipEntry(base, "xl/workbook.xml").decodeToString().replace(Regex("<sheet [^>]*/>|<sheet [^>]*></sheet>"), "")
+        val bytes = replaceZipEntry(base, "xl/workbook.xml", workbookXml.encodeToByteArray())
+
+        assertFailsWith<IllegalArgumentException> { Excel.decodeBytes(bytes) }
+    }
+
+    // endregion
+
+
+    // region --- Cells are written back as they were stored ---
+
+    @Test
+    fun anArrayFormulaKeepsItsTypeAndRange() {
+        // §18.3.1.40: `t="array"` and `ref` are what make C1:C3 one array formula. Without
+        // them C1 is an ordinary formula and C2:C3 are constants.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c><c r="C1"><f t="array" ref="C1:C3" aca="1">A1:A3*10</f><v>10</v></c></row>""" +
+                """<row r="2"><c r="A2"><v>2</v></c><c r="C2"><v>20</v></c></row>""" +
+                """<row r="3"><c r="A3"><v>3</v></c><c r="C3"><v>30</v></c></row>"""
+        )
+        assertEquals(FormulaCellValue("A1:A3*10"), Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("C1")).value)
+
+        val saved = roundTrip(source)
+
+        val f = rawCell(saved, "C1").getElementsByTag("f").first()!!
+        assertEquals(listOf("array", "C1:C3", "1"), listOf(f.attr("t"), f.attr("ref"), f.attr("aca")))
+        PoiOracle.read(saved) { wb ->
+            assertTrue(wb.getSheetAt(0).getRow(0).getCell(2).isPartOfArrayFormulaGroup)
+            assertTrue(wb.getSheetAt(0).getRow(2).getCell(2).isPartOfArrayFormulaGroup)
+        }
+    }
+
+    @Test
+    fun aDataTableFormulaKeepsItsAttributes() {
+        // A what-if data table has no expression at all; everything is in the attributes.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><f t="dataTable" ref="A1:A2" dt2D="0" dtr="0" r1="B1"/><v>3</v></c></row>"""
+        )
+
+        val f = rawCell(roundTrip(source), "A1").getElementsByTag("f").first()!!
+        assertEquals(listOf("dataTable", "A1:A2", "B1"), listOf(f.attr("t"), f.attr("ref"), f.attr("r1")))
+    }
+
+    @Test
+    fun cellAndValueMetadataIndexesAreKeptUntilTheCellIsEdited() {
+        // §18.3.1.4: `cm` points at the cell metadata that marks a dynamic-array formula,
+        // `vm` at the value metadata of a rich data type. They belong to the stored value.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1" cm="1"><f t="array" ref="A1:A2">_xlfn.SEQUENCE(2)</f><v>1</v></c><c r="B1" vm="2"><v>5</v></c><c r="C1" vm="3"><v>6</v></c></row>"""
+        )
+
+        val saved = roundTrip(source) { it["Sheet1"].updateCell(CellIndex.indexByString("C1"), IntCellValue(7)) }
+
+        assertEquals("1", rawCell(saved, "A1").attr("cm"))
+        assertEquals("2", rawCell(saved, "B1").attr("vm"))
+        assertFalse(rawCell(saved, "C1").hasAttr("vm"), "a new value must not inherit the old value's metadata")
+    }
+
+    @Test
+    fun anErrorLiteralIsWrittenBackAsAnErrorNotAsAFormula() {
+        // An error cell has no <f>. Kexcel surfaces it as a FormulaCellValue for want of an
+        // error type, but saving `<f>#N/A</f>` turned a constant into a formula (POI: the
+        // cell type changed from ERROR to FORMULA on 389 cells of the POI corpus).
+        val source = workbookFromRawXml("""<row r="1"><c r="A1" t="e"><v>#N/A</v></c></row>""")
+        assertEquals(FormulaCellValue("#N/A"), Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("A1")).value)
+
+        val saved = roundTrip(source)
+
+        val cell = rawCell(saved, "A1")
+        assertEquals("e", cell.attr("t"))
+        assertTrue(cell.getElementsByTag("f").isEmpty())
+        assertEquals("#N/A", cell.getElementsByTag("v").first()!!.text())
+        assertOnlyDiffers(source, saved)
+    }
+
+    @Test
+    fun aFormulaOnAStringTypedCellIsStillAFormula() {
+        // POI corpus 52575_main.xlsx (LibreOffice): the cached result is typed as a string,
+        // but the cell is a formula. Its result is kept as text (`t="str"`).
+        val sheetXml = """<row r="1"><c r="A1" t="inlineStr"><f>B1&amp;"!"</f><is><t>hi!</t></is></c></row>"""
+        val source = workbookFromRawXml(sheetXml)
+        assertEquals(FormulaCellValue("B1&\"!\""), Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("A1")).value)
+
+        val cell = rawCell(roundTrip(source), "A1")
+        assertEquals("str", cell.attr("t"))
+        assertEquals("hi!", cell.getElementsByTag("v").first()!!.text())
+    }
+
+    @Test
+    fun aCellStyleBeyondTheStyleTableIsReportedAsADamagedFile() {
+        val source = workbookFromRawXml("""<row r="1"><c r="A1" s="99"><v>5</v></c></row>""")
+        assertFailsWith<IllegalArgumentException> { Excel.decodeBytes(source) }
+    }
+
+    // endregion
+
+    @Test
+    fun aCellWithoutAStyleIndexIsWrittenBackWithoutOne() {
+        // §18.3.1.4: `s` is optional. A cell that has none takes its look from its row or
+        // column; writing `s="0"` on it overrode those (POI corpus 45544.xlsx: a centred
+        // column lost its alignment on such cells).
+        val source = workbookFromRawXml("""<row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"/></row>""")
+        assertNotNull(Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("A1")).cellStyle)
+
+        val saved = roundTrip(source) { excel ->
+            excel["Sheet1"].cell(CellIndex.indexByString("B1")).cellStyle = com.gyanoba.kexcel.sheet.CellStyle(bold = true)
+        }
+
+        assertFalse(rawCell(saved, "A1").hasAttr("s"))
+        assertFalse(rawCell(saved, "C1").hasAttr("s"))
+        assertTrue(rawCell(saved, "B1").hasAttr("s"), "a style given in code is written")
+    }
+
+
+    // region --- Valid input that used to be refused ---
+
+    private fun valueOf(sheetDataXml: String, ref: String = "A1") =
+        sheetFromRawXml(sheetDataXml).cell(CellIndex.indexByString(ref)).value
+
+    @Test
+    fun aLowerCaseExponentIsANumber() {
+        // xsd:double accepts `e` and `E`; Excel writes `E`, other producers `e`.
+        assertEquals(DoubleCellValue(100000.0), valueOf("""<row r="1"><c r="A1"><v>1e5</v></c></row>"""))
+        assertEquals(DoubleCellValue(0.0015), valueOf("""<row r="1"><c r="A1"><v>1.5e-3</v></c></row>"""))
+    }
+
+    @Test
+    fun whitespaceAroundANumberIsIgnored() {
+        // Pretty-printed XML: the value is on a line of its own.
+        assertEquals(IntCellValue(7), valueOf("<row r=\"1\"><c r=\"A1\"><v>\n      7\n    </v></c></row>"))
+    }
+
+    @Test
+    fun anIntegerTooLargeForALongIsStillANumber() {
+        assertEquals(DoubleCellValue(1.2345678901234567E19), valueOf("""<row r="1"><c r="A1"><v>12345678901234567890</v></c></row>"""))
+    }
+
+    @Test
+    fun somethingThatIsNotANumberIsReportedAsADamagedFile() {
+        val error = assertFailsWith<IllegalArgumentException> { valueOf("""<row r="1"><c r="B7"><v>twelve</v></c></row>""") }
+        assertTrue("B7" in error.message!!, error.message)
+    }
+
+    @Test
+    fun isoDatesAreReadAndWrittenBackAsTheyWere() {
+        // §18.18.11: `t="d"` holds an ISO 8601 date, the form the Strict conformance
+        // class uses. It used to be parsed as a number and threw.
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1" t="d"><v>2024-01-15T10:30:00</v></c><c r="B1" t="d"><v>2024-01-15</v></c>""" +
+                """<c r="C1" t="d"><v>2024-01-15T10:30:00.250Z</v></c><c r="D1" t="d"><v>10:30:00</v></c></row>"""
+        )
+        val sheet = Excel.decodeBytes(source)["Sheet1"]
+
+        assertEquals(DateTimeCellValue(2024, 1, 15, 10, 30), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(DateCellValue(2024, 1, 15), sheet.cell(CellIndex.indexByString("B1")).value)
+        assertEquals(DateTimeCellValue(2024, 1, 15, 10, 30, millisecond = 250), sheet.cell(CellIndex.indexByString("C1")).value)
+        assertEquals(TimeCellValue(10, 30), sheet.cell(CellIndex.indexByString("D1")).value)
+
+        val saved = roundTrip(source)
+        assertEquals("d", rawCell(saved, "A1").attr("t"))
+        assertEquals("2024-01-15T10:30:00", rawCell(saved, "A1").getElementsByTag("v").first()!!.text())
+    }
+
+    @Test
+    fun aStringCellWithoutAnIndexIsAnEmptyString() {
+        // POI corpus 64508.xlsx: `<c t="s"><v/></c>`. POI reads an empty string; this used
+        // to be reported as a damaged file, which made the whole workbook unreadable.
+        val sheet = sheetFromRawXml("""<row r="1"><c r="A1" t="s"><v/></c><c r="B1" t="s"/><c r="C1"><v>3</v></c></row>""")
+
+        assertEquals(TextCellValue(""), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(TextCellValue(""), sheet.cell(CellIndex.indexByString("B1")).value)
+        assertEquals(IntCellValue(3), sheet.cell(CellIndex.indexByString("C1")).value)
+    }
+
+    @Test
+    fun aSheetWithTensOfThousandsOfMergesIsReadPromptly() {
+        // Each merge used to rescan every merge read so far (POI corpus
+        // 57893-many-merges.xlsx, 50,000 merges, did not finish in two minutes).
+        val merges = (1..30_000).joinToString("") { """<mergeCell ref="A$it:B$it"/>""" }
+        val source = workbookFromRawXml("", afterSheetData = """<mergeCells count="30000">$merges</mergeCells>""")
+
+        val started = kotlin.time.TimeSource.Monotonic.markNow()
+        val sheet = Excel.decodeBytes(source)["Sheet1"]
+
+        assertEquals(30_000, sheet.spannedItems.size)
+        assertTrue(started.elapsedNow() < kotlin.time.Duration.parse("20s"), "took ${started.elapsedNow()}")
+    }
+
+    // endregion
+
+
+    // region --- _xHHHH_ escapes ---
+
+    @Test
+    fun escapedCharactersInStringsAreDecoded() {
+        // ST_Xstring (§22.9.2.19): a carriage return is stored as `_x000D_`, because XML
+        // would read a raw one as a line feed; `_x005F_` protects a literal underscore.
+        // POI decodes these in XSSFRichTextString.utfDecode (corpus file 60289.xlsx).
+        val sheet = sheetFromRawXml(
+            """<row r="1"><c r="A1" t="inlineStr"><is><t>line1_x000D__x000A_line2</t></is></c>""" +
+                """<c r="B1" t="inlineStr"><is><t>tab_x0009_bed</t></is></c>""" +
+                """<c r="C1" t="inlineStr"><is><t>literal _x005F_x000D_ kept</t></is></c>""" +
+                """<c r="D1" t="inlineStr"><is><r><t>run_x000D_</t></r><r><t>two</t></r></is></c>""" +
+                """<c r="E1" t="str"><v>a_x000D_b</v></c></row>"""
+        )
+        fun text(ref: String) = sheet.cell(CellIndex.indexByString(ref)).value.toString()
+
+        assertEquals("line1\r\nline2", text("A1"))
+        assertEquals("tab\tbed", text("B1"))
+        assertEquals("literal _x000D_ kept", text("C1"))
+        assertEquals("run\rtwo", text("D1"))
+        assertEquals("a\rb", text("E1"))
+    }
+
+    // endregion
+
+    // region --- Characters that only survive as character references ---
+
+    @Test
+    fun lineBreaksInAttributeValuesSurviveANoEditSave() {
+        // A data validation message is an attribute. A line break in an attribute value is
+        // only preserved as `&#10;`; written raw, attribute-value normalisation (XML §3.3.3)
+        // hands the next reader a space. ksoup writes it raw, so the worksheet part is
+        // serialised by Kexcel itself.
+        val validation = """<dataValidations count="1"><dataValidation type="list" sqref="B1:B5" showInputMessage="1" """ +
+            """promptTitle="Pick" prompt="first line&#10;second line&#9;tabbed &quot;quoted&quot; &amp; &lt;done&gt;"><formula1>"a,b"</formula1></dataValidation></dataValidations>"""
+        val source = workbookFromRawXml("""<row r="1"><c r="A1"><v>1</v></c></row>""", afterSheetData = validation)
+
+        val sheetXml = readZipEntry(roundTrip(source), "xl/worksheets/sheet1.xml").decodeToString()
+
+        assertTrue(
+            """prompt="first line&#10;second line&#9;tabbed &quot;quoted&quot; &amp; &lt;done&gt;"""" in sheetXml,
+            sheetXml.substringAfter("<dataValidation ").take(200),
+        )
+        assertTrue("""<formula1>"a,b"</formula1>""" in sheetXml)
+    }
+
+    @Test
+    fun aCarriageReturnWrittenAsACharacterReferenceIsDataButALiteralOneIsALineEnd() {
+        // XML §2.11: a literal CR or CRLF in the file is a line end and reads as LF. `&#13;`
+        // is a carriage return the author meant.
+        val source = workbookFromRawXml(
+            "<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>kept&#13;here</t></is></c>" +
+                "<c r=\"B1\" t=\"inlineStr\"><is><t>folded\r\nhere</t></is></c></row>"
+        )
+        val sheet = Excel.decodeBytes(source)["Sheet1"]
+
+        assertEquals("kept\rhere", sheet.cell(CellIndex.indexByString("A1")).value.toString())
+        assertEquals("folded\nhere", sheet.cell(CellIndex.indexByString("B1")).value.toString())
+        PoiOracle.read(roundTrip(source)) { wb ->
+            assertEquals("kept\rhere", wb.getSheetAt(0).getRow(0).getCell(0).stringCellValue)
+            assertEquals("folded\nhere", wb.getSheetAt(0).getRow(0).getCell(1).stringCellValue)
+        }
     }
 
     // endregion

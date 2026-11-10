@@ -119,11 +119,6 @@ internal fun numericToLetters(numberInput: Int): String {
     return letters
 }
 
-/// Normalize line
-internal fun normalizeNewLine(text: String): String {
-    return text.replace("\r\n", "\n")
-}
-
 /// Returns the coordinates from a cell name.
 internal fun cellCoordsFromCellId(cellId: String): Pair<Int, Int> {
     val lettersPart = cellId
@@ -156,8 +151,15 @@ internal fun damagedExcel(text: String = ""): Nothing {
  * are resolved; `..` never climbs above the package root. Percent-encoded characters are not
  * decoded.
  */
-internal fun resolveWorkbookRelTarget(target: String): String {
-    val segments = if (target.startsWith('/')) mutableListOf() else mutableListOf("xl")
+internal fun resolveWorkbookRelTarget(target: String): String = resolveRelationshipTarget("xl", target)
+
+/**
+ * Resolves a relationship `Target` to the archive entry name of the part it points at, for
+ * a source part that lives in [folder] (`xl` for the workbook, `xl/worksheets` for a sheet).
+ * See [resolveWorkbookRelTarget] for the rules.
+ */
+internal fun resolveRelationshipTarget(folder: String, target: String): String {
+    val segments = if (target.startsWith('/')) mutableListOf() else folder.split('/').filter { it.isNotEmpty() }.toMutableList()
     target.split('/').forEach { segment ->
         when (segment) {
             "", "." -> Unit
@@ -251,3 +253,44 @@ public fun getColumnIndex(columnAlphabet: String): Int {
  */
 internal fun fontStyleIndex(fontStyleList: List<FontStyle>, fontStyle: FontStyle): Int =
     fontStyleList.indexOf(fontStyle)
+private val STRING_ESCAPE = Regex("_x([0-9A-Fa-f]{4})_")
+
+/**
+ * Decodes the `_xHHHH_` escapes of a string in the file (ST_Xstring, §22.9.2.19).
+ *
+ * XML 1.0 cannot hold most control characters, and reads a carriage return as a line
+ * feed, so they are stored as `_x000D_`, `_x0001_`, … ; a literal underscore that would
+ * otherwise start such a sequence is stored as `_x005F_`. POI decodes them in
+ * `XSSFRichTextString.utfDecode`. Left undecoded, a line break typed on Windows showed up
+ * as the text `_x000D_`.
+ */
+internal fun decodeXmlString(text: String): String {
+    if ("_x" !in text) return text
+    return STRING_ESCAPE.replace(text) { it.groupValues[1].toInt(16).toChar().toString() }
+}
+
+/** The inverse of [decodeXmlString]: escapes what an XML text node cannot carry unchanged. */
+internal fun encodeXmlString(text: String): String {
+    var needsWork = false
+    for (i in text.indices) {
+        val c = text[i]
+        if ((c < ' ' && c != '\t' && c != '\n') || c == '\uFFFE' || c == '\uFFFF' || (c == '_' && STRING_ESCAPE.matchesAt(text, i))) {
+            needsWork = true
+            break
+        }
+    }
+    if (!needsWork) return text
+
+    val out = StringBuilder(text.length + 16)
+    for (i in text.indices) {
+        val c = text[i]
+        when {
+            (c < ' ' && c != '\t' && c != '\n') || c == '\uFFFE' || c == '\uFFFF' ->
+                out.append("_x").append(c.code.toString(16).uppercase().padStart(4, '0')).append('_')
+            // Text that already reads as an escape must not be decoded into something else.
+            c == '_' && STRING_ESCAPE.matchesAt(text, i) -> out.append("_x005F_")
+            else -> out.append(c)
+        }
+    }
+    return out.toString()
+}

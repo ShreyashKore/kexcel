@@ -1,5 +1,6 @@
 package com.gyanoba.kexcel
 
+import kotlin.test.assertFalse
 import com.gyanoba.kexcel.number_format.CustomNumericNumFormat
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.CellIndex
@@ -521,6 +522,920 @@ class PoiInteropTest {
         OPCPackage.open(ByteArrayInputStream(excel.encode()!!)).use { pkg ->
             assertTrue(pkg.parts.isNotEmpty())
         }
+    }
+
+    // endregion
+
+
+    // region --- Header and footer ---
+
+    @Test
+    fun poiReadsAKexcelHeaderVerbatim() {
+        // §18.3.1.39: the header string is a format of its own — &L/&C/&R pick a section,
+        // &P is the page number — and `&` must reach the file as a single escaped
+        // ampersand. Hand-escaping it before the XML layer did turned every code into text.
+        val header = "&LSample Company & Sons\nLine 2 \"quoted\" <tag>&RPage &P of &N"
+        val excel = Excel.createExcel()
+        excel["Sheet1"].headerFooter = com.gyanoba.kexcel.sheet.HeaderFooter(
+            null, null, null, null, null, null, null, null, oddFooter = "Stamped &D", oddHeader = header,
+        )
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb ->
+            val headerFooter = (wb.getSheetAt(0) as org.apache.poi.xssf.usermodel.XSSFSheet).ctWorksheet.headerFooter
+            assertEquals(header, headerFooter.oddHeader)
+            assertEquals("Stamped &D", headerFooter.oddFooter)
+        }
+        assertEquals(header, Excel.decodeBytes(bytes)["Sheet1"].headerFooter?.oddHeader)
+    }
+
+    @Test
+    fun aPoiHeaderSurvivesAKexcelRoundTrip() {
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            sheet.createRow(0).createCell(0).setCellValue(1.0)
+            sheet.header.left = "Example & Campaign"
+            sheet.header.center = "two\nlines"
+            sheet.footer.right = "amp stamp &P"
+        }
+
+        assertOnlyDiffers(source, roundTrip(source))
+        assertEquals("&Ctwo\nlines&LExample & Campaign", Excel.decodeBytes(source)["S"].headerFooter?.oddHeader)
+    }
+
+    // endregion
+
+
+    // region --- An unedited cell is written back as it was stored ---
+
+    private fun formulaWorkbook(): ByteArray = poiWorkbook { wb ->
+        val sheet = wb.createSheet("S")
+        sheet.createRow(0).createCell(0).setCellValue(2.0)
+        sheet.createRow(1).createCell(0).setCellValue(3.0)
+        val sum = sheet.createRow(2).createCell(0).apply { cellFormula = "A1+A2" }
+        val text = sheet.createRow(3).createCell(0).apply { cellFormula = "\"x\"&\"y\"" }
+        val flag = sheet.createRow(4).createCell(0).apply { cellFormula = "A1<A2" }
+        wb.creationHelper.createFormulaEvaluator().apply { evaluateFormulaCell(sum); evaluateFormulaCell(text); evaluateFormulaCell(flag) }
+    }
+
+    @Test
+    fun cachedFormulaResultsSurviveANoEditRoundTrip() {
+        // The cached <v> is what every reader that does not calculate shows: pandas,
+        // previewers, POI without an evaluator. It used to be emptied on every save.
+        val source = formulaWorkbook()
+        val saved = roundTrip(source)
+
+        assertOnlyDiffers(source, saved)
+        readWithPoi(saved) { wb ->
+            val sheet = wb.getSheetAt(0)
+            assertEquals(5.0, sheet.getRow(2).getCell(0).numericCellValue)
+            assertEquals(CellType.STRING, sheet.getRow(3).getCell(0).cachedFormulaResultType)
+            assertEquals("xy", sheet.getRow(3).getCell(0).stringCellValue)
+            assertEquals(true, sheet.getRow(4).getCell(0).booleanCellValue)
+        }
+    }
+
+    @Test
+    fun editingAValueDropsTheCachedResultsAndAsksForARecalculation() {
+        // Once A1 changes, the cached 5.0 is wrong. A stale result is worse than none, so
+        // it is not written, and fullCalcOnLoad (§18.2.2) tells Excel to recalculate —
+        // what POI's setForceFormulaRecalculation does.
+        val saved = roundTrip(formulaWorkbook()) { it["S"].updateCell(CellIndex.indexByString("A1"), IntCellValue(40)) }
+
+        assertEquals("", rawCell(saved, "A3").getElementsByTag("v").first()!!.text())
+        assertEquals("A1+A2", rawCell(saved, "A3").getElementsByTag("f").first()!!.text())
+        readWithPoi(saved) { wb ->
+            assertTrue(wb.forceFormulaRecalculation)
+            val cell = wb.getSheetAt(0).getRow(2).getCell(0)
+            assertEquals(43.0, wb.creationHelper.createFormulaEvaluator().evaluate(cell).numberValue)
+        }
+    }
+
+    @Test
+    fun stylePropertiesKexcelDoesNotModelSurviveANoEditRoundTrip() {
+        // Each of these differs from the default <xf> only in something CellStyle has no
+        // field for. Looked up by equality they all collapsed onto the first "equal" <xf>:
+        // fills vanished, unlocked cells became locked, and one cell gained the
+        // strike-through of another.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            var row = 0
+            fun cell(value: String, style: (org.apache.poi.xssf.usermodel.XSSFCellStyle) -> Unit) {
+                val c = sheet.createRow(row++).createCell(0)
+                c.setCellValue(value)
+                c.cellStyle = (wb.createCellStyle() as org.apache.poi.xssf.usermodel.XSSFCellStyle).also(style)
+            }
+            fun themed(theme: Long, tint: Double = 0.0) = org.apache.poi.xssf.usermodel.XSSFColor.from(
+                org.openxmlformats.schemas.spreadsheetml.x2006.main.CTColor.Factory.newInstance().also { it.theme = theme; it.tint = tint }, null,
+            )
+            cell("strike-through") { it.setFont(wb.createFont().apply { strikeout = true }) }
+            cell("theme fill") { it.fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND; it.setFillForegroundColor(themed(4, 0.4)) }
+            cell("indexed fill") { it.fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND; it.fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.YELLOW.index }
+            cell("pattern fill") { it.fillPattern = org.apache.poi.ss.usermodel.FillPatternType.THIN_HORZ_BANDS; it.fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index }
+            cell("unlocked") { it.locked = false }
+            cell("hidden formula") { it.hidden = true }
+            cell("indent") { it.indention = 3 }
+            cell("justify") { it.alignment = org.apache.poi.ss.usermodel.HorizontalAlignment.JUSTIFY }
+            cell("theme font colour") { it.setFont((wb.createFont() as org.apache.poi.xssf.usermodel.XSSFFont).apply { setColor(themed(5)) }) }
+            cell("10.5 pt") { it.setFont((wb.createFont() as org.apache.poi.xssf.usermodel.XSSFFont).apply { setFontHeight(10.5) }) }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(1234.5); cellStyle = wb.createCellStyle().apply { dataFormat = 44 } }
+            sheet.createRow(row).createCell(0).apply { setCellValue(12.0); cellStyle = wb.createCellStyle().apply { dataFormat = 5 } }
+        }
+
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun loadingAWorkbookDoesNotChangeAnyNumberFormat() {
+        // Any format may sit on any value. Kexcel used to swap in the default format for
+        // the value's type whenever it judged the two a poor match — text formatted `@`
+        // became General, `hh:mm:ss` became `h:mm` — and, the replacement being a new
+        // style, the cell lost its font, fill and border with it.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            val formats = wb.createDataFormat()
+            var row = 0
+            fun styled(format: String) = wb.createCellStyle().apply {
+                dataFormat = formats.getFormat(format)
+                setFont(wb.createFont().apply { bold = true; fontName = "Arial" })
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
+                fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.LIGHT_GREEN.index
+                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
+            }
+            sheet.createRow(row++).createCell(0).apply { setCellValue("00123"); cellStyle = styled("@") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue("Total"); cellStyle = styled("#,##0") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(0.5); cellStyle = styled("hh:mm:ss") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(1.25); cellStyle = styled("[h]:mm:ss") }
+            sheet.createRow(row++).createCell(0).apply { setCellValue(0.25); cellStyle = styled("m/d/yy") }
+            sheet.createRow(row).createCell(0).apply { setCellValue(true); cellStyle = styled("yyyy-mm-dd") }
+        }
+
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun unEditedNumbersAreWrittenBackDigitForDigit() {
+        // A date or time is read into whole milliseconds; rebuilding the serial from those
+        // changed the stored number (POI corpus 58747.xlsx: 42354.58333333334 became
+        // 42354.583333333336). The first value is a plain number that Kexcel takes for a
+        // date because of the `[Red]` in its format.
+        val values = listOf("[Red]0.00" to 1234.123456789, "h:mm:ss" to 0.64604166, "yyyy-mm-dd h:mm" to 42354.58333333334, "0.00" to 0.1 + 0.2)
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            values.forEachIndexed { i, (format, value) ->
+                sheet.createRow(i).createCell(0).apply {
+                    setCellValue(value)
+                    cellStyle = wb.createCellStyle().apply { dataFormat = wb.createDataFormat().getFormat(format) }
+                }
+            }
+        }
+
+        val saved = roundTrip(source)
+
+        assertOnlyDiffers(source, saved)
+        readWithPoi(saved) { wb -> assertEquals(values.map { it.second }, values.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).numericCellValue }) }
+    }
+
+    @Test
+    fun changingAValueKeepsTheCellsFormatting() {
+        // updateCell without a style used to reset the cell to the bare default style.
+        val source = poiWorkbook { wb ->
+            val style = wb.createCellStyle().apply {
+                dataFormat = 10 // 0.00%
+                setFont(wb.createFont().apply { bold = true })
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
+                fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.YELLOW.index
+            }
+            val sheet = wb.createSheet("S")
+            for (r in 0..2) sheet.createRow(r).createCell(0).apply { setCellValue(0.25); cellStyle = style }
+        }
+
+        val saved = roundTrip(source) { excel ->
+            excel["S"].updateCell(CellIndex.indexByString("A1"), DoubleCellValue(0.5))
+            excel["S"].cell(CellIndex.indexByString("A2")).value = DoubleCellValue(0.75)
+        }
+
+        assertOnlyDiffers(source, saved, expected = setOf("number"))
+        readWithPoi(saved) { wb -> assertEquals(listOf(0.5, 0.75, 0.25), (0..2).map { wb.getSheetAt(0).getRow(it).getCell(0).numericCellValue }) }
+    }
+
+    // endregion
+
+
+    // region --- New and derived styles ---
+
+    private fun signatureOf(bytes: ByteArray, ref: String): Map<String, String> = readWithPoi(bytes) { wb ->
+        val address = org.apache.poi.ss.util.CellReference(ref)
+        val style = wb.getSheetAt(0).getRow(address.row).getCell(address.col.toInt()).cellStyle as org.apache.poi.xssf.usermodel.XSSFCellStyle
+        PoiOracle.styleSignature(style).associate { it.substringBefore('=') to it.substringAfter('=') }
+    }
+
+    @Test
+    fun aStyleDerivedFromAnExistingOneKeepsEverythingThatWasNotChanged() {
+        // copyWith on a style read from a file. The new <xf> used to get fontId, fillId or
+        // borderId 0 for whichever of the three it *kept*, because an id was only worked
+        // out for entries added in the same save; and nothing CellStyle does not model
+        // (here: unlocked, indent) was carried over.
+        val source = poiWorkbook { wb ->
+            val style = (wb.createCellStyle() as org.apache.poi.xssf.usermodel.XSSFCellStyle).apply {
+                setFont(wb.createFont().apply { bold = true; fontName = "Arial"; fontHeightInPoints = 14 })
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
+                setFillForegroundColor(org.apache.poi.xssf.usermodel.XSSFColor(byteArrayOf(0xFF.toByte(), 0, 0), null))
+                borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                locked = false
+                indention = 2
+            }
+            wb.createSheet("S").createRow(0).createCell(0).apply { setCellValue("a"); cellStyle = style }
+        }
+
+        val saved = roundTrip(source) { excel ->
+            val sheet = excel["S"]
+            val a1 = sheet.cell(CellIndex.indexByString("A1")).cellStyle!!
+            sheet.updateCell(CellIndex.indexByString("B1"), TextCellValue("b"), a1.copyWith(italicVal = true))
+            sheet.updateCell(CellIndex.indexByString("C1"), TextCellValue("c"), a1.copyWith(backgroundColorHexVal = ExcelColor.fromHexString("FF0000FF")))
+            sheet.updateCell(
+                CellIndex.indexByString("D1"), TextCellValue("d"),
+                a1.copyWith(leftBorderVal = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Thick)),
+            )
+            sheet.updateCell(CellIndex.indexByString("E1"), IntCellValue(5), a1.copyWith(numberFormat = CustomNumericNumFormat("0.000")))
+        }
+
+        val a1 = signatureOf(saved, "A1")
+        fun changed(ref: String) = signatureOf(saved, ref).filter { (part, value) -> a1[part] != value }.keys
+        assertEquals(signatureOf(source, "A1"), a1)
+        assertEquals(setOf("font"), changed("B1"))
+        assertTrue("italic=true" in signatureOf(saved, "B1").getValue("font"))
+        assertEquals(setOf("fill"), changed("C1"))
+        assertTrue("FF0000FF" in signatureOf(saved, "C1").getValue("fill"))
+        assertEquals(setOf("border"), changed("D1"))
+        assertEquals("THICK,NONE,NONE,THIN", signatureOf(saved, "D1").getValue("border"))
+        assertEquals(setOf("number format"), changed("E1"))
+    }
+
+    @Test
+    fun aNewStyleGetsItsOwnFontFillAndBorderInAWorkbookThatAlreadyHasMany() {
+        // Three traps for the index arithmetic: fonts no cell uses (every Excel workbook
+        // has some), and a conditional format, whose <dxf> holds a <font>, a <fill> and a
+        // <border> that are not numbered by fontId / fillId / borderId (§18.8.45).
+        val source = poiWorkbook { wb ->
+            repeat(3) { wb.createFont().apply { fontName = "Unused $it" } }
+            val sheet = wb.createSheet("S")
+            sheet.createRow(0).createCell(0).setCellValue(10.0)
+            val formatting = sheet.sheetConditionalFormatting
+            val rule = formatting.createConditionalFormattingRule(org.apache.poi.ss.usermodel.ComparisonOperator.GT, "5")
+            rule.createPatternFormatting().apply {
+                fillBackgroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND.code
+            }
+            rule.createFontFormatting().setFontStyle(true, true)
+            rule.createBorderFormatting().apply { borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN }
+            formatting.addConditionalFormatting(arrayOf(CellRangeAddress.valueOf("A1:A5")), rule)
+        }
+
+        val saved = roundTrip(source) { excel ->
+            excel["S"].updateCell(
+                CellIndex.indexByString("C1"), TextCellValue("c"),
+                CellStyle(
+                    bold = true, fontFamily = "Courier New", fontSize = 20,
+                    backgroundColorHex = ExcelColor.fromHexString("FF00FF00"),
+                    leftBorder = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Thick),
+                ),
+            )
+        }
+
+        val c1 = signatureOf(saved, "C1")
+        assertTrue(c1.getValue("font").startsWith("Courier New,400,bold=true"), c1.getValue("font"))
+        assertTrue("FF00FF00" in c1.getValue("fill"), c1.getValue("fill"))
+        assertEquals("THICK,NONE,NONE,NONE", c1.getValue("border"))
+        assertOnlyDiffers(source, saved, expected = setOf("cell appeared"))
+    }
+
+    @Test
+    fun poiSeesTheBordersKexcelWrites() {
+        // POI reports no border unless the <xf> says applyBorder (XSSFCellStyle.getBorderLeft).
+        val excel = Excel.createExcel()
+        excel["Sheet1"].updateCell(
+            CellIndex.indexByString("A1"), TextCellValue("boxed"),
+            CellStyle(
+                leftBorder = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Thin),
+                bottomBorder = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Double),
+            ),
+        )
+
+        assertEquals("THIN,NONE,NONE,DOUBLE", signatureOf(excel.encode()!!, "A1").getValue("border"))
+    }
+
+    @Test
+    fun anyArgbBackgroundColourIsWrittenAsAFill() {
+        // Only colours whose alpha is FF used to be written. A translucent one — many of the
+        // named ExcelColor constants — was counted but skipped, so the next cell's fill id
+        // pointed at the wrong fill and the last one past the end of the table.
+        val colours = listOf(ExcelColor.black26, ExcelColor.fromHexString("FFFF0000"), ExcelColor.fromHexString("FF0000FF"))
+        val excel = Excel.createExcel()
+        colours.forEachIndexed { i, colour ->
+            excel["Sheet1"].updateCell(CellIndex.indexByColumnRow(0, i), TextCellValue("c$i"), CellStyle(backgroundColorHex = colour))
+        }
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb ->
+            val written = colours.indices.map { (wb.getSheetAt(0).getRow(it).getCell(0).cellStyle as org.apache.poi.xssf.usermodel.XSSFCellStyle).fillForegroundColorColor.argbHex }
+            assertEquals(colours.map { it.colorHex }, written)
+        }
+        val reread = Excel.decodeBytes(bytes)["Sheet1"]
+        assertEquals(colours, colours.indices.map { reread.cell(CellIndex.indexByColumnRow(0, it)).cellStyle?.backgroundColor })
+    }
+
+    @Test
+    fun changingAStyleObjectReadFromAFileIsSaved() {
+        // The object returned by Data.cellStyle is the one the parser built. A change made
+        // to it used to be dropped silently: the cell was written under its old index.
+        val source = poiWorkbook { wb -> wb.createSheet("S").createRow(0).createCell(0).apply { setCellValue("a"); cellStyle = wb.createCellStyle().apply { locked = false } } }
+
+        val saved = roundTrip(source) { it["S"].cell(CellIndex.indexByString("A1")).cellStyle!!.isBold = true }
+
+        val after = signatureOf(saved, "A1")
+        assertTrue("bold=true" in after.getValue("font"))
+        assertEquals("locked:false,hidden:false", after.getValue("protection"))
+    }
+
+    // endregion
+
+
+    // region --- Rows and columns ---
+
+    private fun workbookWithRowAndColumnProperties(): ByteArray = poiWorkbook { wb ->
+        val sheet = wb.createSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+        val bold = (wb.createCellStyle() as org.apache.poi.xssf.usermodel.XSSFCellStyle).apply { setFont(wb.createFont().apply { bold = true }) }
+        sheet.createRow(0).createCell(0).setCellValue("a")
+        sheet.createRow(1).apply { createCell(0).setCellValue("hidden row"); zeroHeight = true }
+        sheet.createRow(2).apply { createCell(0).setCellValue("styled row"); rowStyle = bold }
+        sheet.createRow(3).heightInPoints = 40f // a height, no cells
+        sheet.createRow(4).createCell(0).setCellValue("grouped")
+        sheet.createRow(5).createCell(0).setCellValue("grouped")
+        sheet.groupRow(4, 5)
+        sheet.createRow(6).apply { createCell(0).setCellValue("tall"); heightInPoints = 33.3f }
+        sheet.getRow(0).createCell(25).setCellValue("z")
+        sheet.setColumnHidden(1, true)
+        sheet.setColumnWidth(2, 5000)
+        sheet.setDefaultColumnStyle(3, bold)
+        sheet.groupColumn(5, 6)
+        // One <col> for columns J to T.
+        sheet.ctWorksheet.getColsArray(0).addNewCol().apply { min = 10; max = 20; width = 30.0; customWidth = true }
+    }
+
+    @Test
+    fun rowAndColumnPropertiesSurviveANoEditRoundTrip() {
+        // <sheetData> and <cols> used to be rebuilt from cell values, heights and widths
+        // alone: hidden rows and columns became visible, grouping and row/column styles
+        // went, a <col> range kept its width on the first column only, and a row with a
+        // height but no cells disappeared.
+        val source = workbookWithRowAndColumnProperties()
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun aColumnRangeGivesItsWidthToEveryColumnInIt() {
+        // §18.3.1.13: one <col min="10" max="20"> describes eleven columns.
+        val sheet = Excel.decodeBytes(workbookWithRowAndColumnProperties())["S"]
+        assertEquals(List(11) { 30.0 }, (9..19).map { sheet.getColumnWidth(it) })
+    }
+
+    @Test
+    fun changingOneColumnWidthLeavesEverythingElseAboutTheColumnsAlone() {
+        val source = workbookWithRowAndColumnProperties()
+        val saved = roundTrip(source) { excel ->
+            excel["S"].setColumnWidth(1, 12.0)   // the hidden column
+            excel["S"].setColumnWidth(14, 50.0)  // in the middle of the J:T range
+        }
+
+        readWithPoi(saved) { wb ->
+            val sheet = wb.getSheetAt(0)
+            assertTrue(sheet.isColumnHidden(1), "a hidden column stays hidden when its width changes")
+            assertEquals(12 * 256, sheet.getColumnWidth(1))
+            assertEquals(50 * 256, sheet.getColumnWidth(14))
+            assertEquals(listOf(7680, 7680, 7680, 7680), listOf(9, 13, 15, 19).map { sheet.getColumnWidth(it) })
+            assertEquals(5000, sheet.getColumnWidth(2))
+            assertTrue((sheet.getColumnStyle(3) as org.apache.poi.xssf.usermodel.XSSFCellStyle).font.bold)
+            assertEquals(1, sheet.getColumnOutlineLevel(5))
+            assertEquals(2048, sheet.getColumnWidth(0), "a column that never had a width is not given one")
+        }
+    }
+
+    @Test
+    fun changingARowHeightKeepsTheRowsOtherProperties() {
+        val saved = roundTrip(workbookWithRowAndColumnProperties()) { excel ->
+            excel["S"].setRowHeight(1, 20.0)  // the hidden row
+            excel["S"].setRowHeight(9, 55.0)  // a row with no cells at all
+        }
+
+        readWithPoi(saved) { wb ->
+            val sheet = wb.getSheetAt(0)
+            assertTrue(sheet.getRow(1).zeroHeight)
+            assertEquals(20f, sheet.getRow(1).heightInPoints)
+            assertEquals(55f, sheet.getRow(9).heightInPoints, "a height set on an empty row is saved")
+            assertEquals(1, sheet.getRow(4).outlineLevel.toInt())
+            assertTrue((sheet.getRow(2) as org.apache.poi.xssf.usermodel.XSSFRow).rowStyle.font.bold)
+            assertEquals(40f, sheet.getRow(3).heightInPoints)
+        }
+    }
+
+    @Test
+    fun theBorderAroundAMergedRegionSurvivesARoundTrip() {
+        // Excel stores the border of a merged region on the empty cells beneath it. Kexcel
+        // keeps only the top-left cell of a merge in its model, so those cells — and with
+        // them three sides of the border — were dropped on save.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            for (r in 0..2) sheet.createRow(r).apply { for (c in 0..2) createCell(c) }
+            sheet.getRow(0).getCell(0).setCellValue("merged")
+            val region = CellRangeAddress.valueOf("A1:C3")
+            sheet.addMergedRegion(region)
+            for (set in listOf(
+                org.apache.poi.ss.util.RegionUtil::setBorderTop, org.apache.poi.ss.util.RegionUtil::setBorderBottom,
+                org.apache.poi.ss.util.RegionUtil::setBorderLeft, org.apache.poi.ss.util.RegionUtil::setBorderRight,
+            )) set(org.apache.poi.ss.usermodel.BorderStyle.THICK, region, sheet)
+        }
+
+        val saved = roundTrip(source)
+
+        assertOnlyDiffers(source, saved)
+        // The model is unchanged: only the anchor is a cell.
+        assertEquals(1, Excel.decodeBytes(source)["S"].rows.flatten().count { it != null })
+    }
+
+    // endregion
+
+
+    // region --- Workbooks that used to be refused ---
+
+    @Test
+    fun aNegativeNumberInADateFormattedCellDoesNotStopTheWorkbookOpening() {
+        // Excel shows `####` for a negative date; there is no date to read. POI treats it
+        // as an invalid date (DateUtil.isValidExcelDate). Kexcel tried to build a time from
+        // it, threw, and the whole workbook failed to open — including for a plain number
+        // whose format merely contains `[Red]`.
+        val cells = listOf("[Red]0.00" to -5.0, "h:mm" to -0.25, "yyyy-mm-dd" to -1.0, "yyyy-mm-dd" to 1.0E12)
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            cells.forEachIndexed { i, (format, value) ->
+                sheet.createRow(i).createCell(0).apply {
+                    setCellValue(value)
+                    cellStyle = wb.createCellStyle().apply { dataFormat = wb.createDataFormat().getFormat(format) }
+                }
+            }
+        }
+
+        val sheet = Excel.decodeBytes(source)["S"]
+        assertEquals(
+            listOf(IntCellValue(-5), DoubleCellValue(-0.25), IntCellValue(-1), DoubleCellValue(1.0E12)),
+            cells.indices.map { sheet.cell(CellIndex.indexByColumnRow(0, it)).value },
+        )
+        assertOnlyDiffers(source, roundTrip(source))
+    }
+
+    @Test
+    fun aWorkbookWithoutAStylesPartCanBeReadAndStyled() {
+        // The styles part is optional; POI corpus 56278.xlsx has none.
+        val unstyled = fixture("poi/56278.xlsx")
+        kotlin.test.assertFalse(zipEntryNames(unstyled).any { it.endsWith("styles.xml") })
+
+        val excel = Excel.decodeBytes(unstyled)
+        val name = excel.tables.keys.first()
+        excel[name].updateCell(CellIndex.indexByString("Z1"), TextCellValue("bold"), CellStyle(bold = true))
+
+        readWithPoi(excel.encode()!!) { wb ->
+            val cell = wb.getSheet(name).getRow(0).getCell(25)
+            assertEquals("bold", cell.stringCellValue)
+            assertTrue((cell.cellStyle as org.apache.poi.xssf.usermodel.XSSFCellStyle).font.bold)
+        }
+    }
+
+    @Test
+    fun aWorksheetCanBeAddedNextToAChartSheet() {
+        // <sheets> lists chart sheets too. They have no cells and no Sheet in the model,
+        // but they must survive a save and keep their place.
+        val source = fixture("poi/chart_sheet.xlsx")
+        val before = readWithPoi(source) { wb -> (0 until wb.numberOfSheets).map { wb.getSheetName(it) } }
+
+        val excel = Excel.decodeBytes(source)
+        kotlin.test.assertTrue(excel.tables.isNotEmpty() && excel.tables.size < before.size)
+        excel["Added"].updateCell(CellIndex.indexByString("A1"), IntCellValue(1))
+
+        readWithPoi(excel.encode()!!) { wb ->
+            assertEquals(before + "Added", (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals(1.0, wb.getSheet("Added").getRow(0).getCell(0).numericCellValue)
+        }
+    }
+
+    @Test
+    fun aSheetCanBeAddedWhenRelationshipIdsAreNotNumbered() {
+        // Relationship ids are opaque (OPC §9.2). The OpenXML SDK writes ids such as
+        // `R856eb3046363446b`; parsing them as `rId<number>` threw NumberFormatException.
+        var source = poiWorkbook { wb -> wb.createSheet("One").createRow(0).createCell(0).setCellValue("one") }
+        for (part in listOf("xl/workbook.xml", "xl/_rels/workbook.xml.rels")) {
+            source = replaceZipEntry(source, part, readZipEntry(source, part).decodeToString().replace("\"rId", "\"Rabc").encodeToByteArray())
+        }
+
+        val saved = roundTrip(source) { it["New"].updateCell(CellIndex.indexByString("A1"), TextCellValue("new")) }
+
+        readWithPoi(saved) { wb ->
+            assertEquals(listOf("One", "New"), (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals(listOf("one", "new"), (0 until wb.numberOfSheets).map { wb.getSheetAt(it).getRow(0).getCell(0).stringCellValue })
+        }
+    }
+
+    // endregion
+
+
+    // region --- Dates ---
+
+    @Test
+    fun the1904DateSystemIsHonouredInBothDirections() {
+        // §18.2.28: with date1904 set, serial 0 is 1 January 1904. Reading such a workbook
+        // against the 1900 epoch put every date 1,462 days early.
+        val source = poiWorkbook { wb ->
+            (wb as XSSFWorkbook).ctWorkbook.workbookPr.date1904 = true
+            val sheet = wb.createSheet("S")
+            val date = wb.createCellStyle().apply { dataFormat = 14 }
+            sheet.createRow(0).createCell(0).apply { setCellValue(LocalDate.of(2024, 3, 15)); cellStyle = date }
+            sheet.createRow(1).createCell(0).apply { setCellValue(LocalDateTime.of(2024, 3, 15, 13, 45, 30)); cellStyle = wb.createCellStyle().apply { dataFormat = 22 } }
+        }
+        val sheet = Excel.decodeBytes(source)["S"]
+        assertEquals(DateCellValue(2024, 3, 15), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(DateTimeCellValue(2024, 3, 15, 13, 45, 30), sheet.cell(CellIndex.indexByString("A2")).value)
+        assertReadsLikePoi(source)
+
+        val saved = roundTrip(source) { it["S"].updateCell(CellIndex.indexByString("A3"), DateCellValue(2025, 12, 31)) }
+
+        readWithPoi(saved) { wb ->
+            assertTrue((wb as XSSFWorkbook).isDate1904)
+            assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), wb.getSheetAt(0).getRow(2).getCell(0).localDateTimeCellValue)
+            assertEquals(LocalDateTime.of(2024, 3, 15, 0, 0), wb.getSheetAt(0).getRow(0).getCell(0).localDateTimeCellValue)
+        }
+    }
+
+    @Test
+    fun datesInTheFirstWeeksOf1900AgreeWithPoi() {
+        val source = poiWorkbook { wb ->
+            val date = wb.createCellStyle().apply { dataFormat = 14 }
+            val sheet = wb.createSheet("S")
+            listOf(1.0, 2.0, 59.0, 61.0, 62.0, 45036.0).forEachIndexed { i, serial -> sheet.createRow(i).createCell(0).apply { setCellValue(serial); cellStyle = date } }
+        }
+        assertReadsLikePoi(source)
+
+        val written = Excel.createExcel().apply {
+            this["Sheet1"].updateCell(CellIndex.indexByString("A1"), DateCellValue(1900, 1, 1))
+            this["Sheet1"].updateCell(CellIndex.indexByString("A2"), DateCellValue(1900, 2, 28))
+            this["Sheet1"].updateCell(CellIndex.indexByString("A3"), DateCellValue(1900, 3, 1))
+        }.encode()!!
+        readWithPoi(written) { wb ->
+            assertEquals(
+                listOf(LocalDateTime.of(1900, 1, 1, 0, 0), LocalDateTime.of(1900, 2, 28, 0, 0), LocalDateTime.of(1900, 3, 1, 0, 0)),
+                (0..2).map { wb.getSheetAt(0).getRow(it).getCell(0).localDateTimeCellValue },
+            )
+        }
+    }
+
+    @Test
+    fun dateDetectionAgreesWithPoiOnRealFormats() {
+        // Upper-case codes, colours and currency tags, and a custom format declared under
+        // an id below 164 (POI corpus bug66675.xlsx declares 82 as a date format).
+        val formats = listOf("DD/MM/YYYY", "YYYY-MM-DD HH:MM", "[Red]0.00", "[White]0", "[\$Rs.-4009] #,##0.00", "#,##0.00", "dd-mmm-yyyy", "[h]:mm:ss")
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            formats.forEachIndexed { i, format ->
+                sheet.createRow(i).createCell(0).apply { setCellValue(45036.5); cellStyle = wb.createCellStyle().apply { dataFormat = wb.createDataFormat().getFormat(format) } }
+            }
+        }
+        assertReadsLikePoi(source)
+        assertReadsLikePoi(fixture("poi/bug66675.xlsx"), "bug66675.xlsx")
+    }
+
+    // endregion
+
+
+    // region --- Characters XML cannot carry, and formula text ---
+
+    @Test
+    fun controlCharactersAndCarriageReturnsSurviveASave() {
+        // Written raw, a control character was dropped and a carriage return came back as
+        // a line feed; text that merely looks like an escape was turned into one by Excel
+        // and POI. All of it goes through `_xHHHH_` now, as Excel writes it.
+        val texts = listOf("a\u0001b", "vt\u000Bx", "x\ry", "x\r\ny", "lit _x000D_ lit", "_x005F_", "plain_text", "tab\tand\nnewline", "emoji 😀")
+        val excel = Excel.createExcel()
+        texts.forEachIndexed { i, text -> excel["Sheet1"].updateCell(CellIndex.indexByColumnRow(0, i), TextCellValue(text)) }
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb -> assertEquals(texts, texts.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).stringCellValue }) }
+        val reread = Excel.decodeBytes(bytes)["Sheet1"]
+        assertEquals(texts, texts.indices.map { reread.cell(CellIndex.indexByColumnRow(0, it)).value.toString() })
+    }
+
+    @Test
+    fun aCarriageReturnPoiWroteSurvivesAKexcelRoundTrip() {
+        // POI writes a carriage return as the character reference `&#13;`. It has to go
+        // back out as one: written raw, the next XML reader turns it into a line feed.
+        val texts = listOf("line1\r\nline2", "cr\ronly")
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            texts.forEachIndexed { i, text -> sheet.createRow(i).createCell(0).setCellValue(text) }
+        }
+        val sheet = Excel.decodeBytes(source)["S"]
+        assertEquals(texts, texts.indices.map { sheet.cell(CellIndex.indexByColumnRow(0, it)).value.toString() })
+
+        val saved = roundTrip(source) { it["S"].updateCell(CellIndex.indexByString("B1"), TextCellValue("edit")) }
+
+        readWithPoi(saved) { wb -> assertEquals(texts, texts.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).stringCellValue }) }
+    }
+
+    @Test
+    fun aLeadingEqualsSignIsNotWrittenIntoTheFormula() {
+        // §18.3.1.40: <f> holds the expression, without the `=` of the formula bar. POI:
+        // "The specified formula '=SUM(A1:A1)' starts with an equals sign which is not allowed".
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+        sheet.updateCell(CellIndex.indexByString("A1"), IntCellValue(4))
+        sheet.updateCell(CellIndex.indexByString("A2"), FormulaCellValue("=SUM(A1:A1)*2"))
+        sheet.cell(CellIndex.indexByString("A3")).setFormula("A1+1")
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb ->
+            val evaluator = wb.creationHelper.createFormulaEvaluator()
+            assertEquals("SUM(A1:A1)*2", wb.getSheetAt(0).getRow(1).getCell(0).cellFormula)
+            assertEquals(8.0, evaluator.evaluate(wb.getSheetAt(0).getRow(1).getCell(0)).numberValue)
+            assertEquals(5.0, evaluator.evaluate(wb.getSheetAt(0).getRow(2).getCell(0)).numberValue)
+        }
+        assertEquals(FormulaCellValue("SUM(A1:A1)*2"), Excel.decodeBytes(bytes)["Sheet1"].cell(CellIndex.indexByString("A2")).value)
+    }
+
+    // endregion
+
+
+    // region --- Sheets: rename, copy, delete, default ---
+
+    private fun workbookWithSheetFeatures(): ByteArray = poiWorkbook { wb ->
+        val data = wb.createSheet("Data")
+        for (r in 0 until 5) data.createRow(r).apply { createCell(0).setCellValue(r.toDouble()); createCell(1).setCellValue("t$r") }
+        data.createFreezePane(0, 1)
+        data.setColumnHidden(2, true)
+        data.addMergedRegion(CellRangeAddress.valueOf("D1:E1"))
+        val helper = data.dataValidationHelper
+        data.addValidationData(helper.createValidation(helper.createExplicitListConstraint(arrayOf("a", "b")), org.apache.poi.ss.util.CellRangeAddressList(0, 5, 1, 1)))
+        data.getRow(1).getCell(1).hyperlink = wb.creationHelper.createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.URL).apply { address = "https://example.com" }
+        val formatting = data.sheetConditionalFormatting
+        val rule = formatting.createConditionalFormattingRule(org.apache.poi.ss.usermodel.ComparisonOperator.GT, "2")
+        rule.createPatternFormatting().fillBackgroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+        formatting.addConditionalFormatting(arrayOf(CellRangeAddress.valueOf("A1:A5")), rule)
+        wb.setPrintArea(0, "\$A\$1:\$C\$5")
+        wb.createSheet("Calc").createRow(0).createCell(0).cellFormula = "Data!A2*2"
+        wb.createName().apply { nameName = "MyRange"; refersToFormula = "Data!\$A\$1:\$A\$3" }
+    }
+
+    @Test
+    fun renamingASheetChangesItsNameAndNothingElse() {
+        // rename() was a copy followed by a delete: the new name got an empty worksheet
+        // part at the end of the tab list, and the pane, validation, hyperlink and
+        // conditional format stayed behind with the deleted part.
+        val source = workbookWithSheetFeatures()
+        val saved = roundTrip(source) { it.rename("Data", "Sales 2024") }
+
+        // Rename it back with POI: apart from the name, POI must see the original workbook.
+        val restored = readWithPoi(saved) { wb ->
+            assertEquals(listOf("Sales 2024", "Calc"), (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals("'Sales 2024'!A2*2", wb.getSheet("Calc").getRow(0).getCell(0).cellFormula)
+            assertEquals("'Sales 2024'!\$A\$1:\$A\$3", wb.getName("MyRange").refersToFormula)
+            assertEquals("'Sales 2024'!\$A\$1:\$C\$5", wb.getPrintArea(0))
+            wb.setSheetName(0, "Data")
+            ByteArrayOutputStream().also { wb.write(it) }.toByteArray()
+        }
+        assertOnlyDiffers(source, restored)
+    }
+
+    @Test
+    fun aCopiedSheetKeepsItsMergedRegions() {
+        val saved = roundTrip(workbookWithSheetFeatures()) { it.copy("Data", "Copy") }
+
+        readWithPoi(saved) { wb ->
+            assertEquals(listOf("D1:E1"), wb.getSheet("Copy").mergedRegions.map { it.formatAsString() })
+            assertEquals(listOf("D1:E1"), wb.getSheet("Data").mergedRegions.map { it.formatAsString() })
+            assertEquals(5, wb.getSheet("Copy").physicalNumberOfRows)
+        }
+    }
+
+    private fun threeSheetsWithScopedNames(): ByteArray = poiWorkbook { wb ->
+        for (name in listOf("S1", "S2", "S3")) wb.createSheet(name).createRow(0).createCell(0).setCellValue(name)
+        wb.setPrintArea(2, "\$A\$1:\$B\$2")
+        wb.createName().apply { nameName = "Local"; sheetIndex = 1; refersToFormula = "S2!\$A\$1" }
+        wb.createName().apply { nameName = "OnFirst"; sheetIndex = 0; refersToFormula = "S1!\$A\$1" }
+        wb.setActiveSheet(2)
+    }
+
+    private fun scopes(bytes: ByteArray): Map<String, String> = readWithPoi(bytes) { wb ->
+        wb.allNames.associate { it.nameName to wb.getSheetName(it.sheetIndex) }
+    }
+
+    @Test
+    fun deletingASheetKeepsSheetScopedNamesOnTheirSheets() {
+        // `localSheetId` and `activeTab` are positions in <sheets> (§18.2.5, §18.2.30).
+        val source = threeSheetsWithScopedNames()
+        assertEquals(mapOf("_xlnm.Print_Area" to "S3", "Local" to "S2", "OnFirst" to "S1"), scopes(source))
+
+        val withoutFirst = roundTrip(source) { it.delete("S1") }
+        assertEquals(mapOf("_xlnm.Print_Area" to "S3", "Local" to "S2"), scopes(withoutFirst))
+        readWithPoi(withoutFirst) { wb -> assertEquals("S3", wb.getSheetName(wb.activeSheetIndex)) }
+
+        val withoutLast = roundTrip(source) { it.delete("S3") }
+        assertEquals(mapOf("Local" to "S2", "OnFirst" to "S1"), scopes(withoutLast))
+        readWithPoi(withoutLast) { wb -> assertTrue(wb.activeSheetIndex in 0 until wb.numberOfSheets) }
+    }
+
+    @Test
+    fun makingASheetTheDefaultKeepsSheetScopedNamesOnTheirSheets() {
+        val saved = roundTrip(threeSheetsWithScopedNames()) { it.setDefaultSheet("S3") }
+
+        assertEquals(mapOf("_xlnm.Print_Area" to "S3", "Local" to "S2", "OnFirst" to "S1"), scopes(saved))
+    }
+
+    // endregion
+
+
+    // region --- References follow inserted and removed rows and columns ---
+
+    private fun workbookWithReferences(): ByteArray = poiWorkbook { wb ->
+        val sheet = wb.createSheet("S")
+        for (r in 0 until 6) sheet.createRow(r).apply {
+            createCell(0).setCellValue((r + 1).toDouble())
+            createCell(1).setCellValue("text ${r + 1}")
+        }
+        sheet.getRow(0).createCell(3).cellFormula = "A3*2"
+        sheet.getRow(1).createCell(3).cellFormula = "SUM(A1:A6)+\$A\$4"
+        sheet.getRow(5).createCell(3).cellFormula = "SUM(A2:A3)&\"A3\""
+        sheet.getRow(0).createCell(4).cellFormula = "SUM(A:B)+SUM(3:4)"
+        sheet.getRow(3).getCell(1).hyperlink = wb.creationHelper.createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.URL).apply { address = "https://example.com" }
+        val comment = sheet.createDrawingPatriarch().createCellComment(wb.creationHelper.createClientAnchor())
+        comment.string = wb.creationHelper.createRichTextString("on B5")
+        sheet.getRow(4).getCell(1).cellComment = comment
+        val formatting = sheet.sheetConditionalFormatting
+        val rule = formatting.createConditionalFormattingRule("\$A2>3")
+        rule.createPatternFormatting().fillBackgroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+        formatting.addConditionalFormatting(arrayOf(CellRangeAddress.valueOf("A2:B5")), rule)
+
+        val other = wb.createSheet("Other")
+        other.createRow(0).createCell(0).cellFormula = "S!A3+1"
+        other.createRow(1).createCell(0).cellFormula = "SUM(S!A1:A6)+A3"
+        wb.createName().apply { nameName = "Values"; refersToFormula = "S!\$A\$1:\$A\$6" }
+        wb.createName().apply { nameName = "Third"; refersToFormula = "S!\$A\$3" }
+        wb.setPrintArea(0, "\$A\$1:\$E\$6")
+    }
+
+    /** What a structural edit has to get right, as POI reports it. */
+    private val referenceKinds = setOf(
+        "formula", "number", "string", "cell lost", "cell type", "cell appeared", "workbook: defined names",
+        "sheet: hyperlinks", "sheet: comments", "sheet: conditional formatting", "sheet: merged regions",
+    )
+
+    private fun assertSameReferences(expected: ByteArray, actual: ByteArray) {
+        val differences = PoiOracle.differences(expected, actual).filterKeys { it in referenceKinds }
+        assertTrue(differences.isEmpty(), "Kexcel and POI disagree after the same edit:\n" + differences.entries.joinToString("\n") { "  ${it.key}: ${it.value}" })
+    }
+
+    private fun editedWithPoi(source: ByteArray, edit: (org.apache.poi.xssf.usermodel.XSSFSheet) -> Unit): ByteArray =
+        readWithPoi(source) { wb ->
+            edit(wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet)
+            ByteArrayOutputStream().also { wb.write(it) }.toByteArray()
+        }
+
+    @Test
+    fun insertingARowMovesEverythingThatPointsAtTheCellsBelowIt() {
+        // Kexcel used to move the cells only: the formula, the name, the hyperlink, the
+        // comment and the conditional format went on naming the old addresses. Excel
+        // adjusts all of them, and so does POI in XSSFRowShifter; the two results must agree.
+        val source = workbookWithReferences()
+
+        val byPoi = editedWithPoi(source) { it.shiftRows(2, it.lastRowNum, 1) }
+        val byKexcel = roundTrip(source) { it["S"].insertRow(2) }
+
+        assertSameReferences(byPoi, byKexcel)
+        readWithPoi(byKexcel) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals("A4*2", sheet.getRow(0).getCell(3).cellFormula)
+            assertEquals("SUM(A1:A7)+\$A\$5", sheet.getRow(1).getCell(3).cellFormula)
+            assertEquals("SUM(A2:A4)&\"A3\"", sheet.getRow(6).getCell(3).cellFormula)
+            assertEquals("S!A4+1", wb.getSheet("Other").getRow(0).getCell(0).cellFormula)
+            assertEquals("SUM(S!A1:A7)+A3", wb.getSheet("Other").getRow(1).getCell(0).cellFormula)
+            assertEquals("S!\$A\$1:\$A\$7", wb.getName("Values").refersToFormula)
+            assertEquals("S!\$A\$4", wb.getName("Third").refersToFormula)
+            assertEquals(listOf("B5"), sheet.hyperlinkList.map { it.cellRef })
+            assertEquals(listOf("B6"), sheet.cellComments.keys.map { it.formatAsString() })
+            assertEquals("on B5", sheet.getCellComment(org.apache.poi.ss.util.CellAddress("B6")).string.string)
+        }
+    }
+
+    @Test
+    fun removingARowShrinksRangesAndBreaksWhatPointedAtIt() {
+        val source = workbookWithReferences()
+
+        // Row 3 has no hyperlink or comment, so POI's removeRow + shiftRows is the same edit.
+        val byPoi = editedWithPoi(source) { it.removeRow(it.getRow(2)); it.shiftRows(3, it.lastRowNum, -1) }
+        val byKexcel = roundTrip(source) { it["S"].removeRow(2) }
+
+        assertSameReferences(byPoi, byKexcel)
+        readWithPoi(byKexcel) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals("#REF!*2", sheet.getRow(0).getCell(3).cellFormula)
+            assertEquals("SUM(A1:A5)+\$A\$3", sheet.getRow(1).getCell(3).cellFormula)
+            assertEquals("S!\$A\$1:\$A\$5", wb.getName("Values").refersToFormula)
+            assertEquals(listOf("B3"), sheet.hyperlinkList.map { it.cellRef })
+            assertEquals(listOf("B4"), sheet.cellComments.keys.map { it.formatAsString() })
+        }
+    }
+
+    @Test
+    fun insertingAndRemovingColumnsAgreesWithPoi() {
+        val source = workbookWithReferences()
+
+        assertSameReferences(
+            editedWithPoi(source) { it.shiftColumns(1, 4, 1) },
+            roundTrip(source) { it["S"].insertColumn(1) },
+        )
+        readWithPoi(roundTrip(source) { it["S"].insertColumn(0) }) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals("B3*2", sheet.getRow(0).getCell(4).cellFormula)
+            assertEquals("SUM(B:C)+SUM(3:4)", sheet.getRow(0).getCell(5).cellFormula)
+            assertEquals("S!B3+1", wb.getSheet("Other").getRow(0).getCell(0).cellFormula)
+            assertEquals("S!\$B\$1:\$B\$6", wb.getName("Values").refersToFormula)
+            assertEquals(listOf("C4"), sheet.hyperlinkList.map { it.cellRef })
+            assertEquals(listOf("C5"), sheet.cellComments.keys.map { it.formatAsString() })
+        }
+        readWithPoi(roundTrip(source) { it["S"].removeColumn(0) }) { wb ->
+            assertEquals("#REF!*2", wb.getSheet("S").getRow(0).getCell(2).cellFormula)
+            assertEquals("S!#REF!+1", wb.getSheet("Other").getRow(0).getCell(0).cellFormula)
+            assertEquals(listOf("A4"), (wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet).hyperlinkList.map { it.cellRef })
+        }
+    }
+
+    @Test
+    fun aHyperlinkAndACommentGoWithTheRowThatIsRemoved() {
+        val saved = roundTrip(workbookWithReferences()) { excel ->
+            excel["S"].removeRow(4) // the comment is on B5
+            excel["S"].removeRow(3) // the hyperlink is on B4
+        }
+
+        readWithPoi(saved) { wb ->
+            assertTrue(wb.getSheet("S").hyperlinkList.isEmpty())
+            assertTrue(wb.getSheet("S").cellComments.isEmpty())
+        }
+        // No comment box is left behind in the legacy drawing either.
+        val drawing = zipEntryNames(saved).first { it.endsWith(".vml") }
+        assertFalse("ObjectType=\"Note\"" in readZipEntry(saved, drawing).decodeToString())
+    }
+
+    @Test
+    fun validationsFiltersAndProtectedRangesFollowTheirCells() {
+        // POI's shifter does not move these; Excel does.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            for (r in 0 until 6) sheet.createRow(r).apply { createCell(0).setCellValue("h$r"); createCell(1).setCellValue(r.toDouble()) }
+            val helper = sheet.dataValidationHelper
+            sheet.addValidationData(helper.createValidation(helper.createFormulaListConstraint("\$A\$2:\$A\$4"), org.apache.poi.ss.util.CellRangeAddressList(1, 4, 1, 1)))
+            sheet.addValidationData(helper.createValidation(helper.createExplicitListConstraint(arrayOf("a", "b")), org.apache.poi.ss.util.CellRangeAddressList(2, 2, 2, 2)))
+            sheet.setAutoFilter(CellRangeAddress.valueOf("A1:B6"))
+        }
+
+        val inserted = roundTrip(source) { it["S"].insertRow(1) }
+        readWithPoi(inserted) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals(listOf("B3:B6", "C4"), sheet.dataValidations.map { it.regions.cellRangeAddresses.single().formatAsString() })
+            assertEquals("\$A\$3:\$A\$5", sheet.dataValidations.first().validationConstraint.formula1)
+            assertEquals("A1:B7", sheet.ctWorksheet.autoFilter.ref)
+        }
+
+        // The second validation applies to C3 only; removing row 3 removes it.
+        val removed = roundTrip(source) { it["S"].removeRow(2) }
+        readWithPoi(removed) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals(listOf("B2:B4"), sheet.dataValidations.map { it.regions.cellRangeAddresses.single().formatAsString() })
+            assertEquals("A1:B5", sheet.ctWorksheet.autoFilter.ref)
+        }
+        assertEquals("1", rawCount(removed, "dataValidations"))
+    }
+
+    private fun rawCount(bytes: ByteArray, tag: String): String =
+        com.fleeksoft.ksoup.Ksoup.parseXml(readZipEntry(bytes, "xl/worksheets/sheet1.xml").decodeToString()).getElementsByTag(tag).first()!!.attr("count")
+
+    @Test
+    fun anArrayFormulaKeepsCoveringItsCellsAfterARowIsInserted() {
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c><c r="C1"><f t="array" ref="C1:C3">A1:A3*10</f><v>10</v></c></row>""" +
+                """<row r="2"><c r="A2"><v>2</v></c><c r="C2"><v>20</v></c></row>""" +
+                """<row r="3"><c r="A3"><v>3</v></c><c r="C3"><v>30</v></c></row>"""
+        )
+
+        val saved = roundTrip(source) { it["Sheet1"].insertRow(0) }
+
+        val f = rawCell(saved, "C2").getElementsByTag("f").first()!!
+        assertEquals(listOf("array", "C2:C4", "A2:A4*10"), listOf(f.attr("t"), f.attr("ref"), f.text()))
     }
 
     // endregion

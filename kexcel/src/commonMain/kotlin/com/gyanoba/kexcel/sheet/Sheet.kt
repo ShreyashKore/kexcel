@@ -1,6 +1,9 @@
 package com.gyanoba.kexcel.sheet
 
 import com.gyanoba.kexcel.Excel
+import com.gyanoba.kexcel.moveReferences
+import com.gyanoba.kexcel.utils.Axis
+import com.gyanoba.kexcel.utils.StructuralEdit
 import com.gyanoba.kexcel.number_format.NumFormat
 import com.gyanoba.kexcel.utils.EXCEL_DEFAULT_COLUMN_WIDTH
 import com.gyanoba.kexcel.utils.EXCEL_DEFAULT_ROW_HEIGHT
@@ -11,7 +14,7 @@ import kotlin.math.max
 
 public class Sheet internal constructor(
     internal val excel: Excel,
-    private val _sheet: String,
+    private var _sheet: String,
     sh: Map<Int, Map<Int, Data>>? = null,
     spanList: List<Span?>? = null,
     spannedItems: MutableList<String>? = null,
@@ -36,6 +39,31 @@ public class Sheet internal constructor(
     internal var sheetData: MutableMap<Int, MutableMap<Int, Data>> = mutableMapOf()
     internal var _headerFooter: HeaderFooter? = null
 
+    /**
+     * The attributes each `<row>` was read with (§18.3.1.73), apart from `r`: `hidden`,
+     * `outlineLevel`, `collapsed`, the row style `s` / `customFormat`, `ht`, … . The model
+     * only knows row heights; the rest is written back as it was.
+     */
+    internal var rowAttributes: MutableMap<Int, Map<String, String>> = mutableMapOf()
+
+    /** The `<col>` elements the sheet was read with (§18.3.1.13), ranges and all. */
+    internal var columnSpecs: MutableList<ColumnSpec> = mutableListOf()
+
+    /** Whether column widths were changed in code; until then `<cols>` is left untouched. */
+    internal var columnsDirty: Boolean = false
+
+    /**
+     * The cells a merged region covers, other than its top-left one. Reading a merge keeps
+     * only that anchor in [sheetData], which is what the API has always shown. But the file
+     * has cells beneath a merge — Excel stores the region's borders and fill on them — so
+     * they are kept here and written back for as long as the sheet's layout is unchanged.
+     * Row index → column index → cell.
+     */
+    internal val mergedCells: MutableMap<Int, MutableMap<Int, Data>> = mutableMapOf()
+
+    /** A `<col>` element: a zero-based, inclusive column range and its other attributes. */
+    internal class ColumnSpec(val min: Int, val max: Int, val attributes: Map<String, String>)
+
     internal companion object {
         fun clone(excel: Excel, sheetName: String, oldSheetObject: Sheet): Sheet {
             return Sheet(
@@ -51,7 +79,14 @@ public class Sheet internal constructor(
                 columnAutoFitVal = oldSheetObject._columnAutoFit,
                 isRTLVal = oldSheetObject._isRTL,
                 headerFooter = oldSheetObject._headerFooter
-            )
+            ).also { copy ->
+                copy._defaultColumnWidth = oldSheetObject._defaultColumnWidth
+                copy._defaultRowHeight = oldSheetObject._defaultRowHeight
+                copy.rowAttributes = oldSheetObject.rowAttributes.toMutableMap()
+                copy.columnSpecs = oldSheetObject.columnSpecs.toMutableList()
+                // The copy is written to a worksheet part that has no <cols> yet.
+                copy.columnsDirty = true
+            }
         }
     }
 
@@ -61,6 +96,9 @@ public class Sheet internal constructor(
         if (spanList != null) {
             this@Sheet.spanList = spanList.toMutableList()
             excel.addMergeChangeLookup(sheetName)
+            // A copy starts in a worksheet part that has no <mergeCells>; without the flag
+            // the save path does not write one, and the copy lost its merged regions.
+            if (spanList.any { it != null }) excel.mergeChanges = true
         }
         if (spannedItems != null) {
             this@Sheet._spannedItems = spannedItems
@@ -98,6 +136,32 @@ public class Sheet internal constructor(
             }
         }
         countRowsAndColumns()
+    }
+
+    /**
+     * Places a cell exactly as it was read from the file. Unlike [updateCell] this neither
+     * redirects into a merged region nor swaps the number format for one that "fits" the
+     * value: any format may sit on any value in a file (a text cell formatted `@`, a
+     * duration in `[h]:mm:ss`), and changing it while loading altered workbooks that were
+     * never edited.
+     */
+    internal fun putParsed(
+        rowIndex: Int,
+        columnIndex: Int,
+        value: CellValue?,
+        style: CellStyle?,
+        styleIsImplicit: Boolean = false,
+    ) {
+        checkMaxColumn(columnIndex)
+        checkMaxRow(rowIndex)
+        val row = sheetData.getOrPut(rowIndex) { mutableMapOf() }
+        val cell = row.getOrPut(columnIndex) { Data.newData(this, rowIndex, columnIndex) }
+        cell._value = value
+        cell._cellStyle = style
+        cell.implicitStyle = style.takeIf { styleIsImplicit }
+        if (style != null) excel.styleChanges = true
+        if (_maxColumns < columnIndex + 1) _maxColumns = columnIndex + 1
+        if (_maxRows < rowIndex + 1) _maxRows = rowIndex + 1
     }
 
     internal fun removeCell(rowIndex: Int, columnIndex: Int) {
@@ -263,6 +327,11 @@ public class Sheet internal constructor(
         if (columnIndex < 0 || columnIndex >= maxColumns) {
             return
         }
+        excel.valuesEdited = true
+        mergedCells.clear()
+        // The references are rebuilt below. Left in place, the old position of a moved
+        // merge stayed in the list and a later merge() of that range was silently ignored.
+        _spannedItems = mutableListOf()
 
         var updateSpanCell = false
 
@@ -322,6 +391,7 @@ public class Sheet internal constructor(
                         }
                         if (columnIndex < columnKey) {
                             columnMap[columnKey - 1] = sheetData[rowKey]!![columnKey]!!
+                                .also { it._columnIndex = columnKey - 1 }
                             sheetData[rowKey]!!.remove(columnKey)
                         }
                     }
@@ -335,6 +405,8 @@ public class Sheet internal constructor(
         if (_maxColumns > 0) {
             _maxColumns -= 1
         }
+        shiftColumnProperties(columnIndex, removed = true)
+        excel.moveReferences(this, StructuralEdit(Axis.Column, columnIndex, removed = true))
     }
 
     public fun insertColumn(columnIndex: Int) {
@@ -349,6 +421,8 @@ public class Sheet internal constructor(
                 "Cannot insert a column: the sheet already uses the last column (XFD), which would be pushed past Max (16384)."
             )
         }
+        excel.valuesEdited = true
+        mergedCells.clear()
 
         var updateSpanCell = false
 
@@ -400,6 +474,7 @@ public class Sheet internal constructor(
                             }
                             if (columnIndex <= columnKey) {
                                 columnMap[columnKey + 1] = sheetData[rowKey]!![columnKey]!!
+                                    .also { it._columnIndex = columnKey + 1 }
                             }
                         }
                     }
@@ -423,6 +498,47 @@ public class Sheet internal constructor(
         } else {
             _maxColumns = columnIndex + 1
         }
+        shiftColumnProperties(columnIndex, removed = false)
+        excel.moveReferences(this, StructuralEdit(Axis.Column, columnIndex, removed = false))
+    }
+
+    /**
+     * Moves what is keyed by column — widths, auto-fit flags and the `<col>` definitions —
+     * along with the cells when a column is inserted at or removed from [columnIndex].
+     * These used to stay where they were, so the width of column C became the width of
+     * whatever ended up in column C.
+     */
+    private fun shiftColumnProperties(columnIndex: Int, removed: Boolean) {
+        _columnWidths = shiftedKeys(_columnWidths, columnIndex, removed)
+        _columnAutoFit = shiftedKeys(_columnAutoFit, columnIndex, removed)
+        columnSpecs = columnSpecs.mapNotNull { spec ->
+            if (removed) when {
+                spec.max < columnIndex -> spec
+                spec.min > columnIndex -> ColumnSpec(spec.min - 1, spec.max - 1, spec.attributes)
+                spec.min == spec.max -> null
+                else -> ColumnSpec(spec.min, spec.max - 1, spec.attributes)
+            } else when {
+                spec.max < columnIndex -> spec
+                spec.min >= columnIndex -> ColumnSpec(spec.min + 1, minOf(spec.max + 1, 16383), spec.attributes)
+                // The new column lands inside the range and takes its formatting, as in Excel.
+                else -> ColumnSpec(spec.min, minOf(spec.max + 1, 16383), spec.attributes)
+            }
+        }.toMutableList()
+        columnsDirty = true
+    }
+
+    /** [map] after an insertion at, or the removal of, key [index]. */
+    private fun <V> shiftedKeys(map: Map<Int, V>, index: Int, removed: Boolean): MutableMap<Int, V> {
+        val shifted = mutableMapOf<Int, V>()
+        map.forEach { (key, value) ->
+            when {
+                key < index -> shifted[key] = value
+                removed && key == index -> Unit
+                removed -> shifted[key - 1] = value
+                else -> shifted[key + 1] = value
+            }
+        }
+        return shifted
     }
 
     public fun removeRow(rowIndex: Int) {
@@ -430,6 +546,9 @@ public class Sheet internal constructor(
             return
         }
         checkMaxRow(rowIndex)
+        excel.valuesEdited = true
+        mergedCells.clear()
+        _spannedItems = mutableListOf()
 
         var updateSpanCell = false
 
@@ -481,7 +600,10 @@ public class Sheet internal constructor(
                         data[rowKey] = sheetData[rowKey]!!.toMutableMap()
                     }
                     if (rowIndex < rowKey && sheetData[rowKey] != null) {
+                        // The cell objects move up with their row. Left with the old index,
+                        // `data.value = …` on one of them wrote into the row below.
                         data[rowKey - 1] = sheetData[rowKey]!!.toMutableMap()
+                            .onEach { it.value._rowIndex = rowKey - 1 }
                     }
                 }
                 sheetData = data
@@ -495,6 +617,9 @@ public class Sheet internal constructor(
         if (_maxRows > 0) {
             _maxRows -= 1
         }
+        _rowHeights = shiftedKeys(_rowHeights, rowIndex, removed = true)
+        rowAttributes = shiftedKeys(rowAttributes, rowIndex, removed = true)
+        excel.moveReferences(this, StructuralEdit(Axis.Row, rowIndex, removed = true))
     }
 
     public fun insertRow(rowIndex: Int) {
@@ -509,6 +634,8 @@ public class Sheet internal constructor(
                 "Cannot insert a row: the sheet already uses the last row, which would be pushed past Max (1048576)."
             )
         }
+        excel.valuesEdited = true
+        mergedCells.clear()
 
         var updateSpanCell = false
 
@@ -574,6 +701,9 @@ public class Sheet internal constructor(
         } else {
             _maxRows += 1
         }
+        _rowHeights = shiftedKeys(_rowHeights, rowIndex, removed = false)
+        rowAttributes = shiftedKeys(rowAttributes, rowIndex, removed = false)
+        excel.moveReferences(this, StructuralEdit(Axis.Row, rowIndex, removed = false))
     }
 
     public fun updateCell(cellIndex: CellIndex, value: CellValue?, cellStyle: CellStyle? = null) {
@@ -594,6 +724,15 @@ public class Sheet internal constructor(
             newColumnIndex = nc
         }
 
+        // Read before [putData], which resets the style to the bare default for the new
+        // value. Reading it afterwards — as this used to — always saw that default, so
+        // changing a value discarded the cell's font, fill, border and number format.
+        val cellBefore = sheetData[newRowIndex]?.get(newColumnIndex)
+        val styleBefore = cellBefore?.cellStyle
+            // A style [putData] assigned on its own carries no intent; the new value gets
+            // its own default (an Int's "0" must not stick to a Double written later).
+            ?.takeUnless { it == CellStyle(numberFormat = NumFormat.defaultFor(cellBefore.value)) }
+
         putData(newRowIndex, newColumnIndex, value)
 
         var cellStyleToUse = cellStyle
@@ -602,10 +741,15 @@ public class Sheet internal constructor(
             if (!numberFormat.accepts(value)) {
                 cellStyleToUse = cellStyle.copyWith(numberFormat = NumFormat.defaultFor(value))
             }
-        } else {
-            val cellStyleBefore = sheetData[cellIndex.rowIndex]?.get(cellIndex.columnIndex)?.cellStyle
-            if (cellStyleBefore != null && !cellStyleBefore.numberFormat.accepts(value)) {
-                cellStyleToUse = cellStyleBefore.copyWith(numberFormat = NumFormat.defaultFor(value))
+        } else if (styleBefore != null) {
+            // The font, fill, border and alignment stay. So does a specific number format
+            // that can show the new value; `General` gives way to the default for the
+            // value's type, as it always has (a Double written over a General cell gets
+            // "0.00"), and clearing a cell clears its number format with it.
+            val format = styleBefore.numberFormat
+            cellStyleToUse = if (value != null && format != NumFormat.standard_0 && format.accepts(value)) styleBefore
+            else NumFormat.defaultFor(value).let { default ->
+                if (default == format) styleBefore else styleBefore.copyWith(numberFormat = default)
             }
         }
 
@@ -633,6 +777,8 @@ public class Sheet internal constructor(
         val gotPosition = getSpanPosition(start, end)
 
         excel.mergeChanges = true
+        excel.valuesEdited = true
+        mergedCells.clear()
 
         startColumn = gotPosition[0]
         startRow = gotPosition[1]
@@ -705,6 +851,7 @@ public class Sheet internal constructor(
                 }
             }
             _spannedItems.remove(unmergeCells)
+            mergedCells.clear()
             // Like merge(), the save path only rewrites <mergeCells> when this flag is set.
             excel.mergeChanges = true
             excel.addMergeChangeLookup(sheetName)
@@ -850,7 +997,8 @@ public class Sheet internal constructor(
         if (startingColumn > 0) {
             columnIndex = startingColumn
         }
-        checkMaxColumn(columnIndex + row.size)
+        // The last cell written, not one past it: a row that ends exactly at XFD is fine.
+        checkMaxColumn(columnIndex + row.size - 1)
         val rowsLength = _maxRows
         val maxIterationIndex = row.size - 1
         var currentRowPosition = 0
@@ -890,6 +1038,7 @@ public class Sheet internal constructor(
             row[columnIndex] = cell
         }
 
+        excel.valuesEdited = true
         cell._value = value
         cell._cellStyle = CellStyle(numberFormat = NumFormat.defaultFor(value))
         if (cell._cellStyle != null && cell._cellStyle!!.numberFormat != NumFormat.standard_0) {
@@ -945,12 +1094,14 @@ public class Sheet internal constructor(
     public fun setColumnAutoFit(columnIndex: Int) {
         checkMaxColumn(columnIndex)
         if (columnIndex < 0) return
+        columnsDirty = true
         _columnAutoFit[columnIndex] = true
     }
 
     public fun setColumnWidth(columnIndex: Int, columnWidth: Double) {
         checkMaxColumn(columnIndex)
         if (columnWidth < 0) return
+        columnsDirty = true
         _columnWidths[columnIndex] = columnWidth
     }
 
@@ -1046,6 +1197,7 @@ public class Sheet internal constructor(
             }
 
             if (isNotInside) {
+                excel.valuesEdited = true
                 sheetData[rowIndex]!!.keys.toList().forEach { key ->
                     sheetData[rowIndex]!![key] = Data.newData(this, rowIndex, key)
                 }
@@ -1095,16 +1247,12 @@ public class Sheet internal constructor(
 
     public val spannedItems: List<String>
         get() {
-            _spannedItems = mutableListOf()
-
-            for (i in 0 until this@Sheet.spanList.size) {
-                val spanObj = this@Sheet.spanList[i] ?: continue
-                val rC = getSpanCellId(spanObj.columnSpanStart, spanObj.rowSpanStart, spanObj.columnSpanEnd, spanObj.rowSpanEnd)
-                if (!_spannedItems.contains(rC)) {
-                    _spannedItems.add(rC)
-                }
+            val references = LinkedHashSet<String>()
+            for (spanObj in this@Sheet.spanList) {
+                spanObj ?: continue
+                references.add(getSpanCellId(spanObj.columnSpanStart, spanObj.rowSpanStart, spanObj.columnSpanEnd, spanObj.rowSpanEnd))
             }
-
+            _spannedItems = references.toMutableList()
             return _spannedItems
         }
 
@@ -1116,6 +1264,10 @@ public class Sheet internal constructor(
 
     public val sheetName: String
         get() = _sheet
+
+    internal fun renameTo(name: String) {
+        _sheet = name
+    }
 
     public fun row(rowIndex: Int): List<Data?> {
         if (rowIndex < 0) {

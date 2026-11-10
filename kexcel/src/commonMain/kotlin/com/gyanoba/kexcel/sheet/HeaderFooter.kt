@@ -50,42 +50,42 @@ public class HeaderFooter(
         if (evenHeader != null) {
             children.add(
                 Element(
-                    "evenHeader", TextNode(evenHeader!!.simplifyText())
+                    "evenHeader", TextNode(evenHeader!!)
                 )
             )
         }
         if (evenFooter != null) {
             children.add(
                 Element(
-                    "evenFooter", TextNode(evenFooter!!.simplifyText())
+                    "evenFooter", TextNode(evenFooter!!)
                 )
             )
         }
         if (firstHeader != null) {
             children.add(
                 Element(
-                    "firstHeader", TextNode(firstHeader!!.simplifyText())
+                    "firstHeader", TextNode(firstHeader!!)
                 )
             )
         }
         if (firstFooter != null) {
             children.add(
                 Element(
-                    "firstFooter", TextNode(firstFooter!!.simplifyText())
+                    "firstFooter", TextNode(firstFooter!!)
                 )
             )
         }
         if (oddHeader != null) {
             children.add(
                 Element(
-                    "oddHeader", TextNode(oddHeader!!.simplifyText())
+                    "oddHeader", TextNode(oddHeader!!)
                 )
             )
         }
         if (oddFooter != null) {
             children.add(
                 Element(
-                    "oddFooter", TextNode(oddFooter!!.simplifyText())
+                    "oddFooter", TextNode(oddFooter!!)
                 )
             )
         }
@@ -106,12 +106,12 @@ public class HeaderFooter(
                     headerFooterElement.attr("differentOddEven").takeIf { it.isNotEmpty() }?.parseBool(),
                 scaleWithDoc =
                     headerFooterElement.attr("scaleWithDoc").takeIf { it.isNotEmpty() }?.parseBool(),
-                evenHeader = headerFooterElement.getElementsByTag("evenHeader").first()?.text(),
-                evenFooter = headerFooterElement.getElementsByTag("evenFooter").first()?.text(),
-                firstHeader = headerFooterElement.getElementsByTag("firstHeader").first()?.text(),
-                firstFooter = headerFooterElement.getElementsByTag("firstFooter").first()?.text(),
-                oddFooter = headerFooterElement.getElementsByTag("oddFooter").first()?.text(),
-                oddHeader = headerFooterElement.getElementsByTag("oddHeader").first()?.text()
+                evenHeader = headerFooterElement.sectionText("evenHeader"),
+                evenFooter = headerFooterElement.sectionText("evenFooter"),
+                firstHeader = headerFooterElement.sectionText("firstHeader"),
+                firstFooter = headerFooterElement.sectionText("firstFooter"),
+                oddFooter = headerFooterElement.sectionText("oddFooter"),
+                oddHeader = headerFooterElement.sectionText("oddHeader")
             )
         }
     }
@@ -128,12 +128,17 @@ internal fun String.parseBool(): Boolean {
     throw IllegalStateException("\"$this\" can not be parsed to boolean.")
 }
 
-internal fun String.simplifyText(): String {
-    var value = this.replace("&amp", "&")
-    value = value.replace("amp", "&")
-    value = value.replace("&", "&amp;")
-    value = value.replace("\"", "&quot;")
-    return value
+/**
+ * The text of one header/footer section, exactly as stored.
+ *
+ * The string is a small format of its own (§18.3.1.39): `&P`, `&N`, `&L`, `&"Arial,Bold"`
+ * are field and formatting codes, and line breaks are significant. It is read and written
+ * verbatim — the XML layer already takes care of escaping `&`, so escaping it here as well
+ * turned every code into literal text.
+ */
+private fun Element.sectionText(tag: String): String? {
+    val section = getElementsByTag(tag).first() ?: return null
+    return com.gyanoba.kexcel.parser.Parser.parseValue(section)
 }
 
 internal fun Element(tag: String, vararg children: Node): Element = Element(tag).apply {
