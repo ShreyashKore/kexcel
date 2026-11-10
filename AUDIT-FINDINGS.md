@@ -14,13 +14,13 @@ to `Fixed in <commit>` rather than deleting the row, and name the test that now 
 ## Progress
 
 Last updated 2026-11-10, on `fix/audit-findings-2026-11-10`. Of 64 findings: **44 fixed**,
-6 partly fixed, 14 open.
+6 partly fixed, 14 open. What is left is described item by item under **Open items**.
 
 - Each fix comes with tests for the behaviour the probes showed to be broken. They were not
   each re-run against the unfixed code.
 - The tests that existed before still pass. Four of their expectations changed, each with
   POI or the specification as evidence (see T-02).
-- `:kexcel:jvmTest` (404 tests) and `:kexcel:macosArm64Test` (197 common tests, run
+- `:kexcel:jvmTest` (405 tests) and `:kexcel:macosArm64Test` (198 common tests, run
   natively) pass; the wasm and iOS simulator targets compile; `:kexcel:checkKotlinAbi`
   passes, so the public API is unchanged.
 - Nothing was checked in Excel itself.
@@ -33,21 +33,21 @@ Last updated 2026-11-10, on `fix/audit-findings-2026-11-10`. Of 64 findings: **4
 | D-04 | Fixed | `d63c381` |  |
 | D-05 | Fixed | `8ce5e08` `375eacb` | Detection ported from POI; unedited numbers are written back digit for digit. |
 | D-06 | Fixed | `8ce5e08` |  |
-| D-07 | Partly | `8ce5e08` | Serials below 61 fixed in both directions. A date before 1900 is still written as a negative serial. |
+| D-07 | Partly | `8ce5e08` | Serials below 61 fixed in both directions. A date before 1900 is still written as a negative serial. See OPEN-8. |
 | D-08 | Fixed | `8ce5e08` `375eacb` |  |
 | D-09 | Fixed | `010c5a9` |  |
 | D-10 | Fixed | `308bd3b` |  |
 | D-11 | Fixed | `8b86da7` |  |
-| D-12 | Partly | `32cb58c` | Formulas on every sheet, defined names, hyperlinks, comments, data validations, conditional formats, autofilter, protected ranges and ignored errors now follow the edit; the result agrees with POI's `shiftRows` / `shiftColumns`. Tables, image and chart anchors, pivot tables and threaded comments still do not. |
-| D-13 | Fixed | `27724f8` | `copy()` still starts from an empty worksheet part, so panes and validations are not copied (F-11). |
-| D-14 | Fixed | `27724f8` | `setDefaultSheet` still moves the tab to the front; the names follow it now. |
-| D-15 | Fixed | `375eacb` | Cached results kept until a value changes, then dropped with `fullCalcOnLoad` set and the calc chain removed. Reading a cached result through the API is still not possible. |
+| D-12 | Partly | `32cb58c` | Formulas on every sheet, defined names, hyperlinks, comments, data validations, conditional formats, autofilter, protected ranges and ignored errors now follow the edit; the result agrees with POI's `shiftRows` / `shiftColumns`. Tables, image and chart anchors, pivot tables and threaded comments still do not. See OPEN-2. |
+| D-13 | Fixed | `27724f8` | `copy()` still starts from an empty worksheet part, so panes and validations are not copied (F-11). See OPEN-10. |
+| D-14 | Fixed | `27724f8` | `setDefaultSheet` still moves the tab to the front; the names follow it now. See OPEN-9. |
+| D-15 | Fixed | `375eacb` | Cached results kept until a value changes, then dropped with `fullCalcOnLoad` set and the calc chain removed. Reading a cached result through the API is still not possible. See OPEN-1. |
 | D-17 | Fixed | `7bc8d77` |  |
-| D-18 | Partly | `375eacb` | An unedited error cell is written back as an error. There is still no error value type. |
+| D-18 | Partly | `375eacb` | An unedited error cell is written back as an error. There is still no error value type. See OPEN-1. |
 | D-19 | Fixed | `7bc8d77` |  |
 | D-20 | Fixed | `375eacb` |  |
-| D-21 | Fixed | `83cc03a` | Written back on save. The model still shows only the top-left cell of a merge. |
-| D-22 | **Open** | — | By design for now. |
+| D-21 | Fixed | `83cc03a` | Written back on save. The model still shows only the top-left cell of a merge. See OPEN-9. |
+| D-22 | **Open** | — | By design for now. See OPEN-9. |
 | D-23 | Fixed | `8b86da7` | Found while fixing D-11. |
 | O-01 | Fixed | `99426ca` |  |
 | O-02 | Fixed | `e30bf68` |  |
@@ -55,10 +55,10 @@ Last updated 2026-11-10, on `fix/audit-findings-2026-11-10`. Of 64 findings: **4
 | O-05 | Fixed | `27724f8` |  |
 | O-06 | Fixed | `5e152ae` |  |
 | O-07 | Fixed | `99426ca` | `applyBorder` and `applyNumberFormat` on new styles. Not checked in Excel. |
-| O-08 | **Open** | — |  |
-| O-09 | **Open** | — | Needs an API decision: `Left` is also the default value. |
+| O-08 | **Open** | — | See OPEN-8. |
+| O-09 | **Open** | — | Needs an API decision: `Left` is also the default value. See OPEN-7. |
 | O-10 | Fixed | `f2435fc` |  |
-| O-11 | **Open** | — |  |
+| O-11 | **Open** | — | See OPEN-8. |
 | R-01 | Fixed | `62cd4e5` |  |
 | R-02 | Fixed | `62cd4e5` |  |
 | R-03 | Fixed | `62cd4e5` | Reads as an empty string, as POI does. |
@@ -67,30 +67,30 @@ Last updated 2026-11-10, on `fix/audit-findings-2026-11-10`. Of 64 findings: **4
 | R-06 | Fixed | `62cd4e5` |  |
 | R-07 | Fixed | `375eacb` |  |
 | R-08 | Fixed | `62cd4e5` |  |
-| R-09 | **Open** | — |  |
-| R-10 | **Open** | — |  |
-| R-11 | **Open** | — |  |
-| R-12 | **Open** | — |  |
-| R-13 | Partly | `62cd4e5` | A bad number or date names its cell in a damaged-file error. Other paths unchanged. |
+| R-09 | **Open** | — | See OPEN-4. |
+| R-10 | **Open** | — | See OPEN-3. |
+| R-11 | **Open** | — | See OPEN-5. |
+| R-12 | **Open** | — | See OPEN-5. |
+| R-13 | Partly | `62cd4e5` | A bad number or date names its cell in a damaged-file error. Other paths unchanged. See OPEN-6. |
 | F-01 | Fixed | `375eacb` `0377f78` `99426ca` |  |
-| F-02 | Fixed | `375eacb` | On load. The editing API still swaps a format that cannot show the new value. |
-| F-03 | Partly | `8ce5e08` | Ids 5-8 and 41-44 added, three codes corrected, ids below 164 honoured. The locale-dependent ids 23-36 and 50-81 are still unknown. |
+| F-02 | Fixed | `375eacb` | On load. The editing API still swaps a format that cannot show the new value. See OPEN-9. |
+| F-03 | Partly | `8ce5e08` | Ids 5-8 and 41-44 added, three codes corrected, ids below 164 honoured. The locale-dependent ids 23-36 and 50-81 are still unknown. See OPEN-11. |
 | F-04 | Fixed | `5e152ae` |  |
 | F-05 | Fixed | `5e152ae` |  |
 | F-06 | Fixed | `38a45d0` |  |
 | F-07 | Fixed | `5e152ae` `83cc03a` |  |
 | F-08 | Fixed | `5e152ae` | Unchanged sizes keep their stored text. A size set in code is still written with two decimals. |
 | F-09 | Fixed | `99426ca` |  |
-| F-10 | **Open** | — |  |
-| F-11 | Partly | `5e152ae` `27724f8` | Default sizes, row and column settings and merges are copied. What lives only in the XML is not. |
-| F-12 | **Open** | — | No longer loses anything on a round trip (F-01); still not modelled. |
-| M-01 | **Open** | — |  |
+| F-10 | **Open** | — | See OPEN-7. |
+| F-11 | Partly | `5e152ae` `27724f8` | Default sizes, row and column settings and merges are copied. What lives only in the XML is not. See OPEN-10. |
+| F-12 | **Open** | — | No longer loses anything on a round trip (F-01); still not modelled. See OPEN-7. |
+| M-01 | **Open** | — | See OPEN-9. |
 | M-02 | Fixed | `308bd3b` |  |
 | M-03 | Fixed | `308bd3b` |  |
 | M-04 | Fixed | `f2435fc` | `kotlinx-datetime` now resolves its own `kotlinx-serialization-core` (1.6.2) for consumers instead of the newer one the removed dependency pulled in. |
-| M-05 | **Open** | — |  |
-| M-06 | **Open** | — |  |
-| M-07 | **Open** | — | `:kexcel:macosArm64Test` was run by hand for this work and passes. |
+| M-05 | **Open** | — | See OPEN-9. |
+| M-06 | **Open** | — | See OPEN-12. |
+| M-07 | **Open** | — | `:kexcel:macosArm64Test` was run by hand for this work and passes. See OPEN-12. |
 
 Also on the branch: `4c3c9ad` adds the POI oracle the fidelity tests are built on (T-01), and
 the last code commit keeps the common source set free of JVM-only calls.
@@ -124,6 +124,274 @@ Two files still differ: `56702.xlsx` has 25 cells with an empty `<v></v>`, which
 counts as the number 0 and Kexcel as empty; `52575_main.xlsx` has one formula whose cached
 string is stored in a non-standard place. POI also prints the text of 1,394 expanded
 shared-formula followers with different spacing than the file has; the formulas are the same.
+
+## Open items
+
+What is left, written so that each item can be picked up on its own. Paths are relative to
+`kexcel/src/commonMain/kotlin/com/gyanoba/kexcel/`. **Size** is a rough guess: S is under a
+day, M a few days, L a week or more. Items marked **decision** need a choice from a
+maintainer before any code, usually because the public API or existing behaviour changes.
+
+Suggested order: OPEN-1 and OPEN-2 first (they are the two things users are most likely to
+hit), then OPEN-3 and OPEN-4 before anyone feeds the library untrusted or very large files.
+
+### OPEN-1 An API for what a formula evaluated to, and for error values (D-15, D-18)
+
+- **Where it stands**: every parsed value carries an internal `CellSource`
+  (`sheet/DataModel.kt`) with the cell's `t` attribute and raw `<v>` text. For a formula that
+  is its cached result; for an error cell it is the error code. The save path uses it, so the
+  round trip is lossless. None of it is public.
+- **What is missing**: a reader cannot ask "what does this formula cell show?". It gets
+  `FormulaCellValue("A1+A2")` and nothing else. An error cell reads as
+  `FormulaCellValue("#N/A")`, which is indistinguishable from a formula.
+- **Why it matters**: most people who read a spreadsheet want the numbers, and Kexcel has no
+  formula evaluator. The guide (`docs/guides/formulas.md`) currently has to warn about this.
+- **Approach**
+  1. Add a read-only `FormulaCellValue.cachedValue: CellValue?`, built from `source.type` and
+     `source.rawValue` (number, text, boolean, or error). It is `null` for a formula made in
+     code, and should become `null` once `Excel.valuesEdited` is set, for the same reason the
+     save path drops cached results then.
+  2. Add an error value. **Decision**: a new `ErrorCellValue(code)` subtype of the sealed
+     `CellValue` makes every exhaustive `when` in user code stop compiling, so it needs a
+     major version. The non-breaking alternative is an `isError` / `errorCode` pair on
+     `FormulaCellValue`.
+  3. In `parser/Parser.kt` (the `"e" ->` branch, line 728) produce the new value; in
+     `save/SaveFile.kt` `createCell` replace the `isErrorLiteral` special case.
+  4. Run `./gradlew :kexcel:updateKotlinAbi`, update the formulas guide and `ExcelSamples.kt`.
+- **Reference**: POI `Cell.getCachedFormulaResultType`, `FormulaError`; ECMA-376 §18.18.11.
+- **Tests**: reader conformance for `t="n"`, `"str"`, `"b"`, `"e"` with and without `<f>`;
+  a POI cross-check on `poi/56822-Countifs.xlsx`. `errorCellsSurfaceTheirErrorLiteral`
+  changes with step 2.
+- **Size**: M.
+
+### OPEN-2 The rest of D-12: tables, drawings, pivot tables, threaded comments
+
+- **Where it stands**: `Excel.moveReferences` (`ReferenceUpdates.kt:44`) adjusts formulas,
+  defined names, the ranges in the worksheet part, and cell comments. It agrees with POI's
+  `shiftRows` / `shiftColumns`.
+- **What is missing**, by part:
+  - **Tables** (`xl/tables/tableN.xml`): `ref` and `autoFilter ref`. A row edit above or
+    inside the data rows only needs those two moved. A column inserted *inside* a table needs
+    a new `<tableColumn>` with a unique name, and the header cell must hold that name, or
+    Excel repairs the file. Removing the header row has no good answer.
+  - **Images and charts** (`xl/drawings/drawingN.xml`): `xdr:from` / `xdr:to` hold zero-based
+    `xdr:row` and `xdr:col`. Whether an anchor moves depends on its `editAs` (`twoCell`,
+    `oneCell`, `absolute`). Chart series ranges are formulas in `xl/charts/chartN.xml`.
+  - **Pivot tables**: the cache source range in `xl/pivotCache/pivotCacheDefinitionN.xml`
+    and the `location ref` of the pivot table.
+  - **Threaded comments** (`xl/threadedComments/`): `ref` per comment.
+  - In the worksheet part: `<rowBreaks>` / `<colBreaks>` (`brk id`), and the saved selection
+    and `pane topLeftCell` in `<sheetView>`.
+- **Approach**: `moveComments` in `ReferenceUpdates.kt` shows the pattern: read the sheet's
+  `_rels` part, resolve the target with `resolveRelationshipTarget`, parse with
+  `parseXmlPart`, register the document in `Excel.xmlFiles` so it is saved, and reuse
+  `adjustReferenceForEdit` / `adjustFormulaForEdit`. Until a part is handled, consider
+  refusing the edit on a sheet that has it rather than leaving it stale. **Decision** for the
+  table cases above.
+- **Reference**: Excel's behaviour. POI does not shift tables or drawings either, so there is
+  no oracle; test against hand-built expectations.
+- **Size**: tables M, drawings M, the rest S each.
+
+### OPEN-3 Guard against decompression bombs (R-10)
+
+- **What is missing**: `readZipArchive` (`utils/ZipReader.kt:21`) inflates every entry fully
+  into memory with no limit. `poc-shared-strings.xlsx` from the POI corpus exhausts a
+  512 MiB heap in a quarter of a second.
+- **Approach**: in `readAllBytes`, count bytes and stop at a maximum entry size and a maximum
+  total; also refuse an entry whose inflated-to-compressed ratio is absurd. POI's
+  `ZipSecureFile` defaults are a minimum ratio of 0.01 and a 4 GiB entry limit, with a
+  separate cap on text size; much lower defaults suit a mobile library. Make the limits
+  configurable. **Decision**: that needs a public parameter or settings object on
+  `decodeBytes` / `decodeStream`.
+- **Tests**: `poc-shared-strings.xlsx` must fail fast with a clear message; a normal large
+  file must still open.
+- **Size**: S.
+
+### OPEN-4 Memory use and large files (R-09)
+
+- **Measured**: about 2 KiB of heap per cell. 200,000 cells need roughly 400 MiB to encode;
+  1,000,000 cells do not fit in 512 MiB.
+- **Where it goes**: each part is a full ksoup DOM (`parser/Parser.kt`, `parseTable`); every
+  cell is a `Data` plus a value plus, when parsed, a `CellSource`; and the save path builds a
+  second DOM for `<sheetData>` (`save/SaveFile.kt`, `setRows`). `Sheet.rows`
+  (`sheet/Sheet.kt:208`) also allocates `maxRows x maxColumns`.
+- **Approach**, cheapest first:
+  1. Write `<sheetData>` as text. Parts are already serialised by Kexcel's own
+     `serializeXml` (`utils/Xml.kt`), so `setRows` can append rows to a `StringBuilder` and
+     splice the result in place of the element, instead of building `Element` objects.
+  2. Stop materialising `rows` densely; offer an iterator over the cells that exist.
+  3. Read `<sheetData>` with a pull parser instead of a DOM. This is the large one, and the
+     worksheet's other children still have to be kept for the round trip.
+- **Tests**: a time and heap budget for 100,000 and 1,000,000 cells; none exists today.
+- **Size**: step 1 M, step 2 S, step 3 L.
+
+### OPEN-5 Find the workbook through the package relationships (R-12, R-11, Strict OOXML)
+
+- **What is missing**
+  - The workbook is assumed to be `xl/workbook.xml` (`Excel.kt:560-567`), and that string and
+    `xl/_rels/workbook.xml.rels` appear 24 times in the main sources. OPC says to find it
+    through the `officeDocument` relationship in `_rels/.rels`.
+  - Zip entry names are matched exactly. `49609.xlsx` uses backslashes and lower case
+    (`xl\workbook.xml`, `[content_types].xml`); POI opens it, Kexcel reports "format
+    unsupported". Part names are case-insensitive in OPC.
+  - Strict OOXML files use `http://purl.oclc.org/ooxml/...` namespaces and relationship
+    types. Dates in `t="d"` cells are already read.
+- **Approach**: resolve the workbook path once in `decodeExcel`, keep it on `Excel`, and
+  derive the relationships path and the base folder from it (`resolveWorkbookRelTarget` in
+  `utils/Utility.kt` hard-codes `xl`). Normalise entry names when the archive is read. For
+  Strict, map the namespaces and relationship types to their Transitional equivalents on read.
+- **Reference**: ECMA-376 Part 2 §9.3 and §10; POI `OPCPackage`. POI 5.4.1 refuses Strict, so
+  there is no oracle for it.
+- **Size**: M for the path, S for entry names, M to L for Strict.
+
+### OPEN-6 One kind of error for a file that cannot be read (R-13)
+
+- **Where it stands**: a damaged file surfaces as `IllegalArgumentException` from
+  `damagedExcel` in most places, and a bad number or date now names its cell. Unexpected
+  shapes can still escape as `NullPointerException`, `IndexOutOfBoundsException` or
+  `NumberFormatException`, and a non-zip input as `UnsupportedOperationException`.
+- **Approach**: **decision** on a public exception type (or keep `IllegalArgumentException`
+  and document it), then catch anything else at the top of `decodeBytes` / `decodeStream`
+  and wrap it with the part name.
+- **Tests**: the seven `clusterfuzz-testcase-*` files in the POI corpus are a ready-made
+  input set; assert the exception type for each.
+- **Size**: S to M.
+
+### OPEN-7 The style model (F-12, F-10, O-09)
+
+Everything below is now safe on a round trip: an unedited cell keeps its `<xf>`, and a style
+derived with `copyWith` starts from the `<xf>` it came from (`save/SaveFile.kt`,
+`processStylesFile`). What is missing is being able to *read or set* these through `CellStyle`.
+
+- **Theme, indexed and tinted colours (F-12)**: they read as black or "none"
+  (`parser/Parser.kt`, `parseFont` and the fill loop in `parseStyles`). To read them, parse
+  `xl/theme/theme1.xml`, resolve `theme` + `tint` to ARGB (ECMA-376 §18.8.3, §20.1.6.2; POI
+  `ThemesTable`, `XSSFColor`), and the indexed palette (§18.8.27). The resolved colour must be
+  what both the parsed style and its pristine copy hold, or every such cell would get a new
+  `<xf>` on save.
+- **Fractional font sizes (F-10)**: `fontSize` is an `Int` (`sheet/CellStyle.kt:22`), so 10.5
+  reads as 10. **Decision**: changing the type is a breaking change; an extra `Double`
+  property is not.
+- **Left alignment (O-09)**: `HorizontalAlign.Left` is also the default
+  (`sheet/CellStyle.kt:25`) and is never written (`applyAlignment`, `save/SaveFile.kt:1001`),
+  so a number cannot be left-aligned. **Decision**: a nullable alignment, or a `General`
+  entry in the enum.
+- **Not modelled at all**: strike-through, sub/superscript, pattern and gradient fills,
+  indent, justify/distributed, reading order, and cell protection (`locked`, `hidden`).
+- **A trap to document or remove**: `Data.cellStyle` returns the object shared by every
+  cell with that style. Changing it in place is now saved, and changes all of those cells.
+- **Size**: M each.
+
+### OPEN-8 Limits Excel enforces and Kexcel does not (O-08, O-11, D-07)
+
+- A string longer than 32,767 characters, a column wider than 255, a row taller than 409, a
+  formula longer than 8,192 characters and more than about 64,000 cell styles are all
+  accepted and written.
+- An integer beyond 15 significant digits is written in full (`save/SaveFile.kt:159`);
+  Excel stores a double and changes it.
+- A date before 1 January 1900 is written as a negative serial
+  (`number_format/BaseNumFormat.kt`, `writeDate` / `serialOf`), which Excel shows as `####`.
+- **Decision**: throw when the value is set, throw on `encode()`, or document. POI throws
+  `IllegalArgumentException` from `setCellValue` (`SpreadsheetVersion.EXCEL2007`).
+- **Size**: S.
+
+### OPEN-9 API traps
+
+- **`sheet.cell(index)` creates the cell (M-01)** and grows `maxRows` / `maxColumns`
+  (`sheet/Sheet.kt:182`). Reading `Z500` on a one-cell sheet makes it 500 x 26. Add a
+  non-creating read (for example a nullable `get`) and point the docs at it.
+- **Text edits flatten rich text (D-22)**: `findAndReplace` (`sheet/Sheet.kt:1118`) replaces
+  a rich-text cell with plain text. Replacing inside the runs would keep the formatting.
+- **`updateCell` still swaps a number format it thinks cannot show the value (F-02)**
+  (`sheet/Sheet.kt:709`, `NumFormat.accepts`). Excel allows any format on any value. Removing
+  the check changes behaviour that two tests pin. **Decision**.
+- **`setDefaultSheet` moves the tab to the front (D-14)** (`save/SaveFile.kt:625`). The
+  sheet-scoped names now follow, but the tab order still changes. Excel's own mechanism is
+  `activeTab` on `<workbookView>`. **Decision**: switching changes what `getDefaultSheet`
+  returns for files whose active tab is not the first.
+- **A merge shows only its top-left cell (D-21)**: the cells beneath are written back, but
+  cannot be read or styled through the API.
+- **`TextWrapping.Clip` writes `shrinkToFit` (M-05)**, which shrinks the text rather than
+  clipping it. A rename needs a deprecation cycle.
+- **Size**: S each, apart from the decisions.
+
+### OPEN-10 Copying, deleting and renaming sheets (F-11, rest of D-13)
+
+- **`copy()` starts from an empty worksheet part** (`Excel.kt:180`, `Sheet.clone` at
+  `sheet/Sheet.kt:68`). Cells, styles, merges, sizes and row/column settings are copied.
+  Panes, validations, conditional formats, hyperlinks, page setup and drawings are not.
+  Cloning the worksheet DOM would carry most of it; relationships (hyperlinks, drawings,
+  comments) need new ids and, for drawings and comments, new parts.
+- **`delete()` leaves the sheet's own parts behind** (`Excel.kt:259`): its `_rels` part,
+  comments, drawings and tables stay in the archive with their content-type overrides. They
+  are harmless to Excel but make the file larger, and a later sheet that reuses the part name
+  picks up the old relationships.
+- **`rename()` rewrites cell formulas and defined names only** (`Excel.kt:194`). Formulas
+  inside data validations and conditional formats, chart series and pivot sources still name
+  the old sheet. `renameSheetReferences` (`utils/FormulaShift.kt`) can be applied to the
+  first two the way `moveReferences` applies `adjustFormulaForEdit`.
+- **Size**: M for copy, S for the other two.
+
+### OPEN-11 Number formats (rest of F-03)
+
+- Built-in ids 23-36 and 50-81 are still unknown and read as `General`. They are
+  locale-dependent (ECMA-376 §18.8.30 lists them per language; 27-36 and 50-58 are dates in
+  CJK locales). The file is not damaged, but such dates read as numbers.
+- There is no formatted display text, i.e. what Excel shows for a value and a format code
+  (POI `DataFormatter`). This is a feature in its own right.
+- The date detection (`formatCodeLooksLikeDateTime`, `number_format/BaseNumFormat.kt:515`)
+  does not know the Buddhist-year and era codes (`b`, `g`, `e`).
+- **Size**: S for the ids, L for display text.
+
+### OPEN-12 Housekeeping
+
+- **CI runs only `:kexcel:jvmTest` and the Android instrumented tests (M-07)**
+  (`.github/workflows/publish.yaml`). During this work two JVM-only calls in the common
+  source set compiled and passed under `jvmTest`; only compiling a native target showed
+  them. Add `:kexcel:macosArm64Test` (198 common tests, run natively) or `:kexcel:allTests`.
+- **`docProps/app.xml` is not updated (M-06)** when sheets are added, renamed or deleted
+  (`TitlesOfParts`). Harmless to Excel.
+- The `kotlinx-serialization` Gradle plugin is still applied in `kexcel/build.gradle.kts`
+  although nothing uses it.
+- `Excel.cellStyleReferenced` and the branch of `createCell` that reads it are effectively
+  dead: `styleChanges` is set as soon as a workbook has a parsed cell, and the map is empty
+  for a new one.
+- `reference/poi/test-data` has 354 workbooks and the suite uses 19. A task that runs the
+  whole corpus, gated by a Gradle property so the normal build does not depend on
+  `reference/`, would catch regressions the curated set cannot. **Decision**: `CLAUDE.md`
+  says not to depend on reference sources, so this needs a maintainer's call.
+
+### OPEN-13 Not verified in Excel
+
+POI is lenient where Excel is strict, and the other way round. These should be opened in
+Excel once, by hand, before a release:
+
+- a workbook saved after an edit, to confirm no repair prompt now that `xl/calcChain.xml` is
+  removed and `fullCalcOnLoad` is set (D-15);
+- new styles with `applyBorder` / `applyNumberFormat` (O-07);
+- a sheet with an autofilter and protection after a merge is added (O-02);
+- a workbook that had no styles part, after Kexcel gave it one (R-02);
+- a sheet after `insertRow` with comments, to confirm the note boxes sit on the right cells
+  (the VML `x:Row` / `x:Column` are updated, the box's `x:Anchor` is not);
+- a formula written with a leading `=` (D-19).
+
+### Known limits of the formula text handling
+
+`shiftFormulaReferences`, `renameSheetReferences` (`utils/FormulaShift.kt`) and
+`adjustFormulaForEdit` (`utils/ReferenceEdit.kt`) scan a formula lexically; they are not a
+parser. They handle string literals, quoted and unquoted sheet names, function names, defined
+names, structured references and numbers, and are checked against POI on the corpus. They
+do not handle R1C1 notation, and they leave 3-D references (`First:Last!A1`) and references
+into other workbooks untouched on purpose. If a real formula parser is ever added (it would
+also be the first step towards evaluation), these three functions are what it replaces.
+
+### Two corpus files that still differ after a no-edit save
+
+- `56702.xlsx`: 25 cells are `<c t="n"><v></v></c>`. POI reads the number 0; Kexcel reads an
+  empty cell and writes `<c/>`. Keeping the empty `<v>` would need a value to hang the
+  `CellSource` on.
+- `52575_main.xlsx`: one formula cell typed `t="inlineStr"` keeps its cached text in a
+  `<v t="inlineStr">` element, which is not valid; Kexcel writes it back as `t="str"`.
 
 ## How the evidence was gathered
 
@@ -649,46 +917,48 @@ CT_Worksheet is a sequence, and Excel rejects a part whose children are out of o
 
 "Up to date with the spec" has two parts: not damaging what Kexcel does not understand
 (covered above), and offering an API for it (this section). Status key: **API** = can be read
-and written through Kexcel; **Kept** = no API, survives a no-edit save as raw XML;
-**Lost** = damaged or dropped today.
+and written through Kexcel; **Kept** = no API, but survives a save unchanged.
+
+This table shows the state on the fix branch. Nothing is in the "lost on a round trip"
+state it had at the time of the audit; the original status of each area is in the findings.
 
 | Area (ECMA-376 Part 1) | Status | Notes |
 |---|---|---|
 | Cell values: number, string, boolean | API | |
-| Dates and times | API, with defects | D-05 to D-08; no 1904 system; no ISO `t="d"` |
-| Error values | Lost | D-18; no error type |
-| Formulas: plain | API | no cached result (D-15), no evaluation |
-| Formulas: shared, array, data table, dynamic array | Lost | D-02, D-03 |
+| Dates and times | API | 1900 and 1904 systems, ISO `t="d"` on read. Dates before 1900 are not representable (OPEN-8) |
+| Error values | Kept | round-trip as errors; no error type in the API (OPEN-1) |
+| Formulas: plain | API | cached results are kept but not readable (OPEN-1); no evaluation |
+| Formulas: shared, array, data table, dynamic array | Read / Kept | shared formulas are expanded on read; array, data-table and dynamic-array attributes are kept; none can be created through the API |
 | Rich text | API (partial) | unmodelled run properties are kept while the cell is unedited |
-| Number formats | API (partial) | F-03; no formatted display text (POI `DataFormatter`) |
-| Fonts, fills, borders, alignment | API (partial) | no theme/indexed colours, pattern or gradient fills, strike, sub/superscript, indent, justify, reading order, fractional sizes |
-| Cell protection (locked, hidden) | Lost | F-01 |
-| Named cell styles (`cellStyleXfs`, `cellStyles`), `dxfs` | Kept | miscounted by O-01 |
-| Merged cells | API | styling lost (F-07) |
-| Column width, row height | API | F-04, F-05 |
-| Hidden rows and columns, grouping/outline | Lost | F-04, F-05 |
-| Row and column default styles | Lost | F-04, F-05 |
-| Header and footer | API, corrupts | D-09 |
+| Number formats | API (partial) | locale-dependent built-in ids unknown; no formatted display text (OPEN-11) |
+| Fonts, fills, borders, alignment | API (partial) | what is not modelled is kept; see OPEN-7 for the list |
+| Cell protection (locked, hidden) | Kept | no API (OPEN-7) |
+| Named cell styles (`cellStyleXfs`, `cellStyles`), `dxfs` | Kept | |
+| Merged cells | API | cells under a merge are kept but not reachable (OPEN-9) |
+| Column width, row height | API | |
+| Hidden rows and columns, grouping/outline | Kept | follow inserted and removed rows and columns; no API |
+| Row and column default styles | Kept | no API |
+| Header and footer | API | |
 | Right-to-left sheets | API | |
-| Freeze and split panes, zoom, gridlines, selection | Kept | lost by `rename` / `copy` |
+| Freeze and split panes, zoom, gridlines, selection | Kept | not carried by `copy` (OPEN-10); not adjusted by row/column edits (OPEN-2) |
 | Sheet visibility, tab colour, sheet order | Kept | no API to hide or move a sheet |
-| Defined names, print area, print titles | Kept | broken by delete / default sheet (D-14) |
-| Hyperlinks | Kept | not shifted (D-12) |
-| Comments and notes, threaded comments | Kept | not shifted |
-| Data validation | Kept | not shifted |
-| Conditional formatting | Kept | not shifted; triggers O-01(c) |
-| Autofilter, sort state | Kept | not shifted; row `hidden` lost (F-04) |
-| Tables (list objects), structured references | Kept | not shifted |
-| Images, drawings, charts | Kept | chart **sheets** cannot be opened (R-01) |
+| Defined names, print area, print titles | Kept | follow renames, deletes and row/column edits; no API |
+| Hyperlinks | Kept | follow row/column edits; no API |
+| Comments and notes, threaded comments | Kept | notes follow row/column edits, threaded comments do not (OPEN-2); no API |
+| Data validation | Kept | follows row/column edits; no API |
+| Conditional formatting | Kept | follows row/column edits; no API |
+| Autofilter, sort state | Kept | follow row/column edits; no API |
+| Tables (list objects), structured references | Kept | not adjusted by row/column edits (OPEN-2) |
+| Images, drawings, charts | Kept | chart sheets are kept too; anchors are not adjusted by row/column edits (OPEN-2) |
 | Pivot tables, slicers, sparklines (`extLst`) | Kept | |
 | Page setup, margins, breaks | Kept | |
 | Sheet and workbook protection | Kept | |
 | Document properties (`docProps`) | Kept | no API |
-| VBA project (`.xlsm`) | Kept | macro sheets cannot be opened (R-01) |
-| Workbook calculation settings, calc chain | Kept, stale | D-15 |
-| Strict OOXML (`purl.oclc.org` namespaces) | Not supported | POI 5.4.1 also refuses it |
+| VBA project (`.xlsm`) | Kept | macro sheets are kept |
+| Workbook calculation settings, calc chain | Kept | the calc chain is removed and a full recalculation requested once a value changes |
+| Strict OOXML (`purl.oclc.org` namespaces) | Not supported | POI 5.4.1 also refuses it (OPEN-5) |
 | Encrypted workbooks, `.xls`, `.xlsb` | Not supported | reported as "format unsupported" |
-| Large files (streaming read or write) | Not supported | R-09 |
+| Large files (streaming read or write) | Not supported | OPEN-4 |
 
 Feature parity with the Dart library is complete: `reference/dart-excel` is at 5.0.0, the
 latest release, and every public operation and all 21 upstream fixtures have a Kotlin
@@ -819,9 +1089,7 @@ All in place. The last item compares Kexcel's insert and remove with POI's on th
 
 ## Suggested order of work
 
-Steps 1 to 6 are done. What is left, roughly by value: an API for cached formula results and
-error values (D-15, D-18), the rest of D-12 (tables, drawings, pivot tables), R-09 and R-10
-(memory and untrusted input), R-12, and the open S2 and S5 items.
+Steps 1 to 6 are done. What is left is under **Open items**, in suggested order.
 
 1. **Stop destroying data on a no-edit round trip.** D-01, D-02 (step 1: preserve `<f>`
    attributes), D-09, D-04. Each is a small, contained change.
