@@ -55,9 +55,8 @@ println(sheet.cell(CellIndex.indexByString("A4")).value) // =SUM(A1:A3)
 - The leading `=` is optional: `"=SUM(A1:A3)"` and `"SUM(A1:A3)"` save the same formula.
   The file stores the expression without it, so a formula read back from a saved
   workbook has no `=`.
-- Use A1-style references. Kexcel does not rewrite references when you insert or
-  remove rows/columns, so keep that in mind if you [reshape the sheet](rows-and-columns.md)
-  after adding formulas.
+- Use A1-style references. They are adjusted when you
+  [insert or remove rows and columns](rows-and-columns.md), the way Excel adjusts them.
 - Reading a formula cell:
 
     ```kotlin

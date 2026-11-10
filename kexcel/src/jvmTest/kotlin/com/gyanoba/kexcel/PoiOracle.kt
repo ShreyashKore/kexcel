@@ -64,6 +64,8 @@ internal object PoiOracle {
 
     private class Facts(val workbook: Map<String, String>, val sheets: Map<String, SheetFacts>)
 
+    private val rowsAsArea = Regex("""\$?A\$?([0-9]{1,7}):\$?XFD\$?([0-9]{1,7})""")
+    private val columnsAsArea = Regex("""\$?([A-Za-z]{1,3})\$?1:\$?([A-Za-z]{1,3})\$?1048576""")
     private val wholeColumns = Regex("""(?<![A-Za-z0-9$])\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})(?![A-Za-z0-9(!])""")
     private val wholeRows = Regex("""(?<![A-Za-z0-9$.])\$?([0-9]{1,7}):\$?([0-9]{1,7})(?![A-Za-z0-9.])""")
 
@@ -75,6 +77,10 @@ internal object PoiOracle {
      */
     fun normalised(formula: String?): String? = formula
         ?.filterNot(Char::isWhitespace)
+        // After a shift POI spells a whole-row reference out as an area over every column
+        // (`3:4` becomes `$A3:$XFD4`), and a whole-column one over every row.
+        ?.replace(rowsAsArea, "$1:$2")
+        ?.replace(columnsAsArea, "$1:$2")
         ?.replace(wholeColumns, "$1:$2")
         ?.replace(wholeRows, "$1:$2")
 
@@ -130,8 +136,15 @@ internal object PoiOracle {
                 "merged regions" to sheet.mergedRegions.map { it.formatAsString() }.sorted().toString(),
                 "hyperlinks" to safe("?") { sheet.hyperlinkList.map { it.cellRef }.toString() },
                 "comments" to safe("?") { sheet.cellComments.keys.map { it.formatAsString() }.sorted().toString() },
-                "data validations" to safe("?") { sheet.dataValidations.size.toString() },
-                "conditional formatting" to safe("?") { sheet.sheetConditionalFormatting.numConditionalFormattings.toString() },
+                "data validations" to safe("?") { sheet.dataValidations.map { v -> v.regions.cellRangeAddresses.joinToString(" ") { it.formatAsString() } }.toString() },
+                "conditional formatting" to safe("?") {
+                    val formatting = sheet.sheetConditionalFormatting
+                    (0 until formatting.numConditionalFormattings).map { i ->
+                        val entry = formatting.getConditionalFormattingAt(i)
+                        entry.formattingRanges.joinToString(" ") { it.formatAsString() } + " => " +
+                            (0 until entry.numberOfRules).map { r -> listOf(entry.getRule(r).formula1, entry.getRule(r).formula2) }
+                    }.toString()
+                },
                 "tables" to safe("?") { sheet.tables.size.toString() },
                 "drawing shapes" to safe("?") { (sheet.drawingPatriarch?.shapes?.size ?: 0).toString() },
                 "pane" to safe("?") { sheet.paneInformation?.let { "${it.verticalSplitPosition},${it.horizontalSplitPosition},${it.isFreezePane}" } ?: "-" },

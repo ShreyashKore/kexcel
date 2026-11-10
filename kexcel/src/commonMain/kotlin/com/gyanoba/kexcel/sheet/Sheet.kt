@@ -1,6 +1,9 @@
 package com.gyanoba.kexcel.sheet
 
 import com.gyanoba.kexcel.Excel
+import com.gyanoba.kexcel.moveReferences
+import com.gyanoba.kexcel.utils.Axis
+import com.gyanoba.kexcel.utils.StructuralEdit
 import com.gyanoba.kexcel.number_format.NumFormat
 import com.gyanoba.kexcel.utils.EXCEL_DEFAULT_COLUMN_WIDTH
 import com.gyanoba.kexcel.utils.EXCEL_DEFAULT_ROW_HEIGHT
@@ -403,6 +406,7 @@ public class Sheet internal constructor(
             _maxColumns -= 1
         }
         shiftColumnProperties(columnIndex, removed = true)
+        excel.moveReferences(this, StructuralEdit(Axis.Column, columnIndex, removed = true))
     }
 
     public fun insertColumn(columnIndex: Int) {
@@ -495,6 +499,7 @@ public class Sheet internal constructor(
             _maxColumns = columnIndex + 1
         }
         shiftColumnProperties(columnIndex, removed = false)
+        excel.moveReferences(this, StructuralEdit(Axis.Column, columnIndex, removed = false))
     }
 
     /**
@@ -614,6 +619,7 @@ public class Sheet internal constructor(
         }
         _rowHeights = shiftedKeys(_rowHeights, rowIndex, removed = true)
         rowAttributes = shiftedKeys(rowAttributes, rowIndex, removed = true)
+        excel.moveReferences(this, StructuralEdit(Axis.Row, rowIndex, removed = true))
     }
 
     public fun insertRow(rowIndex: Int) {
@@ -697,6 +703,7 @@ public class Sheet internal constructor(
         }
         _rowHeights = shiftedKeys(_rowHeights, rowIndex, removed = false)
         rowAttributes = shiftedKeys(rowAttributes, rowIndex, removed = false)
+        excel.moveReferences(this, StructuralEdit(Axis.Row, rowIndex, removed = false))
     }
 
     public fun updateCell(cellIndex: CellIndex, value: CellValue?, cellStyle: CellStyle? = null) {

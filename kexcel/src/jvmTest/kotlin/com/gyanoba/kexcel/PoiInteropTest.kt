@@ -1,5 +1,6 @@
 package com.gyanoba.kexcel
 
+import kotlin.test.assertFalse
 import com.gyanoba.kexcel.number_format.CustomNumericNumFormat
 import com.gyanoba.kexcel.sheet.BoolCellValue
 import com.gyanoba.kexcel.sheet.CellIndex
@@ -1254,6 +1255,187 @@ class PoiInteropTest {
         val saved = roundTrip(threeSheetsWithScopedNames()) { it.setDefaultSheet("S3") }
 
         assertEquals(mapOf("_xlnm.Print_Area" to "S3", "Local" to "S2", "OnFirst" to "S1"), scopes(saved))
+    }
+
+    // endregion
+
+
+    // region --- References follow inserted and removed rows and columns ---
+
+    private fun workbookWithReferences(): ByteArray = poiWorkbook { wb ->
+        val sheet = wb.createSheet("S")
+        for (r in 0 until 6) sheet.createRow(r).apply {
+            createCell(0).setCellValue((r + 1).toDouble())
+            createCell(1).setCellValue("text ${r + 1}")
+        }
+        sheet.getRow(0).createCell(3).cellFormula = "A3*2"
+        sheet.getRow(1).createCell(3).cellFormula = "SUM(A1:A6)+\$A\$4"
+        sheet.getRow(5).createCell(3).cellFormula = "SUM(A2:A3)&\"A3\""
+        sheet.getRow(0).createCell(4).cellFormula = "SUM(A:B)+SUM(3:4)"
+        sheet.getRow(3).getCell(1).hyperlink = wb.creationHelper.createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.URL).apply { address = "https://example.com" }
+        val comment = sheet.createDrawingPatriarch().createCellComment(wb.creationHelper.createClientAnchor())
+        comment.string = wb.creationHelper.createRichTextString("on B5")
+        sheet.getRow(4).getCell(1).cellComment = comment
+        val formatting = sheet.sheetConditionalFormatting
+        val rule = formatting.createConditionalFormattingRule("\$A2>3")
+        rule.createPatternFormatting().fillBackgroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+        formatting.addConditionalFormatting(arrayOf(CellRangeAddress.valueOf("A2:B5")), rule)
+
+        val other = wb.createSheet("Other")
+        other.createRow(0).createCell(0).cellFormula = "S!A3+1"
+        other.createRow(1).createCell(0).cellFormula = "SUM(S!A1:A6)+A3"
+        wb.createName().apply { nameName = "Values"; refersToFormula = "S!\$A\$1:\$A\$6" }
+        wb.createName().apply { nameName = "Third"; refersToFormula = "S!\$A\$3" }
+        wb.setPrintArea(0, "\$A\$1:\$E\$6")
+    }
+
+    /** What a structural edit has to get right, as POI reports it. */
+    private val referenceKinds = setOf(
+        "formula", "number", "string", "cell lost", "cell type", "cell appeared", "workbook: defined names",
+        "sheet: hyperlinks", "sheet: comments", "sheet: conditional formatting", "sheet: merged regions",
+    )
+
+    private fun assertSameReferences(expected: ByteArray, actual: ByteArray) {
+        val differences = PoiOracle.differences(expected, actual).filterKeys { it in referenceKinds }
+        assertTrue(differences.isEmpty(), "Kexcel and POI disagree after the same edit:\n" + differences.entries.joinToString("\n") { "  ${it.key}: ${it.value}" })
+    }
+
+    private fun editedWithPoi(source: ByteArray, edit: (org.apache.poi.xssf.usermodel.XSSFSheet) -> Unit): ByteArray =
+        readWithPoi(source) { wb ->
+            edit(wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet)
+            ByteArrayOutputStream().also { wb.write(it) }.toByteArray()
+        }
+
+    @Test
+    fun insertingARowMovesEverythingThatPointsAtTheCellsBelowIt() {
+        // Kexcel used to move the cells only: the formula, the name, the hyperlink, the
+        // comment and the conditional format went on naming the old addresses. Excel
+        // adjusts all of them, and so does POI in XSSFRowShifter; the two results must agree.
+        val source = workbookWithReferences()
+
+        val byPoi = editedWithPoi(source) { it.shiftRows(2, it.lastRowNum, 1) }
+        val byKexcel = roundTrip(source) { it["S"].insertRow(2) }
+
+        assertSameReferences(byPoi, byKexcel)
+        readWithPoi(byKexcel) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals("A4*2", sheet.getRow(0).getCell(3).cellFormula)
+            assertEquals("SUM(A1:A7)+\$A\$5", sheet.getRow(1).getCell(3).cellFormula)
+            assertEquals("SUM(A2:A4)&\"A3\"", sheet.getRow(6).getCell(3).cellFormula)
+            assertEquals("S!A4+1", wb.getSheet("Other").getRow(0).getCell(0).cellFormula)
+            assertEquals("SUM(S!A1:A7)+A3", wb.getSheet("Other").getRow(1).getCell(0).cellFormula)
+            assertEquals("S!\$A\$1:\$A\$7", wb.getName("Values").refersToFormula)
+            assertEquals("S!\$A\$4", wb.getName("Third").refersToFormula)
+            assertEquals(listOf("B5"), sheet.hyperlinkList.map { it.cellRef })
+            assertEquals(listOf("B6"), sheet.cellComments.keys.map { it.formatAsString() })
+            assertEquals("on B5", sheet.getCellComment(org.apache.poi.ss.util.CellAddress("B6")).string.string)
+        }
+    }
+
+    @Test
+    fun removingARowShrinksRangesAndBreaksWhatPointedAtIt() {
+        val source = workbookWithReferences()
+
+        // Row 3 has no hyperlink or comment, so POI's removeRow + shiftRows is the same edit.
+        val byPoi = editedWithPoi(source) { it.removeRow(it.getRow(2)); it.shiftRows(3, it.lastRowNum, -1) }
+        val byKexcel = roundTrip(source) { it["S"].removeRow(2) }
+
+        assertSameReferences(byPoi, byKexcel)
+        readWithPoi(byKexcel) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals("#REF!*2", sheet.getRow(0).getCell(3).cellFormula)
+            assertEquals("SUM(A1:A5)+\$A\$3", sheet.getRow(1).getCell(3).cellFormula)
+            assertEquals("S!\$A\$1:\$A\$5", wb.getName("Values").refersToFormula)
+            assertEquals(listOf("B3"), sheet.hyperlinkList.map { it.cellRef })
+            assertEquals(listOf("B4"), sheet.cellComments.keys.map { it.formatAsString() })
+        }
+    }
+
+    @Test
+    fun insertingAndRemovingColumnsAgreesWithPoi() {
+        val source = workbookWithReferences()
+
+        assertSameReferences(
+            editedWithPoi(source) { it.shiftColumns(1, 4, 1) },
+            roundTrip(source) { it["S"].insertColumn(1) },
+        )
+        readWithPoi(roundTrip(source) { it["S"].insertColumn(0) }) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals("B3*2", sheet.getRow(0).getCell(4).cellFormula)
+            assertEquals("SUM(B:C)+SUM(3:4)", sheet.getRow(0).getCell(5).cellFormula)
+            assertEquals("S!B3+1", wb.getSheet("Other").getRow(0).getCell(0).cellFormula)
+            assertEquals("S!\$B\$1:\$B\$6", wb.getName("Values").refersToFormula)
+            assertEquals(listOf("C4"), sheet.hyperlinkList.map { it.cellRef })
+            assertEquals(listOf("C5"), sheet.cellComments.keys.map { it.formatAsString() })
+        }
+        readWithPoi(roundTrip(source) { it["S"].removeColumn(0) }) { wb ->
+            assertEquals("#REF!*2", wb.getSheet("S").getRow(0).getCell(2).cellFormula)
+            assertEquals("S!#REF!+1", wb.getSheet("Other").getRow(0).getCell(0).cellFormula)
+            assertEquals(listOf("A4"), (wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet).hyperlinkList.map { it.cellRef })
+        }
+    }
+
+    @Test
+    fun aHyperlinkAndACommentGoWithTheRowThatIsRemoved() {
+        val saved = roundTrip(workbookWithReferences()) { excel ->
+            excel["S"].removeRow(4) // the comment is on B5
+            excel["S"].removeRow(3) // the hyperlink is on B4
+        }
+
+        readWithPoi(saved) { wb ->
+            assertTrue(wb.getSheet("S").hyperlinkList.isEmpty())
+            assertTrue(wb.getSheet("S").cellComments.isEmpty())
+        }
+        // No comment box is left behind in the legacy drawing either.
+        val drawing = zipEntryNames(saved).first { it.endsWith(".vml") }
+        assertFalse("ObjectType=\"Note\"" in readZipEntry(saved, drawing).decodeToString())
+    }
+
+    @Test
+    fun validationsFiltersAndProtectedRangesFollowTheirCells() {
+        // POI's shifter does not move these; Excel does.
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            for (r in 0 until 6) sheet.createRow(r).apply { createCell(0).setCellValue("h$r"); createCell(1).setCellValue(r.toDouble()) }
+            val helper = sheet.dataValidationHelper
+            sheet.addValidationData(helper.createValidation(helper.createFormulaListConstraint("\$A\$2:\$A\$4"), org.apache.poi.ss.util.CellRangeAddressList(1, 4, 1, 1)))
+            sheet.addValidationData(helper.createValidation(helper.createExplicitListConstraint(arrayOf("a", "b")), org.apache.poi.ss.util.CellRangeAddressList(2, 2, 2, 2)))
+            sheet.setAutoFilter(CellRangeAddress.valueOf("A1:B6"))
+        }
+
+        val inserted = roundTrip(source) { it["S"].insertRow(1) }
+        readWithPoi(inserted) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals(listOf("B3:B6", "C4"), sheet.dataValidations.map { it.regions.cellRangeAddresses.single().formatAsString() })
+            assertEquals("\$A\$3:\$A\$5", sheet.dataValidations.first().validationConstraint.formula1)
+            assertEquals("A1:B7", sheet.ctWorksheet.autoFilter.ref)
+        }
+
+        // The second validation applies to C3 only; removing row 3 removes it.
+        val removed = roundTrip(source) { it["S"].removeRow(2) }
+        readWithPoi(removed) { wb ->
+            val sheet = wb.getSheet("S") as org.apache.poi.xssf.usermodel.XSSFSheet
+            assertEquals(listOf("B2:B4"), sheet.dataValidations.map { it.regions.cellRangeAddresses.single().formatAsString() })
+            assertEquals("A1:B5", sheet.ctWorksheet.autoFilter.ref)
+        }
+        assertEquals("1", rawCount(removed, "dataValidations"))
+    }
+
+    private fun rawCount(bytes: ByteArray, tag: String): String =
+        com.fleeksoft.ksoup.Ksoup.parseXml(readZipEntry(bytes, "xl/worksheets/sheet1.xml").decodeToString()).getElementsByTag(tag).first()!!.attr("count")
+
+    @Test
+    fun anArrayFormulaKeepsCoveringItsCellsAfterARowIsInserted() {
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c><c r="C1"><f t="array" ref="C1:C3">A1:A3*10</f><v>10</v></c></row>""" +
+                """<row r="2"><c r="A2"><v>2</v></c><c r="C2"><v>20</v></c></row>""" +
+                """<row r="3"><c r="A3"><v>3</v></c><c r="C3"><v>30</v></c></row>"""
+        )
+
+        val saved = roundTrip(source) { it["Sheet1"].insertRow(0) }
+
+        val f = rawCell(saved, "C2").getElementsByTag("f").first()!!
+        assertEquals(listOf("array", "C2:C4", "A2:A4*10"), listOf(f.attr("t"), f.attr("ref"), f.text()))
     }
 
     // endregion

@@ -151,8 +151,15 @@ internal fun damagedExcel(text: String = ""): Nothing {
  * are resolved; `..` never climbs above the package root. Percent-encoded characters are not
  * decoded.
  */
-internal fun resolveWorkbookRelTarget(target: String): String {
-    val segments = if (target.startsWith('/')) mutableListOf() else mutableListOf("xl")
+internal fun resolveWorkbookRelTarget(target: String): String = resolveRelationshipTarget("xl", target)
+
+/**
+ * Resolves a relationship `Target` to the archive entry name of the part it points at, for
+ * a source part that lives in [folder] (`xl` for the workbook, `xl/worksheets` for a sheet).
+ * See [resolveWorkbookRelTarget] for the rules.
+ */
+internal fun resolveRelationshipTarget(folder: String, target: String): String {
+    val segments = if (target.startsWith('/')) mutableListOf() else folder.split('/').filter { it.isNotEmpty() }.toMutableList()
     target.split('/').forEach { segment ->
         when (segment) {
             "", "." -> Unit

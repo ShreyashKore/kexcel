@@ -67,13 +67,19 @@ no-op.
 What moves with the cells: their styles, merged regions, row heights, column widths,
 and the hidden, grouping and style settings of rows and columns.
 
-!!! warning "References are not rewritten"
-    Kexcel does not adjust anything that refers to cells by address. After an insert
-    or a remove, formulas (in this sheet and in others), defined names, hyperlinks,
-    comments, data validations, conditional formats and autofilters that were read
-    from a file still name the old addresses. Excel adjusts these for you; Kexcel
-    does not. Reshape a sheet before adding formulas, or avoid these operations on
-    workbooks that carry such features.
+What points at the cells follows them too, as it does in Excel:
+
+- formulas, on this sheet and on every other sheet that refers to it. `SUM(A1:A5)`
+  becomes `SUM(A1:A6)` when a row is inserted inside the range, and a reference to
+  a removed row or column becomes `#REF!`;
+- defined names and print areas;
+- hyperlinks, cell comments, data validations, conditional formats, the autofilter,
+  protected ranges and ignored errors that came with the file.
+
+!!! warning "What does not follow"
+    Tables, images and charts, pivot tables and threaded comments are kept in the
+    file as they were read, and their positions are not adjusted. Avoid inserting or
+    removing rows and columns on a sheet that has them.
 
 ## Clearing a row
 
