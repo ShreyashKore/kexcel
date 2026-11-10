@@ -49,10 +49,32 @@ private val CELL = Regex("""(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,7})""")
 private val COLUMN_RANGE = Regex("""(\$?)([A-Za-z]{1,3}):(\$?)([A-Za-z]{1,3})""")
 private val ROW_RANGE = Regex("""(\$?)([0-9]{1,7}):(\$?)([0-9]{1,7})""")
 
-/** `Name!` or the 3-D `First:Last!`, unquoted. */
-private val BARE_QUALIFIER = Regex("""([A-Za-z_][A-Za-z0-9_.]*)(:[A-Za-z_][A-Za-z0-9_.]*)?!""")
-
 private fun Char.isNameChar(): Boolean = isLetterOrDigit() || this == '_' || this == '.'
+
+/** An unquoted sheet qualifier: where it ends (after the `!`), and the sheet it names — `null` for a 3-D `First:Last!`. */
+internal class BareQualifier(val end: Int, val sheet: String?)
+
+/**
+ * Reads `Name!` or `First:Last!` at [start] of [text]. Letters are any Unicode letters:
+ * Excel leaves a name such as `Données` or `売上` unquoted, so an ASCII-only pattern would
+ * take the reference after it for an unqualified one.
+ */
+internal fun bareQualifierAt(text: String, start: Int): BareQualifier? {
+    fun nameEnd(from: Int): Int {
+        if (from >= text.length || !(text[from].isLetter() || text[from] == '_')) return from
+        var j = from + 1
+        while (j < text.length && text[j].isNameChar()) j++
+        return j
+    }
+    val first = nameEnd(start)
+    if (first == start || first >= text.length) return null
+    if (text[first] == '!') return BareQualifier(first + 1, text.substring(start, first))
+    if (text[first] == ':') {
+        val second = nameEnd(first + 1)
+        if (second > first + 1 && second < text.length && text[second] == '!') return BareQualifier(second + 1, null)
+    }
+    return null
+}
 
 private fun validColumn(letters: String) = lettersToNumeric(letters) in 1..16384
 private fun validRow(digits: String) = digits.toIntOrNull()?.let { it in 1..1048576 } == true
@@ -212,11 +234,10 @@ internal fun adjustFormulaForEdit(
                 out.append(formula, i, j); i = j
             }
             c == '$' || c.isLetter() || c.isDigit() || c == '_' -> {
-                val qualifier = if (c.isLetter() || c == '_') BARE_QUALIFIER.matchAt(formula, i) else null
+                val qualifier = bareQualifierAt(formula, i)
                 if (qualifier != null) {
-                    out.append(qualifier.value)
-                    val is3d = qualifier.groupValues[2].isNotEmpty()
-                    i = reference(qualifier.range.last + 1, targets = !is3d && isEdited(qualifier.groupValues[1]))
+                    out.append(formula, i, qualifier.end)
+                    i = reference(qualifier.end, targets = qualifier.sheet != null && isEdited(qualifier.sheet))
                 } else {
                     val next = reference(i, targets = inEditedSheet)
                     if (next != i) i = next else {

@@ -189,7 +189,7 @@ internal fun renameSheetReferences(formula: String, oldName: String, newName: St
                 while (j < n && (formula[j].isLetterOrDigit() || formula[j] == '_' || formula[j] == '.')) j++
                 val name = formula.substring(i, j)
                 // Followed by `!`, or by `:Other!` as the first end of a 3-D reference.
-                val qualifies = j < n && (formula[j] == '!' || (formula[j] == ':' && Regex("""[A-Za-z_][A-Za-z0-9_.]*!""").matchesAt(formula, j + 1)))
+                val qualifies = j < n && (formula[j] == '!' || (formula[j] == ':' && bareQualifierAt(formula, j + 1)?.sheet != null))
                 out.append(if (qualifies && isOld(name)) replacement else name)
                 i = j
             }

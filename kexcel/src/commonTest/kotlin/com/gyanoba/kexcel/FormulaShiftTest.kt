@@ -116,6 +116,8 @@ class FormulaShiftTest {
     fun eitherEndOfAThreeDimensionalReferenceIsRenamed() {
         assertEquals("SUM(Renamed:Last!A1)", rename("SUM(Data:Last!A1)"))
         assertEquals("SUM('First:Renamed'!A1)", rename("SUM('First:Data'!A1)"))
+        assertEquals("SUM(Renamed:Été!A1)+Été!A2", rename("SUM(Data:Été!A1)+Été!A2"))
+        assertEquals("Renamed!A1", rename("Données!A1", old = "Données"))
     }
 
     // endregion

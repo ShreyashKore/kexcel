@@ -112,4 +112,13 @@ class ReferenceEditTest {
         assertEquals("A1:A4 C7", adjustReferenceListForEdit("A1:A5 B2 C8", removeRow(1)))
         assertEquals("", adjustReferenceListForEdit("B2", removeRow(1)))
     }
+
+    @Test
+    fun unquotedSheetNamesMayUseAnyLetters() {
+        // Excel leaves a sheet name made of letters unquoted, whatever the script.
+        val sheets = setOf("Données")
+        assertEquals("Données!A3+A2", adjust("Données!A2+A2", insertRow(0), own = false, sheets = sheets))
+        assertEquals("Données!A2+A3", adjust("Données!A2+A2", insertRow(0), own = true, sheets = setOf("Data")))
+        assertEquals("売上!B1", adjust("売上!A1", insertColumn(0), own = false, sheets = setOf("売上")))
+    }
 }
