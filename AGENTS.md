@@ -8,8 +8,9 @@ reference.
 ## What this is
 
 Kexcel is a **Kotlin Multiplatform** library for reading and writing Excel
-(`.xlsx`) files, in **pure Kotlin** with no platform-specific dependencies. It is a
-Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel) library.
+(`.xlsx`) files, in **pure Kotlin** with no platform-specific dependencies. It began as
+a Kotlin port of the Dart [`excel`](https://github.com/justkawal/excel) library
+and has since diverged; the Dart library is history, not a behavioural reference.
 
 - The published library is the **`:kexcel`** module. Everything under `sample/` is
   demo apps that consume it and is **not** part of the published artifact.
@@ -55,13 +56,16 @@ Android Studio; iOS from `sample/iosApp/iosApp.xcodeproj` in Xcode.
 
 ## Reference libraries (read-only)
 
-`reference/` holds two git submodules, fetched with `scripts/reference.sh init`.
-Neither is part of the build.
+`reference/poi` is a git submodule, fetched with `scripts/reference.sh init`.
+It is not part of the build. It holds Apache POI at the tag matching `poi` in
+`gradle/libs.versions.toml`, the same version `PoiInteropTest` runs against, and
+real `.xlsx` files under `test-data/spreadsheet/`.
 
-- `reference/poi` — Apache POI at the tag matching `poi` in
-  `gradle/libs.versions.toml`, the same version `PoiInteropTest` runs against.
-  It also has real `.xlsx` files under `test-data/spreadsheet/`.
-- `reference/dart-excel` — the upstream Dart `excel` library Kexcel ports.
+The Dart `excel` library is **not** a reference: Kexcel has moved past it, so a
+difference from Dart is never evidence of a Kexcel bug. Never change behaviour or
+a test's expected value to match it. `// Dart: '...'` test comments record where
+a test came from, not a requirement to match. Authority order: ECMA-376 spec,
+then Excel's behaviour, then POI.
 
 Before deciding what Kexcel should read or write, check POI's
 `poi-ooxml/src/main/java/org/apache/poi/xssf/` and the spec, and cite what you
