@@ -1148,5 +1148,25 @@ class PoiInteropTest {
         readWithPoi(saved) { wb -> assertEquals(texts, texts.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).stringCellValue }) }
     }
 
+    @Test
+    fun aLeadingEqualsSignIsNotWrittenIntoTheFormula() {
+        // §18.3.1.40: <f> holds the expression, without the `=` of the formula bar. POI:
+        // "The specified formula '=SUM(A1:A1)' starts with an equals sign which is not allowed".
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+        sheet.updateCell(CellIndex.indexByString("A1"), IntCellValue(4))
+        sheet.updateCell(CellIndex.indexByString("A2"), FormulaCellValue("=SUM(A1:A1)*2"))
+        sheet.cell(CellIndex.indexByString("A3")).setFormula("A1+1")
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb ->
+            val evaluator = wb.creationHelper.createFormulaEvaluator()
+            assertEquals("SUM(A1:A1)*2", wb.getSheetAt(0).getRow(1).getCell(0).cellFormula)
+            assertEquals(8.0, evaluator.evaluate(wb.getSheetAt(0).getRow(1).getCell(0)).numberValue)
+            assertEquals(5.0, evaluator.evaluate(wb.getSheetAt(0).getRow(2).getCell(0)).numberValue)
+        }
+        assertEquals(FormulaCellValue("SUM(A1:A1)*2"), Excel.decodeBytes(bytes)["Sheet1"].cell(CellIndex.indexByString("A2")).value)
+    }
+
     // endregion
 }

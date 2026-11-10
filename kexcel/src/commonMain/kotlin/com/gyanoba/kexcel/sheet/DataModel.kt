@@ -72,6 +72,7 @@ public class Data private constructor(
      * val cell = sheet.cell(CellIndex.indexByString("E5"))
      * cell.setFormula("=SUM(1,2)")
      * ```
+     * The leading `=` is optional; the saved file holds the expression without it.
      */
     public fun setFormula(formula: String) {
         sheet.updateCell(cellIndex, FormulaCellValue(formula))
@@ -162,6 +163,12 @@ public class IntCellValue(public val value: Long) : CellValue() {
 }
 
 public class DoubleCellValue(public val value: Double) : CellValue() {
+    init {
+        // A cell cannot hold NaN or an infinity: Excel has no such numbers, and `<v>NaN</v>`
+        // is a workbook neither Excel nor Kexcel itself can read back.
+        require(value.isFinite()) { "A cell value must be a finite number, was $value" }
+    }
+
     override fun toString(): String = value.toString()
     override fun hashCode(): Int = 31 * this::class.hashCode() + value.hashCode()
     override fun equals(other: Any?): Boolean = other is DoubleCellValue && other.value == value

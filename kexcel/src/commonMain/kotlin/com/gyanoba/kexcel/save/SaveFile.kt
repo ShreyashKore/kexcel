@@ -145,7 +145,9 @@ public class Save internal constructor(private val excel: Excel, private val par
                 hasFormulas = true
                 val formulaAttributes = source?.formulaAttributes.orEmpty().map { Attribute(it.key, it.value) }
                 listOf(
-                    Element("f", formulaAttributes, listOf(TextNode(value.formula))),
+                    // <f> holds the expression without the `=` that a formula is typed with
+                    // (§18.3.1.40); POI refuses to parse one that has it.
+                    Element("f", formulaAttributes, listOf(TextNode(value.formula.removePrefix("=")))),
                     v(cached ?: ""),
                 )
             }

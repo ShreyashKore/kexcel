@@ -244,4 +244,13 @@ class CellValueTest {
     }
 
     // endregion
+
+    @Test
+    fun aDoubleCellValueMustBeFinite() {
+        // Excel has no NaN or infinity; `<v>NaN</v>` made a file nothing could read back.
+        assertFailsWith<IllegalArgumentException> { DoubleCellValue(Double.NaN) }
+        assertFailsWith<IllegalArgumentException> { DoubleCellValue(Double.POSITIVE_INFINITY) }
+        assertFailsWith<IllegalArgumentException> { DoubleCellValue(Double.NEGATIVE_INFINITY) }
+        assertEquals(1.0E300, DoubleCellValue(1.0E300).value)
+    }
 }
