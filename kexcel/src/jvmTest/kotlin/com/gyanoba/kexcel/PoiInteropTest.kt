@@ -1169,4 +1169,92 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- Sheets: rename, copy, delete, default ---
+
+    private fun workbookWithSheetFeatures(): ByteArray = poiWorkbook { wb ->
+        val data = wb.createSheet("Data")
+        for (r in 0 until 5) data.createRow(r).apply { createCell(0).setCellValue(r.toDouble()); createCell(1).setCellValue("t$r") }
+        data.createFreezePane(0, 1)
+        data.setColumnHidden(2, true)
+        data.addMergedRegion(CellRangeAddress.valueOf("D1:E1"))
+        val helper = data.dataValidationHelper
+        data.addValidationData(helper.createValidation(helper.createExplicitListConstraint(arrayOf("a", "b")), org.apache.poi.ss.util.CellRangeAddressList(0, 5, 1, 1)))
+        data.getRow(1).getCell(1).hyperlink = wb.creationHelper.createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.URL).apply { address = "https://example.com" }
+        val formatting = data.sheetConditionalFormatting
+        val rule = formatting.createConditionalFormattingRule(org.apache.poi.ss.usermodel.ComparisonOperator.GT, "2")
+        rule.createPatternFormatting().fillBackgroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+        formatting.addConditionalFormatting(arrayOf(CellRangeAddress.valueOf("A1:A5")), rule)
+        wb.setPrintArea(0, "\$A\$1:\$C\$5")
+        wb.createSheet("Calc").createRow(0).createCell(0).cellFormula = "Data!A2*2"
+        wb.createName().apply { nameName = "MyRange"; refersToFormula = "Data!\$A\$1:\$A\$3" }
+    }
+
+    @Test
+    fun renamingASheetChangesItsNameAndNothingElse() {
+        // rename() was a copy followed by a delete: the new name got an empty worksheet
+        // part at the end of the tab list, and the pane, validation, hyperlink and
+        // conditional format stayed behind with the deleted part.
+        val source = workbookWithSheetFeatures()
+        val saved = roundTrip(source) { it.rename("Data", "Sales 2024") }
+
+        // Rename it back with POI: apart from the name, POI must see the original workbook.
+        val restored = readWithPoi(saved) { wb ->
+            assertEquals(listOf("Sales 2024", "Calc"), (0 until wb.numberOfSheets).map { wb.getSheetName(it) })
+            assertEquals("'Sales 2024'!A2*2", wb.getSheet("Calc").getRow(0).getCell(0).cellFormula)
+            assertEquals("'Sales 2024'!\$A\$1:\$A\$3", wb.getName("MyRange").refersToFormula)
+            assertEquals("'Sales 2024'!\$A\$1:\$C\$5", wb.getPrintArea(0))
+            wb.setSheetName(0, "Data")
+            ByteArrayOutputStream().also { wb.write(it) }.toByteArray()
+        }
+        assertOnlyDiffers(source, restored)
+    }
+
+    @Test
+    fun aCopiedSheetKeepsItsMergedRegions() {
+        val saved = roundTrip(workbookWithSheetFeatures()) { it.copy("Data", "Copy") }
+
+        readWithPoi(saved) { wb ->
+            assertEquals(listOf("D1:E1"), wb.getSheet("Copy").mergedRegions.map { it.formatAsString() })
+            assertEquals(listOf("D1:E1"), wb.getSheet("Data").mergedRegions.map { it.formatAsString() })
+            assertEquals(5, wb.getSheet("Copy").physicalNumberOfRows)
+        }
+    }
+
+    private fun threeSheetsWithScopedNames(): ByteArray = poiWorkbook { wb ->
+        for (name in listOf("S1", "S2", "S3")) wb.createSheet(name).createRow(0).createCell(0).setCellValue(name)
+        wb.setPrintArea(2, "\$A\$1:\$B\$2")
+        wb.createName().apply { nameName = "Local"; sheetIndex = 1; refersToFormula = "S2!\$A\$1" }
+        wb.createName().apply { nameName = "OnFirst"; sheetIndex = 0; refersToFormula = "S1!\$A\$1" }
+        wb.setActiveSheet(2)
+    }
+
+    private fun scopes(bytes: ByteArray): Map<String, String> = readWithPoi(bytes) { wb ->
+        wb.allNames.associate { it.nameName to wb.getSheetName(it.sheetIndex) }
+    }
+
+    @Test
+    fun deletingASheetKeepsSheetScopedNamesOnTheirSheets() {
+        // `localSheetId` and `activeTab` are positions in <sheets> (§18.2.5, §18.2.30).
+        val source = threeSheetsWithScopedNames()
+        assertEquals(mapOf("_xlnm.Print_Area" to "S3", "Local" to "S2", "OnFirst" to "S1"), scopes(source))
+
+        val withoutFirst = roundTrip(source) { it.delete("S1") }
+        assertEquals(mapOf("_xlnm.Print_Area" to "S3", "Local" to "S2"), scopes(withoutFirst))
+        readWithPoi(withoutFirst) { wb -> assertEquals("S3", wb.getSheetName(wb.activeSheetIndex)) }
+
+        val withoutLast = roundTrip(source) { it.delete("S3") }
+        assertEquals(mapOf("Local" to "S2", "OnFirst" to "S1"), scopes(withoutLast))
+        readWithPoi(withoutLast) { wb -> assertTrue(wb.activeSheetIndex in 0 until wb.numberOfSheets) }
+    }
+
+    @Test
+    fun makingASheetTheDefaultKeepsSheetScopedNamesOnTheirSheets() {
+        val saved = roundTrip(threeSheetsWithScopedNames()) { it.setDefaultSheet("S3") }
+
+        assertEquals(mapOf("_xlnm.Print_Area" to "S3", "Local" to "S2", "OnFirst" to "S1"), scopes(saved))
+    }
+
+    // endregion
 }

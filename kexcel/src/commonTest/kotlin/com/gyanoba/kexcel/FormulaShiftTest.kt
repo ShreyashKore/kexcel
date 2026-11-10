@@ -84,4 +84,39 @@ class FormulaShiftTest {
     fun lowerCaseReferencesAreShiftedToo() {
         assertEquals("B3", shift("a2", rows = 1, columns = 1))
     }
+
+
+    // region --- Sheet renames ---
+
+    private fun rename(formula: String, old: String = "Data", new: String = "Renamed") =
+        com.gyanoba.kexcel.utils.renameSheetReferences(formula, old, new)
+
+    @Test
+    fun referencesToARenamedSheetFollowIt() {
+        assertEquals("Renamed!A1*2", rename("Data!A1*2"))
+        assertEquals("Renamed!A1+Renamed!\$B\$2", rename("'Data'!A1+Data!\$B\$2"))
+        assertEquals("SUM(Renamed!A1:B2)+Other!C1", rename("SUM(data!A1:B2)+Other!C1"))
+        // A new name that is not a plain identifier is quoted, with apostrophes doubled.
+        assertEquals("'Q1 Totals'!A1", rename("Data!A1", new = "Q1 Totals"))
+        assertEquals("'It''s'!A1", rename("Data!A1", new = "It's"))
+        assertEquals("'A1'!B2", rename("Data!B2", new = "A1"))
+        assertEquals("Renamed!A1", rename("'Old Name'!A1", old = "Old Name"))
+    }
+
+    @Test
+    fun onlyReferencesToThatSheetAreTouched() {
+        assertEquals("\"Data!A1\"&Renamed!A1", rename("\"Data!A1\"&Data!A1"))
+        assertEquals("DataSet!A1+MyData!A1", rename("DataSet!A1+MyData!A1"))
+        assertEquals("[1]Data!A1+'[2]Data'!A1", rename("[1]Data!A1+'[2]Data'!A1"))
+        assertEquals("Data+A1", rename("Data+A1")) // a defined name, not a sheet
+        assertEquals("SUM(A1:B2)", rename("SUM(A1:B2)"))
+    }
+
+    @Test
+    fun eitherEndOfAThreeDimensionalReferenceIsRenamed() {
+        assertEquals("SUM(Renamed:Last!A1)", rename("SUM(Data:Last!A1)"))
+        assertEquals("SUM('First:Renamed'!A1)", rename("SUM('First:Data'!A1)"))
+    }
+
+    // endregion
 }

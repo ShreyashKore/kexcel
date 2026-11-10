@@ -643,6 +643,18 @@ public class Save internal constructor(private val excel: Excel, private val par
         elementFound.remove()
         sheets?.prependChildren(listOf(elementFound))
 
+        // A defined name scoped to a sheet names it by position (`localSheetId`, §18.2.5).
+        // The sheet at `position` is now first and the ones before it moved down by one.
+        excel.xmlFiles["xl/workbook.xml"]!!.getElementsByTag("definedName").forEach { definedName ->
+            val scope = definedName.attr("localSheetId").trim().toIntOrNull() ?: return@forEach
+            val moved = when {
+                scope == position -> 0
+                scope < position -> scope + 1
+                else -> scope
+            }
+            definedName.setAttribute("localSheetId", moved.toString())
+        }
+
         return excel.getDefaultSheetInternal() == sheetName
     }
 

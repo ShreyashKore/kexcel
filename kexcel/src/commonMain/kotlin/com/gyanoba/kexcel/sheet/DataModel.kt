@@ -23,7 +23,6 @@ public class Data private constructor(
     internal var _value: CellValue? = null,
     internal var _cellStyle: CellStyle? = null,
 ) {
-    private var _sheetName: String = sheet.sheetName
 
     /**
      * Set when the cell was read without an `s` attribute: the style object it was given
@@ -60,7 +59,7 @@ public class Data private constructor(
     public val columnIndex: Int get() = _columnIndex
 
     /** Returns the sheet name. */
-    public val sheetName: String get() = _sheetName
+    public val sheetName: String get() = sheet.sheetName
 
     /** Returns the cell index as a [CellIndex] (e.g. A1, Z5). */
     public val cellIndex: CellIndex
@@ -98,7 +97,7 @@ public class Data private constructor(
 
     // Equatable-equivalent component list
     private fun props(): List<Any?> =
-        listOf(_value, _columnIndex, _rowIndex, _cellStyle, _sheetName)
+        listOf(_value, _columnIndex, _rowIndex, _cellStyle, sheetName)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

@@ -93,6 +93,9 @@ public class Sheet internal constructor(
         if (spanList != null) {
             this@Sheet.spanList = spanList.toMutableList()
             excel.addMergeChangeLookup(sheetName)
+            // A copy starts in a worksheet part that has no <mergeCells>; without the flag
+            // the save path does not write one, and the copy lost its merged regions.
+            if (spanList.any { it != null }) excel.mergeChanges = true
         }
         if (spannedItems != null) {
             this@Sheet._spannedItems = spannedItems
