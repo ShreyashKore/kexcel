@@ -64,6 +64,17 @@ excel.removeColumn("Sheet1", columnIndex = 2) // delete column C, pull the rest 
 Negative indices are ignored. Removing an index at or beyond the used range is a
 no-op.
 
+What moves with the cells: their styles, merged regions, row heights, column widths,
+and the hidden, grouping and style settings of rows and columns.
+
+!!! warning "References are not rewritten"
+    Kexcel does not adjust anything that refers to cells by address. After an insert
+    or a remove, formulas (in this sheet and in others), defined names, hyperlinks,
+    comments, data validations, conditional formats and autofilters that were read
+    from a file still name the old addresses. Excel adjusts these for you; Kexcel
+    does not. Reshape a sheet before adding formulas, or avoid these operations on
+    workbooks that carry such features.
+
 ## Clearing a row
 
 `clearRow` empties the cells of a row **without** shifting anything. It returns

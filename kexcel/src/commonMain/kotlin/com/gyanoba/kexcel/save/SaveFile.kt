@@ -463,7 +463,9 @@ public class Save internal constructor(private val excel: Excel, private val par
         val buf = ByteArrayOutputStream()
         ZipOutputStream(buf).use { zos ->
             val merged = cloneArchive(excel.archive, archiveFiles)
-            merged.files.forEach { file ->
+            // [Content_Types].xml first: OPC does not require it, but it is what Excel
+            // writes and what a consumer reading the package as a stream needs first.
+            merged.files.sortedBy { if (it.name == "[Content_Types].xml") 0 else 1 }.forEach { file ->
                 zos.putNextEntry(ZipEntry(file.name))
                 zos.write(file.content)
                 zos.closeEntry()
