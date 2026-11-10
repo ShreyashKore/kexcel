@@ -88,3 +88,19 @@ internal fun insertInSequence(parent: Element, child: Element, order: List<Strin
     val follower = parent.children().firstOrNull { order.indexOf(it.tagName()) > position }
     if (follower != null) follower.before(child) else parent.appendChild(child)
 }
+
+/**
+ * Sets an attribute with its name exactly as given. `Element.attr(name, value)` consults the
+ * owner document's parser settings and, for an element that is not attached to an XML
+ * document yet, falls back to HTML rules and lower-cases the name (`fontId` → `fontid`).
+ */
+internal fun Element.setAttribute(name: String, value: String): Element {
+    attributes().put(name, value)
+    return this
+}
+
+/** Removes an attribute by its exact name; see [setAttribute]. */
+internal fun Element.dropAttribute(name: String): Element {
+    attributes().remove(name)
+    return this
+}

@@ -47,6 +47,16 @@ public class Excel internal constructor(internal var archive: Archive) {
     internal val sheetMap: MutableMap<String, Sheet> = mutableMapOf()
 
     internal var cellStyleList: MutableList<CellStyle> = mutableListOf()
+
+    /**
+     * One untouched copy per `<xf>` of what the parser read, parallel to [cellStyleList].
+     * The instances in [cellStyleList] are handed to callers and can be mutated; these
+     * cannot, so they say what each `<xf>` in the file really is.
+     */
+    internal var cellStylePristine: MutableList<CellStyle> = mutableListOf()
+
+    /** `<xf>` entries added for styles made or changed in code, so a second save reuses them. */
+    internal val derivedXf: MutableMap<Any, Int> = mutableMapOf()
     internal var patternFill: MutableList<String> = mutableListOf()
     internal val mergeChangeLook: MutableList<String> = mutableListOf()
     internal val rtlChangeLook: MutableList<String> = mutableListOf()

@@ -277,23 +277,37 @@ public class Parser internal constructor(private val excel: Excel) {
         excel.fontStyleList = mutableListOf()
         excel.patternFill = mutableListOf()
         excel.cellStyleList = mutableListOf()
+        excel.cellStylePristine = mutableListOf()
         excel.borderSetList = mutableListOf()
 
-        val fontList = document.getElementsByTag("font").toList()
+        // `fontId`, `fillId` and `borderId` (§18.8.45) count the direct children of
+        // <fonts>, <fills> and <borders>, and nothing else. The same element names occur
+        // under <dxfs> for conditional formats; taking every <font>, <patternFill> and
+        // <border> in the document made the three lists longer than the tables, and the
+        // ids of every style added later pointed past the end.
+        fun tableEntries(table: String, entry: String): List<Element> =
+            document.getElementsByTag(table).firstOrNull()?.children()?.filter { it.tagName() == entry }
+                ?: emptyList()
 
-        document.getElementsByTag("patternFill").forEach { node ->
-            val patternType = node.attr("patternType") ?: ""
-            if (node.children().isNotEmpty()) {
-                node.getElementsByTag("fgColor").forEach { child ->
-                    val rgb = child.attr("rgb") ?: ""
-                    excel.patternFill.add(rgb)
+        tableEntries("fonts", "font").forEach { excel.fontStyleList.add(parseFont(it)) }
+
+        tableEntries("fills", "fill").forEach { fill ->
+            val pattern = fill.children().firstOrNull { it.tagName() == "patternFill" }
+            val foreground = pattern?.children()?.firstOrNull { it.tagName() == "fgColor" }
+            excel.patternFill.add(
+                when {
+                    // A gradient, or a pattern without a colour Kexcel can express: the
+                    // entry still takes its place in the list, and reads as "no colour".
+                    pattern == null -> UNMODELLED_FILL
+                    // "" for a theme or indexed colour.
+                    foreground != null -> foreground.attr("rgb")
+                    pattern.children().isEmpty() -> pattern.attr("patternType").ifEmpty { "none" }
+                    else -> UNMODELLED_FILL
                 }
-            } else {
-                excel.patternFill.add(patternType)
-            }
+            )
         }
 
-        document.getElementsByTag("border").forEach { node ->
+        tableEntries("borders", "border").forEach { node ->
             val diagonalUp = node.attr("diagonalUp").trim()
                 .let { it.isNotEmpty() && it != "0" && it != "false" }
             val diagonalDown = node.attr("diagonalDown").trim()
@@ -358,61 +372,15 @@ public class Parser internal constructor(private val excel: Excel) {
                 var textWrapping: TextWrapping? = null
                 var rotation = 0
 
-                val fontId = getFontIndex(node, "fontId")
-                val fontStyle = FontStyle()
-
-                if (fontId < fontList.size) {
-                    val font = fontList[fontId]
-
-                    val clr = nodeChildren(font, "color", attribute = "rgb")
-                    if (clr != null && clr !is Boolean) {
-                        fontColor = clr.toString()
-                    }
-
-                    val size = nodeChildren(font, "sz", attribute = "val")
-                    if (size != null) {
-                        fontSize = size.toString().toDouble().toInt()
-                    }
-
-                    // Presence alone is not enough: <b val="0"/> is an explicit "not bold".
-                    if (nodeChildren(font, "b") != null) {
-                        isBold = isOnOff(nodeChildren(font, "b", attribute = "val") as String?)
-                    }
-
-                    if (nodeChildren(font, "i") != null) {
-                        isItalic = isOnOff(nodeChildren(font, "i", attribute = "val") as String?)
-                    }
-
-                    // <u/> is a single underline, <u val="double"/> a double one. A missing
-                    // attribute reads back as "", so only an explicit "double" counts.
-                    if (nodeChildren(font, "u") != null) {
-                        underline = if (nodeChildren(font, "u", attribute = "val") == "double") {
-                            Underline.Double
-                        } else {
-                            Underline.Single
-                        }
-                    }
-
-                    val family = nodeChildren(font, "name", attribute = "val")
-                    if (family != null && family != true) {
-                        fontFamily = family.toString()
-                    }
-
-                    val scheme = nodeChildren(font, "scheme", attribute = "val")
-                    if (scheme != null) {
-                        fontScheme = if (scheme == "major") FontScheme.Major else FontScheme.Minor
-                    }
-
-                    fontStyle.isBold = isBold
-                    fontStyle.isItalic = isItalic
-                    fontStyle.fontSize = fontSize
-                    fontStyle.fontFamily = fontFamily
-                    fontStyle.fontScheme = fontScheme
-                    fontStyle.fontColorHex = fontColor.toExcelColor()
-                }
-
-                if (fontStyleIndex(excel.fontStyleList, fontStyle) == -1) {
-                    excel.fontStyleList.add(fontStyle)
+                val font = excel.fontStyleList.getOrNull(getFontIndex(node, "fontId"))
+                if (font != null) {
+                    fontColor = font.fontColorHex.colorHex
+                    fontSize = font.fontSize ?: 12
+                    isBold = font.isBold
+                    isItalic = font.isItalic
+                    underline = font.underline
+                    fontFamily = font.fontFamily
+                    fontScheme = font.fontScheme
                 }
 
                 val fillId = getFontIndex(node, "fillId")
@@ -477,8 +445,9 @@ public class Parser internal constructor(private val excel: Excel) {
                     bold = isBold,
                     italic = isItalic,
                     underline = underline,
-                    backgroundColorHex = if (backgroundColor == "none" || backgroundColor.isEmpty())
-                        ExcelColor.none else backgroundColor.toExcelColor(),
+                    // A pattern name ("gray125") is not a colour either.
+                    backgroundColorHex = if (assertHexString(backgroundColor))
+                        backgroundColor.toExcelColor() else ExcelColor.none,
                     horizontalAlign = horizontalAlign,
                     verticalAlign = verticalAlign,
                     textWrapping = textWrapping,
@@ -493,23 +462,37 @@ public class Parser internal constructor(private val excel: Excel) {
                     numberFormat = numFormat
                 )
 
+                excel.cellStylePristine.add(cellStyle.copyWith())
                 cellStyle.xfIndex = excel.cellStyleList.size
+                cellStyle.owner = excel
                 excel.cellStyleList.add(cellStyle)
             }
         }
     }
 
-    /**
-     * Returns the attribute value of [attribute] on the first [child] element found under [node],
-     * returns `true` if the child exists but has no [attribute], or `null` if [child] is absent.
-     */
-    private fun nodeChildren(node: Element, child: String, attribute: String? = null): Any? {
-        val elements = node.getElementsByTag(child)
-        if (elements.isEmpty()) return null
-        if (attribute != null) {
-            return elements.first()?.attr(attribute)
-        }
-        return true // child present — used as a signal for bold/italic
+    /** One `<font>` of the styles part (§18.8.22), reduced to what [CellStyle] models. */
+    private fun parseFont(font: Element): FontStyle {
+        fun child(name: String) = font.children().firstOrNull { it.tagName() == name }
+
+        return FontStyle(
+            // A theme or indexed colour has no `rgb` and reads as the default black.
+            fontColorHex = (child("color")?.attr("rgb")?.takeIf { it.isNotEmpty() } ?: ExcelColor.black.colorHex).toExcelColor(),
+            fontSize = child("sz")?.attr("val")?.toDoubleOrNull()?.toInt() ?: 12,
+            fontFamily = child("name")?.attr("val")?.takeIf { it.isNotEmpty() },
+            fontScheme = child("scheme")?.let { if (it.attr("val") == "major") FontScheme.Major else FontScheme.Minor }
+                ?: FontScheme.Unset,
+            // Presence alone is not enough: <b val="0"/> is an explicit "not bold".
+            isBold = child("b")?.let { isOnOff(it.attr("val")) } ?: false,
+            isItalic = child("i")?.let { isOnOff(it.attr("val")) } ?: false,
+            // <u/> is a single underline, <u val="double"/> a double one.
+            underline = child("u")?.let {
+                when (it.attr("val")) {
+                    "double" -> Underline.Double
+                    "none" -> Underline.None
+                    else -> Underline.Single
+                }
+            } ?: Underline.None,
+        )
     }
 
     private fun getFontIndex(node: Element, text: String): Int {
@@ -976,6 +959,9 @@ public class Parser internal constructor(private val excel: Excel) {
     }
 
     internal companion object {
+        /** Takes the place, in the fill list, of a `<fill>` that has no ARGB colour. */
+        const val UNMODELLED_FILL = ""
+
         /** `<f>` attributes that describe a shared-formula group rather than the formula. */
         val SHARED_GROUP_ATTRIBUTES = setOf("t", "si", "ref")
 

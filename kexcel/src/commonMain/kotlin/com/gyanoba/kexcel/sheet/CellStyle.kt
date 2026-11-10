@@ -52,6 +52,9 @@ public class CellStyle(
      */
     internal var baseXf: Int = -1
 
+    /** The workbook [xfIndex] and [baseXf] refer to; an index means nothing in another one. */
+    internal var owner: Any? = null
+
     // region --- Backing fields ---
 
     private var _fontColorHex: String = isColorAppropriate(fontColorHex.colorHex)
@@ -120,7 +123,10 @@ public class CellStyle(
         diagonalBorderUp = diagonalBorderUpVal ?: _diagonalBorderUp,
         diagonalBorderDown = diagonalBorderDownVal ?: _diagonalBorderDown,
         numberFormat = numberFormat ?: this.numberFormat,
-    ).also { it.baseXf = if (xfIndex >= 0) xfIndex else baseXf }
+    ).also {
+        it.baseXf = if (xfIndex >= 0) xfIndex else baseXf
+        it.owner = owner
+    }
 
     // endregion
 

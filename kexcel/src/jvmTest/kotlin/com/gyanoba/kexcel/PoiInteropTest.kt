@@ -719,4 +719,144 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- New and derived styles ---
+
+    private fun signatureOf(bytes: ByteArray, ref: String): Map<String, String> = readWithPoi(bytes) { wb ->
+        val address = org.apache.poi.ss.util.CellReference(ref)
+        val style = wb.getSheetAt(0).getRow(address.row).getCell(address.col.toInt()).cellStyle as org.apache.poi.xssf.usermodel.XSSFCellStyle
+        PoiOracle.styleSignature(style).associate { it.substringBefore('=') to it.substringAfter('=') }
+    }
+
+    @Test
+    fun aStyleDerivedFromAnExistingOneKeepsEverythingThatWasNotChanged() {
+        // copyWith on a style read from a file. The new <xf> used to get fontId, fillId or
+        // borderId 0 for whichever of the three it *kept*, because an id was only worked
+        // out for entries added in the same save; and nothing CellStyle does not model
+        // (here: unlocked, indent) was carried over.
+        val source = poiWorkbook { wb ->
+            val style = (wb.createCellStyle() as org.apache.poi.xssf.usermodel.XSSFCellStyle).apply {
+                setFont(wb.createFont().apply { bold = true; fontName = "Arial"; fontHeightInPoints = 14 })
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND
+                setFillForegroundColor(org.apache.poi.xssf.usermodel.XSSFColor(byteArrayOf(0xFF.toByte(), 0, 0), null))
+                borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                borderBottom = org.apache.poi.ss.usermodel.BorderStyle.THIN
+                locked = false
+                indention = 2
+            }
+            wb.createSheet("S").createRow(0).createCell(0).apply { setCellValue("a"); cellStyle = style }
+        }
+
+        val saved = roundTrip(source) { excel ->
+            val sheet = excel["S"]
+            val a1 = sheet.cell(CellIndex.indexByString("A1")).cellStyle!!
+            sheet.updateCell(CellIndex.indexByString("B1"), TextCellValue("b"), a1.copyWith(italicVal = true))
+            sheet.updateCell(CellIndex.indexByString("C1"), TextCellValue("c"), a1.copyWith(backgroundColorHexVal = ExcelColor.fromHexString("FF0000FF")))
+            sheet.updateCell(
+                CellIndex.indexByString("D1"), TextCellValue("d"),
+                a1.copyWith(leftBorderVal = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Thick)),
+            )
+            sheet.updateCell(CellIndex.indexByString("E1"), IntCellValue(5), a1.copyWith(numberFormat = CustomNumericNumFormat("0.000")))
+        }
+
+        val a1 = signatureOf(saved, "A1")
+        fun changed(ref: String) = signatureOf(saved, ref).filter { (part, value) -> a1[part] != value }.keys
+        assertEquals(signatureOf(source, "A1"), a1)
+        assertEquals(setOf("font"), changed("B1"))
+        assertTrue("italic=true" in signatureOf(saved, "B1").getValue("font"))
+        assertEquals(setOf("fill"), changed("C1"))
+        assertTrue("FF0000FF" in signatureOf(saved, "C1").getValue("fill"))
+        assertEquals(setOf("border"), changed("D1"))
+        assertEquals("THICK,NONE,NONE,THIN", signatureOf(saved, "D1").getValue("border"))
+        assertEquals(setOf("number format"), changed("E1"))
+    }
+
+    @Test
+    fun aNewStyleGetsItsOwnFontFillAndBorderInAWorkbookThatAlreadyHasMany() {
+        // Three traps for the index arithmetic: fonts no cell uses (every Excel workbook
+        // has some), and a conditional format, whose <dxf> holds a <font>, a <fill> and a
+        // <border> that are not numbered by fontId / fillId / borderId (§18.8.45).
+        val source = poiWorkbook { wb ->
+            repeat(3) { wb.createFont().apply { fontName = "Unused $it" } }
+            val sheet = wb.createSheet("S")
+            sheet.createRow(0).createCell(0).setCellValue(10.0)
+            val formatting = sheet.sheetConditionalFormatting
+            val rule = formatting.createConditionalFormattingRule(org.apache.poi.ss.usermodel.ComparisonOperator.GT, "5")
+            rule.createPatternFormatting().apply {
+                fillBackgroundColor = org.apache.poi.ss.usermodel.IndexedColors.RED.index
+                fillPattern = org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND.code
+            }
+            rule.createFontFormatting().setFontStyle(true, true)
+            rule.createBorderFormatting().apply { borderLeft = org.apache.poi.ss.usermodel.BorderStyle.THIN }
+            formatting.addConditionalFormatting(arrayOf(CellRangeAddress.valueOf("A1:A5")), rule)
+        }
+
+        val saved = roundTrip(source) { excel ->
+            excel["S"].updateCell(
+                CellIndex.indexByString("C1"), TextCellValue("c"),
+                CellStyle(
+                    bold = true, fontFamily = "Courier New", fontSize = 20,
+                    backgroundColorHex = ExcelColor.fromHexString("FF00FF00"),
+                    leftBorder = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Thick),
+                ),
+            )
+        }
+
+        val c1 = signatureOf(saved, "C1")
+        assertTrue(c1.getValue("font").startsWith("Courier New,400,bold=true"), c1.getValue("font"))
+        assertTrue("FF00FF00" in c1.getValue("fill"), c1.getValue("fill"))
+        assertEquals("THICK,NONE,NONE,NONE", c1.getValue("border"))
+        assertOnlyDiffers(source, saved, expected = setOf("cell appeared"))
+    }
+
+    @Test
+    fun poiSeesTheBordersKexcelWrites() {
+        // POI reports no border unless the <xf> says applyBorder (XSSFCellStyle.getBorderLeft).
+        val excel = Excel.createExcel()
+        excel["Sheet1"].updateCell(
+            CellIndex.indexByString("A1"), TextCellValue("boxed"),
+            CellStyle(
+                leftBorder = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Thin),
+                bottomBorder = com.gyanoba.kexcel.sheet.Border(borderStyle = com.gyanoba.kexcel.sheet.BorderStyle.Double),
+            ),
+        )
+
+        assertEquals("THIN,NONE,NONE,DOUBLE", signatureOf(excel.encode()!!, "A1").getValue("border"))
+    }
+
+    @Test
+    fun anyArgbBackgroundColourIsWrittenAsAFill() {
+        // Only colours whose alpha is FF used to be written. A translucent one — many of the
+        // named ExcelColor constants — was counted but skipped, so the next cell's fill id
+        // pointed at the wrong fill and the last one past the end of the table.
+        val colours = listOf(ExcelColor.black26, ExcelColor.fromHexString("FFFF0000"), ExcelColor.fromHexString("FF0000FF"))
+        val excel = Excel.createExcel()
+        colours.forEachIndexed { i, colour ->
+            excel["Sheet1"].updateCell(CellIndex.indexByColumnRow(0, i), TextCellValue("c$i"), CellStyle(backgroundColorHex = colour))
+        }
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb ->
+            val written = colours.indices.map { (wb.getSheetAt(0).getRow(it).getCell(0).cellStyle as org.apache.poi.xssf.usermodel.XSSFCellStyle).fillForegroundColorColor.argbHex }
+            assertEquals(colours.map { it.colorHex }, written)
+        }
+        val reread = Excel.decodeBytes(bytes)["Sheet1"]
+        assertEquals(colours, colours.indices.map { reread.cell(CellIndex.indexByColumnRow(0, it)).cellStyle?.backgroundColor })
+    }
+
+    @Test
+    fun changingAStyleObjectReadFromAFileIsSaved() {
+        // The object returned by Data.cellStyle is the one the parser built. A change made
+        // to it used to be dropped silently: the cell was written under its old index.
+        val source = poiWorkbook { wb -> wb.createSheet("S").createRow(0).createCell(0).apply { setCellValue("a"); cellStyle = wb.createCellStyle().apply { locked = false } } }
+
+        val saved = roundTrip(source) { it["S"].cell(CellIndex.indexByString("A1")).cellStyle!!.isBold = true }
+
+        val after = signatureOf(saved, "A1")
+        assertTrue("bold=true" in after.getValue("font"))
+        assertEquals("locked:false,hidden:false", after.getValue("protection"))
+    }
+
+    // endregion
 }

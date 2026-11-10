@@ -35,10 +35,11 @@ import com.gyanoba.kexcel.utils.Underline
 import com.gyanoba.kexcel.utils.VerticalAlign
 import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
-import com.gyanoba.kexcel.utils.fontStyleIndex
 import com.gyanoba.kexcel.utils.getCellId
 import com.gyanoba.kexcel.utils.WORKBOOK_CHILD_ORDER
 import com.gyanoba.kexcel.utils.insertInSequence
+import com.gyanoba.kexcel.utils.setAttribute
+import com.gyanoba.kexcel.utils.dropAttribute
 import com.gyanoba.kexcel.utils.resolveWorkbookRelTarget
 import com.gyanoba.kexcel.utils.toFixed2
 import no.synth.kmpzip.io.ByteArrayOutputStream
@@ -52,7 +53,8 @@ private const val EXCEL_DEFAULT_COLUMN_WIDTH = 8.0
 public class Save internal constructor(private val excel: Excel, private val parser: Parser) {
 
     private val archiveFiles: MutableMap<String, ArchiveFile> = mutableMapOf()
-    private val innerCellStyle: MutableList<CellStyle> = mutableListOf()
+    // First <xf> that says exactly what a given style says; rebuilt at the start of each save.
+    private val pristineIndex: MutableMap<CellStyle, Int> = mutableMapOf()
     private var hasFormulas: Boolean = false
 
     // region --- Column helpers ---
@@ -176,24 +178,40 @@ public class Save internal constructor(private val excel: Excel, private val par
         return Element("c", attributes, children)
     }
 
-    /**
-     * The `cellXfs` index to write for [cellStyle].
-     *
-     * A style the parser built *is* an `<xf>` and goes back under its own index. Looking it
-     * up by equality instead — as this used to — returns the first `<xf>` that agrees on the
-     * properties [CellStyle] models, and two `<xf>` that differ only in a theme colour, an
-     * indent or the locked flag then collapsed into one.
-     */
-    private fun styleIndexOf(cellStyle: CellStyle): Int {
-        val own = cellStyle.xfIndex
-        if (own >= 0 && excel.cellStyleList.getOrNull(own) === cellStyle) return own
+    /** A style that needs an `<xf>` of its own: what it says, and the `<xf>` it was derived from. */
+    private data class StyleKey(val style: CellStyle, val baseXf: Int)
 
-        var upperLevelPos = checkPosition(excel.cellStyleList, cellStyle)
-        if (upperLevelPos == -1) {
-            val lowerLevelPos = checkPosition(innerCellStyle, cellStyle)
-            upperLevelPos = if (lowerLevelPos != -1) lowerLevelPos + excel.cellStyleList.size else 0
-        }
-        return upperLevelPos
+    /**
+     * The `<xf>` [style] started out as, or `-1` for a style made from nothing.
+     *
+     * That is the `<xf>` the parser built the object from — even if the object has been
+     * changed since — or the one it was copied from with `copyWith`. The index is only
+     * meaningful in the workbook the style came from.
+     */
+    private fun baseOf(style: CellStyle): Int {
+        val own = style.xfIndex
+        if (own >= 0 && excel.cellStyleList.getOrNull(own) === style) return own
+        return if (style.owner === excel && style.baseXf in excel.cellStylePristine.indices) style.baseXf else -1
+    }
+
+    /**
+     * The existing `<xf>` that already is [style], or `null` when it needs a new one.
+     *
+     * A style that still says what its base `<xf>` said goes back under that index. Looking
+     * styles up by equality alone — as this used to — returns the first `<xf>` that agrees
+     * on the properties [CellStyle] models, and two `<xf>` that differ only in a theme
+     * colour, an indent or the locked flag then collapsed into one.
+     */
+    private fun existingXfFor(style: CellStyle, base: Int): Int? {
+        if (base >= 0) return base.takeIf { style == excel.cellStylePristine[base] }
+        // A style made in code that matches one already in the file shares it.
+        return pristineIndex[style]
+    }
+
+    /** The `cellXfs` index to write for [cellStyle]. */
+    private fun styleIndexOf(cellStyle: CellStyle): Int {
+        val base = baseOf(cellStyle)
+        return existingXfFor(cellStyle, base) ?: excel.derivedXf[StyleKey(cellStyle, base)] ?: 0
     }
 
     private fun createNewRow(table: Element, rowIndex: Int, height: Double?): Element {
@@ -211,232 +229,151 @@ public class Save internal constructor(private val excel: Excel, private val par
 
     // region --- Styles file ---
 
+    /**
+     * Adds an `<xf>` to `xl/styles.xml` for every cell style that is not in it yet, along
+     * with whatever fonts, fills and borders those need.
+     *
+     * A style derived from an existing `<xf>` — with `copyWith`, or by changing the object
+     * the parser handed out — starts as a copy of that `<xf>` and has only the parts that
+     * were changed replaced. Everything the `<xf>` says that [CellStyle] has no field for
+     * (protection, indent, a theme-coloured fill left alone) is carried over.
+     */
     private fun processStylesFile() {
-        innerCellStyle.clear()
-        val innerPatternFill = mutableListOf<String>()
-        val innerFontStyle = mutableListOf<FontStyle>()
-        val innerBorderSet = mutableListOf<BorderSet>()
-
-        excel.sheetMap.forEach { (_, sheetObject) ->
-            sheetObject.sheetData.forEach { (_, columnMap) ->
-                columnMap.forEach { (_, dataObject) ->
-                    val cs = dataObject.cellStyle ?: return@forEach
-                    if (checkPosition(innerCellStyle, cs) == -1) {
-                        innerCellStyle.add(cs)
-                    }
-                }
-            }
-        }
-
-        innerCellStyle.forEach { cellStyle ->
-            val fs = FontStyle(
-                isBold = cellStyle.isBold,
-                isItalic = cellStyle.isItalic,
-                fontColorHex = cellStyle.fontColor,
-                underline = cellStyle.underline,
-                fontSize = cellStyle.fontSize,
-                fontFamily = cellStyle.fontFamily,
-                fontScheme = cellStyle.fontScheme,
-            )
-            if (fontStyleIndex(excel.fontStyleList, fs) == -1 && fontStyleIndex(innerFontStyle, fs) == -1) {
-                innerFontStyle.add(fs)
-            }
-
-            val bgColor = cellStyle.backgroundColor.colorHex
-            if (!excel.patternFill.contains(bgColor) && !innerPatternFill.contains(bgColor)) {
-                innerPatternFill.add(bgColor)
-            }
-
-            val bs = createBorderSetFromCellStyle(cellStyle)
-            if (!excel.borderSetList.contains(bs) && !innerBorderSet.contains(bs)) {
-                innerBorderSet.add(bs)
-            }
-        }
-
         val stylesXml = excel.xmlFiles[excel.stylesPath]!!
+        fun table(name: String) = stylesXml.getElementsByTag(name).first()
+            ?: damagedExcel("Missing <$name> element in xl/styles.xml")
 
-        // --- fonts ---
-        val fonts = stylesXml.getElementsByTag("fonts").first()
-            ?: damagedExcel("Missing <fonts> element in xl/styles.xml")
-        val fontCountAttr = fonts.attribute("count")
-        val fontCount = (excel.fontStyleList.size + innerFontStyle.size).toString()
-        if (fontCountAttr != null) fontCountAttr.setValue(fontCount)
-        else fonts.attributes().add("count", fontCount)
+        val fonts = table("fonts")
+        val fills = table("fills")
+        val borders = table("borders")
+        val cellXfs = table("cellXfs")
 
-        innerFontStyle.forEach { fs ->
-            val fontChildren = mutableListOf<Element>()
+        pristineIndex.clear()
+        excel.cellStylePristine.forEachIndexed { index, style -> if (style !in pristineIndex) pristineIndex[style] = index }
 
-            if (fs.fontColorHex != null && fs.fontColorHex!!.colorHex != "FF000000") {
-                fontChildren.add(
-                    Element("color", listOf(Attribute("rgb", fs.fontColorHex!!.colorHex)))
-                )
-            }
-            if (fs.isBold) fontChildren.add(Element("b"))
-            if (fs.isItalic) fontChildren.add(Element("i"))
-            when {
-                fs.underline == Underline.Single ->
-                    fontChildren.add(Element("u"))
-                fs.underline == Underline.Double ->
-                    fontChildren.add(Element("u", listOf(Attribute("val", "double"))))
-            }
-            val ff = fs.fontFamily
-            if (!ff.isNullOrEmpty() && ff.lowercase() != "null") {
-                fontChildren.add(Element("name", listOf(Attribute("val", ff))))
-            }
-            if (fs.fontScheme != FontScheme.Unset) {
-                val schemeVal = if (fs.fontScheme == FontScheme.Major) "major" else "minor"
-                fontChildren.add(Element("scheme", listOf(Attribute("val", schemeVal))))
-            }
-            val fSize = fs.fontSize
-            if (fSize != null) {
-                fontChildren.add(Element("sz", listOf(Attribute("val", fSize.toString()))))
-            }
-
-            fonts.appendChild(Element("font", emptyList(), fontChildren))
-        }
-
-        // --- fills ---
-        val fills = stylesXml.getElementsByTag("fills").first()
-            ?: damagedExcel("Missing <fills> element in xl/styles.xml")
-        val fillCountAttr = fills.attribute("count")
-        val fillCount = (excel.patternFill.size + innerPatternFill.size).toString()
-        if (fillCountAttr != null) fillCountAttr.setValue(fillCount)
-        else fills.attributes().add("count", fillCount)
-
-        innerPatternFill.forEach { color ->
-            if (color.length >= 2) {
-                when {
-                    color.substring(0, 2).uppercase() == "FF" -> {
-                        fills.appendChild(
-                            Element("fill", emptyList(), listOf(
-                                Element("patternFill", listOf(Attribute("patternType", "solid")), listOf(
-                                    Element("fgColor", listOf(Attribute("rgb", color))),
-                                    Element("bgColor", listOf(Attribute("rgb", color))),
-                                ))
-                            ))
-                        )
-                    }
-                    color == "none" || color == "gray125" || color == "lightGray" -> {
-                        fills.appendChild(
-                            Element("fill", emptyList(), listOf(
-                                Element("patternFill", listOf(Attribute("patternType", color)))
-                            ))
-                        )
-                    }
+        val needed = LinkedHashSet<StyleKey>()
+        val seen = HashSet<CellStyle>()
+        excel.sheetMap.values.forEach { sheetObject ->
+            sheetObject.sheetData.values.forEach { columnMap ->
+                columnMap.values.forEach { dataObject ->
+                    val style = dataObject.cellStyle ?: return@forEach
+                    val base = baseOf(style)
+                    // Most cells hold one of the parser's own, untouched instances.
+                    if (base >= 0 && style === excel.cellStyleList[base] && !seen.add(style)) return@forEach
+                    if (existingXfFor(style, base) != null) return@forEach
+                    val key = StyleKey(style, base)
+                    // The key outlives this save, so it holds a copy the caller cannot change.
+                    if (key !in excel.derivedXf) needed.add(StyleKey(style.copyWith(), base))
                 }
-            } else {
-                damagedExcel(text = "Corrupted Styles Found. Can't process further, Open up issue in github.")
             }
         }
 
-        // --- borders ---
-        val borders = stylesXml.getElementsByTag("borders").first()
-            ?: damagedExcel("Missing <borders> element in xl/styles.xml")
-        val borderCountAttr = borders.attribute("count")
-        val borderCount = (excel.borderSetList.size + innerBorderSet.size).toString()
-        if (borderCountAttr != null) borderCountAttr.setValue(borderCount)
-        else borders.attributes().add("count", borderCount)
+        val xfElements = cellXfs.children().filter { it.tagName() == "xf" }
+        val fontElements = fonts.children().filter { it.tagName() == "font" }
+        var xfCount = xfElements.size
 
-        innerBorderSet.forEach { bs ->
-            val borderElement = Element("border", mutableListOf(), mutableListOf())
-            if (bs.diagonalBorderDown) borderElement.attributes().add("diagonalDown", "1")
-            if (bs.diagonalBorderUp) borderElement.attributes().add("diagonalUp", "1")
-
-            val borderMap = linkedMapOf(
-                "left" to bs.leftBorder,
-                "right" to bs.rightBorder,
-                "top" to bs.topBorder,
-                "bottom" to bs.bottomBorder,
-                "diagonal" to bs.diagonalBorder,
+        for (key in needed) {
+            if (key in excel.derivedXf) continue
+            val style = key.style
+            val baseStyle = excel.cellStylePristine.getOrNull(key.baseXf)
+            val baseXf = if (baseStyle != null) xfElements.getOrNull(key.baseXf) else null
+            val xf = baseXf?.clone() ?: Element(
+                "xf",
+                listOf(
+                    Attribute("numFmtId", "0"), Attribute("fontId", "0"), Attribute("fillId", "0"),
+                    Attribute("borderId", "0"), Attribute("xfId", "0"),
+                ),
             )
-            borderMap.forEach { (key, borderValue) ->
-                val element = Element(key, mutableListOf(), mutableListOf())
-                borderValue.borderStyle?.let {
-                    element.attributes().add("style", it.style)
+
+            // --- font ---
+            val font = fontStyleOf(style)
+            val baseFont = baseStyle?.let { fontStyleOf(it) }
+            if (baseFont == null || !sameFont(font, baseFont)) {
+                var fontId = excel.fontStyleList.indexOfFirst { sameFont(it, font) }
+                if (fontId == -1) {
+                    val baseFontElement = baseXf?.attr("fontId")?.toIntOrNull()?.let { fontElements.getOrNull(it) }
+                    fonts.appendChild(
+                        if (baseFontElement != null && baseFont != null) patchedFont(baseFontElement.clone(), font, baseFont)
+                        else newFont(font)
+                    )
+                    fontId = excel.fontStyleList.size
+                    excel.fontStyleList.add(font)
                 }
-                borderValue.borderColorHex?.let {
-                    element.appendChild(Element("color", listOf(Attribute("rgb", it))))
-                }
-                borderElement.appendChild(element)
+                xf.setAttribute("fontId", fontId.toString())
+                xf.setAttribute("applyFont", "1")
             }
-            borders.appendChild(borderElement)
+
+            // --- fill ---
+            val background = style.backgroundColor.colorHex
+            if (baseStyle == null || baseStyle.backgroundColor.colorHex != background) {
+                var fillId = excel.patternFill.indexOf(background)
+                if (fillId == -1) {
+                    fills.appendChild(
+                        if (background == "none") {
+                            Element("fill", emptyList(), listOf(Element("patternFill", listOf(Attribute("patternType", "none")))))
+                        } else {
+                            // Any ARGB value is a solid fill. Only colours whose alpha was
+                            // `FF` used to be written; the others were counted but left
+                            // out, which shifted the id of every fill after them.
+                            Element(
+                                "fill", emptyList(), listOf(
+                                    Element(
+                                        "patternFill", listOf(Attribute("patternType", "solid")), listOf(
+                                            Element("fgColor", listOf(Attribute("rgb", background))),
+                                            Element("bgColor", listOf(Attribute("rgb", background))),
+                                        )
+                                    )
+                                )
+                            )
+                        }
+                    )
+                    fillId = excel.patternFill.size
+                    excel.patternFill.add(background)
+                }
+                xf.setAttribute("fillId", fillId.toString())
+                if (background != "none") xf.setAttribute("applyFill", "1")
+            }
+
+            // --- border ---
+            val borderSet = createBorderSetFromCellStyle(style)
+            if (baseStyle == null || createBorderSetFromCellStyle(baseStyle) != borderSet) {
+                var borderId = excel.borderSetList.indexOf(borderSet)
+                if (borderId == -1) {
+                    borders.appendChild(newBorder(borderSet))
+                    borderId = excel.borderSetList.size
+                    excel.borderSetList.add(borderSet)
+                }
+                xf.setAttribute("borderId", borderId.toString())
+                // Without applyBorder a reader may ignore the border (POI does).
+                if (borderId != 0) xf.setAttribute("applyBorder", "1")
+            }
+
+            // --- number format ---
+            if (baseStyle == null || baseStyle.numberFormat != style.numberFormat) {
+                val numFmtId = when (val nf = style.numberFormat) {
+                    is StandardNumFormat -> nf.numFmtId
+                    is CustomNumFormat -> excel.numFormats.findOrAdd(nf)
+                    else -> 0
+                }
+                xf.setAttribute("numFmtId", numFmtId.toString())
+                if (numFmtId != 0) xf.setAttribute("applyNumberFormat", "1")
+            }
+
+            // --- alignment ---
+            applyAlignment(xf, style, baseStyle)
+
+            cellXfs.appendChild(xf)
+            val index = xfCount++
+            excel.derivedXf[key] = index
+            // Keep the two lists parallel to <cellXfs>, as the parser leaves them.
+            excel.cellStylePristine.add(style)
+            excel.cellStyleList.add(style.copyWith().also { it.xfIndex = index; it.owner = excel })
+            if (style !in pristineIndex) pristineIndex[style] = index
         }
 
-        // --- cellXfs ---
-        val celx = stylesXml.getElementsByTag("cellXfs").first()
-            ?: damagedExcel("Missing <cellXfs> element in xl/styles.xml")
-        val cellCountAttr = celx.attribute("count")
-        val cellCount = (excel.cellStyleList.size + innerCellStyle.size).toString()
-        if (cellCountAttr != null) cellCountAttr.setValue(cellCount)
-        else celx.attributes().add("count", cellCount)
-
-        innerCellStyle.forEach { cellStyle ->
-            val bgColor = cellStyle.backgroundColor.colorHex
-            val fs = FontStyle(
-                isBold = cellStyle.isBold,
-                isItalic = cellStyle.isItalic,
-                fontColorHex = cellStyle.fontColor,
-                underline = cellStyle.underline,
-                fontSize = cellStyle.fontSize,
-                fontFamily = cellStyle.fontFamily,
-            )
-            val hAlign = cellStyle.horizontalAlignment
-            val vAlign = cellStyle.verticalAlignment
-            val rotation = cellStyle.rotation
-            val textWrapping = cellStyle.wrap
-
-            val bgIndex = innerPatternFill.indexOf(bgColor)
-            val fontIndex = fontStyleIndex(innerFontStyle, fs)
-            val bs = createBorderSetFromCellStyle(cellStyle)
-            val borderIndex = innerBorderSet.indexOf(bs)
-
-            val numFmtId = when (val nf = cellStyle.numberFormat) {
-                is StandardNumFormat -> nf.numFmtId
-                is CustomNumFormat -> excel.numFormats.findOrAdd(nf)
-                else -> 0
-            }
-
-            val attrs = mutableListOf(
-                Attribute("borderId", "${if (borderIndex == -1) 0 else borderIndex + excel.borderSetList.size}"),
-                Attribute("fillId", "${if (bgIndex == -1) 0 else bgIndex + excel.patternFill.size}"),
-                Attribute("fontId", "${if (fontIndex == -1) 0 else fontIndex + excel.fontStyleList.size}"),
-                Attribute("numFmtId", numFmtId.toString()),
-                Attribute("xfId", "0"),
-            )
-
-            if ((excel.patternFill.contains(bgColor) || innerPatternFill.contains(bgColor)) &&
-                bgColor != "none" && bgColor != "gray125" && bgColor.lowercase() != "lightgray"
-            ) {
-                attrs.add(Attribute("applyFill", "1"))
-            }
-
-            if (fontStyleIndex(excel.fontStyleList, fs) != -1 || fontStyleIndex(innerFontStyle, fs) != -1) {
-                attrs.add(Attribute("applyFont", "1"))
-            }
-
-            val xfChildren = mutableListOf<Element>()
-            if (hAlign != HorizontalAlign.Left || textWrapping != null ||
-                vAlign != VerticalAlign.Bottom || rotation != 0
-            ) {
-                attrs.add(Attribute("applyAlignment", "1"))
-                val childAttrs = mutableListOf<Attribute>()
-
-                textWrapping?.let {
-                    childAttrs.add(Attribute(if (it == TextWrapping.Clip) "shrinkToFit" else "wrapText", "1"))
-                }
-                if (vAlign != VerticalAlign.Bottom) {
-                    childAttrs.add(Attribute("vertical", if (vAlign == VerticalAlign.Top) "top" else "center"))
-                }
-                if (hAlign != HorizontalAlign.Left) {
-                    childAttrs.add(Attribute("horizontal", if (hAlign == HorizontalAlign.Right) "right" else "center"))
-                }
-                if (rotation != 0) {
-                    childAttrs.add(Attribute("textRotation", rotation.toString()))
-                }
-                xfChildren.add(Element("alignment", childAttrs, emptyList()))
-            }
-
-            celx.appendChild(Element("xf", attrs, xfChildren))
+        // `count` is the number of entries actually in each table.
+        for ((element, entry) in listOf(fonts to "font", fills to "fill", borders to "border", cellXfs to "xf")) {
+            element.setAttribute("count", element.children().count { it.tagName() == entry }.toString())
         }
 
         // --- custom numFmts ---
@@ -547,7 +484,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         val workbook = excel.xmlFiles["xl/workbook.xml"]?.getElementsByTag("workbook")?.first() ?: return
         val calcPr = workbook.children().firstOrNull { it.tagName() == "calcPr" }
             ?: Element("calcPr").also { insertInSequence(workbook, it, WORKBOOK_CHILD_ORDER) }
-        calcPr.attr("fullCalcOnLoad", "1")
+        calcPr.setAttribute("fullCalcOnLoad", "1")
     }
 
     // endregion
@@ -870,11 +807,143 @@ public class Save internal constructor(private val excel: Excel, private val par
         diagonalBorderDown = cellStyle.diagonalBorderDown,
     )
 
+    private fun newBorder(bs: BorderSet): Element {
+        val borderElement = Element("border", mutableListOf(), mutableListOf())
+        if (bs.diagonalBorderDown) borderElement.attributes().add("diagonalDown", "1")
+        if (bs.diagonalBorderUp) borderElement.attributes().add("diagonalUp", "1")
+
+        linkedMapOf(
+            "left" to bs.leftBorder,
+            "right" to bs.rightBorder,
+            "top" to bs.topBorder,
+            "bottom" to bs.bottomBorder,
+            "diagonal" to bs.diagonalBorder,
+        ).forEach { (key, borderValue) ->
+            val element = Element(key, mutableListOf(), mutableListOf())
+            borderValue.borderStyle?.let { element.attributes().add("style", it.style) }
+            borderValue.borderColorHex?.let { element.appendChild(Element("color", listOf(Attribute("rgb", it)))) }
+            borderElement.appendChild(element)
+        }
+        return borderElement
+    }
+
+    // endregion
+
+    // region --- Font and alignment helpers ---
+
+    private fun fontStyleOf(style: CellStyle): FontStyle = FontStyle(
+        isBold = style.isBold,
+        isItalic = style.isItalic,
+        fontColorHex = style.fontColor,
+        underline = style.underline,
+        fontSize = style.fontSize,
+        fontFamily = style.fontFamily,
+        fontScheme = style.fontScheme,
+    )
+
+    /** [FontStyle] equality leaves the scheme out; two fonts are only the same font with it. */
+    private fun sameFont(a: FontStyle, b: FontStyle): Boolean = a == b && a.fontScheme == b.fontScheme
+
+    private fun newFont(fs: FontStyle): Element {
+        val fontChildren = mutableListOf<Element>()
+
+        if (fs.fontColorHex.colorHex != "FF000000") {
+            fontChildren.add(Element("color", listOf(Attribute("rgb", fs.fontColorHex.colorHex))))
+        }
+        if (fs.isBold) fontChildren.add(Element("b"))
+        if (fs.isItalic) fontChildren.add(Element("i"))
+        when (fs.underline) {
+            Underline.Single -> fontChildren.add(Element("u"))
+            Underline.Double -> fontChildren.add(Element("u", listOf(Attribute("val", "double"))))
+            Underline.None -> Unit
+        }
+        val ff = fs.fontFamily
+        if (!ff.isNullOrEmpty() && ff.lowercase() != "null") {
+            fontChildren.add(Element("name", listOf(Attribute("val", ff))))
+        }
+        if (fs.fontScheme != FontScheme.Unset) {
+            val schemeVal = if (fs.fontScheme == FontScheme.Major) "major" else "minor"
+            fontChildren.add(Element("scheme", listOf(Attribute("val", schemeVal))))
+        }
+        val fSize = fs.fontSize
+        if (fSize != null) {
+            fontChildren.add(Element("sz", listOf(Attribute("val", fSize.toString()))))
+        }
+        return Element("font", emptyList(), fontChildren)
+    }
+
+    /**
+     * [font], a copy of an existing `<font>`, with the properties that differ between
+     * [wanted] and [was] replaced. What the model does not cover — strike-through, charset,
+     * a theme colour that was left alone — stays as it is.
+     */
+    private fun patchedFont(font: Element, wanted: FontStyle, was: FontStyle): Element {
+        fun replace(tag: String, replacement: Element?) {
+            font.children().filter { it.tagName() == tag }.forEach { it.remove() }
+            if (replacement != null) font.appendChild(replacement)
+        }
+        if (wanted.isBold != was.isBold) replace("b", if (wanted.isBold) Element("b") else null)
+        if (wanted.isItalic != was.isItalic) replace("i", if (wanted.isItalic) Element("i") else null)
+        if (wanted.underline != was.underline) replace(
+            "u",
+            when (wanted.underline) {
+                Underline.Single -> Element("u")
+                Underline.Double -> Element("u", listOf(Attribute("val", "double")))
+                Underline.None -> null
+            },
+        )
+        if (wanted.fontSize != was.fontSize) replace("sz", wanted.fontSize?.let { Element("sz", listOf(Attribute("val", it.toString()))) })
+        if (wanted.fontColorHex != was.fontColorHex) replace("color", Element("color", listOf(Attribute("rgb", wanted.fontColorHex.colorHex))))
+        if (wanted.fontFamily != was.fontFamily) replace("name", wanted.fontFamily?.let { Element("name", listOf(Attribute("val", it))) })
+        if (wanted.fontScheme != was.fontScheme) replace(
+            "scheme",
+            if (wanted.fontScheme == FontScheme.Unset) null
+            else Element("scheme", listOf(Attribute("val", if (wanted.fontScheme == FontScheme.Major) "major" else "minor"))),
+        )
+        return font
+    }
+
+    /**
+     * Writes the alignment of [style] onto [xf]. For a derived style only the attributes
+     * whose modelled value changed are touched, so `indent`, `readingOrder` or a
+     * `horizontal="justify"` that reads as [HorizontalAlign.Left] survive.
+     */
+    private fun applyAlignment(xf: Element, style: CellStyle, baseStyle: CellStyle?) {
+        val changedHorizontal = baseStyle == null || baseStyle.horizontalAlignment != style.horizontalAlignment
+        val changedVertical = baseStyle == null || baseStyle.verticalAlignment != style.verticalAlignment
+        val changedWrap = baseStyle == null || baseStyle.wrap != style.wrap
+        val changedRotation = baseStyle == null || baseStyle.rotation != style.rotation
+        if (!changedHorizontal && !changedVertical && !changedWrap && !changedRotation) return
+
+        val alignment = xf.children().firstOrNull { it.tagName() == "alignment" } ?: Element("alignment")
+        if (changedWrap) {
+            alignment.dropAttribute("wrapText")
+            alignment.dropAttribute("shrinkToFit")
+            style.wrap?.let { alignment.attr(if (it == TextWrapping.Clip) "shrinkToFit" else "wrapText", "1") }
+        }
+        if (changedVertical) when (style.verticalAlignment) {
+            VerticalAlign.Bottom -> alignment.dropAttribute("vertical")
+            VerticalAlign.Top -> alignment.setAttribute("vertical", "top")
+            VerticalAlign.Center -> alignment.setAttribute("vertical", "center")
+        }
+        if (changedHorizontal) when (style.horizontalAlignment) {
+            HorizontalAlign.Left -> alignment.dropAttribute("horizontal")
+            HorizontalAlign.Right -> alignment.setAttribute("horizontal", "right")
+            HorizontalAlign.Center -> alignment.setAttribute("horizontal", "center")
+        }
+        if (changedRotation) {
+            if (style.rotation == 0) alignment.dropAttribute("textRotation")
+            else alignment.setAttribute("textRotation", style.rotation.toString())
+        }
+
+        if (alignment.attributesSize() == 0) {
+            alignment.remove()
+            xf.dropAttribute("applyAlignment")
+        } else {
+            if (alignment.parent() == null) xf.appendChild(alignment)
+            xf.setAttribute("applyAlignment", "1")
+        }
+    }
+
     // endregion
 }
-
-// region --- Top-level helper ---
-
-private fun checkPosition(list: List<CellStyle>, cellStyle: CellStyle): Int = list.indexOf(cellStyle)
-
-// endregion
