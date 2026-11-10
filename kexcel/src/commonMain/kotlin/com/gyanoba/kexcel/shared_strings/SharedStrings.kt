@@ -9,8 +9,9 @@ import com.gyanoba.kexcel.sheet.CellStyle
 import com.gyanoba.kexcel.sheet.Element
 import com.gyanoba.kexcel.utils.ExcelColor
 import com.gyanoba.kexcel.utils.Underline
+import com.gyanoba.kexcel.utils.decodeXmlString
+import com.gyanoba.kexcel.utils.encodeXmlString
 import com.gyanoba.kexcel.utils.isOnOff
-import com.gyanoba.kexcel.utils.normalizeNewLine
 import com.gyanoba.kexcel.utils.toExcelColor
 
 // region --- SharedStringsMaintainer ---
@@ -161,7 +162,7 @@ private fun run(properties: Element?, text: String): Element =
 
 /** `xml:space="preserve"` keeps leading/trailing spaces, which runs rely on. */
 private fun textNode(text: String): Element =
-    Element("t", listOf(Attribute("xml:space", "preserve")), listOf(TextNode(text)))
+    Element("t", listOf(Attribute("xml:space", "preserve")), listOf(TextNode(encodeXmlString(text))))
 
 /**
  * Emits only the properties [SharedString.textSpan] reads back, and only when they differ
@@ -228,9 +229,9 @@ public class SharedString internal constructor(internal val node: Element) {
                     "t" -> {
                         // wholeText() preserves significant whitespace (xml:space="preserve");
                         // text() would collapse/trim it and drop spaces between runs.
-                        // ksoup does not do XML's end-of-line handling (§2.11), so a literal
-                        // CRLF is folded to LF here, as Parser.parseValue does for other text.
-                        text = (text ?: "") + normalizeNewLine(child.wholeText())
+                        // Line ends were already normalised when the part was parsed
+                        // (parseXmlPart), so a carriage return here was written as one.
+                        text = (text ?: "") + decodeXmlString(child.wholeText())
                     }
 
                     // 18.4.4 r (Rich Text Run)
@@ -261,7 +262,7 @@ public class SharedString internal constructor(internal val node: Element) {
                                 // 18.4.12 t (Text)
                                 "t" -> {
                                     if (children == null) children = mutableListOf()
-                                    children!!.add(TextSpan(text = normalizeNewLine(runChild.wholeText()), style = style))
+                                    children!!.add(TextSpan(text = decodeXmlString(runChild.wholeText()), style = style))
                                 }
                             }
                         }
@@ -281,7 +282,7 @@ public class SharedString internal constructor(internal val node: Element) {
             node.getElementsByTag("t").forEach { child ->
                 val parentLocal = child.parentElement()?.tagName()
                 if (parentLocal == null || parentLocal != "rPh") {
-                    buffer.append(Parser.parseValue(child))
+                    buffer.append(decodeXmlString(Parser.parseValue(child)))
                 }
             }
             return buffer.toString()

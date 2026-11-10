@@ -1112,4 +1112,41 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- Characters XML cannot carry, and formula text ---
+
+    @Test
+    fun controlCharactersAndCarriageReturnsSurviveASave() {
+        // Written raw, a control character was dropped and a carriage return came back as
+        // a line feed; text that merely looks like an escape was turned into one by Excel
+        // and POI. All of it goes through `_xHHHH_` now, as Excel writes it.
+        val texts = listOf("a\u0001b", "vt\u000Bx", "x\ry", "x\r\ny", "lit _x000D_ lit", "_x005F_", "plain_text", "tab\tand\nnewline", "emoji 😀")
+        val excel = Excel.createExcel()
+        texts.forEachIndexed { i, text -> excel["Sheet1"].updateCell(CellIndex.indexByColumnRow(0, i), TextCellValue(text)) }
+        val bytes = excel.encode()!!
+
+        readWithPoi(bytes) { wb -> assertEquals(texts, texts.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).stringCellValue }) }
+        val reread = Excel.decodeBytes(bytes)["Sheet1"]
+        assertEquals(texts, texts.indices.map { reread.cell(CellIndex.indexByColumnRow(0, it)).value.toString() })
+    }
+
+    @Test
+    fun aCarriageReturnPoiWroteSurvivesAKexcelRoundTrip() {
+        // POI writes a carriage return as the character reference `&#13;`. It has to go
+        // back out as one: written raw, the next XML reader turns it into a line feed.
+        val texts = listOf("line1\r\nline2", "cr\ronly")
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            texts.forEachIndexed { i, text -> sheet.createRow(i).createCell(0).setCellValue(text) }
+        }
+        val sheet = Excel.decodeBytes(source)["S"]
+        assertEquals(texts, texts.indices.map { sheet.cell(CellIndex.indexByColumnRow(0, it)).value.toString() })
+
+        val saved = roundTrip(source) { it["S"].updateCell(CellIndex.indexByString("B1"), TextCellValue("edit")) }
+
+        readWithPoi(saved) { wb -> assertEquals(texts, texts.indices.map { wb.getSheetAt(0).getRow(it).getCell(0).stringCellValue }) }
+    }
+
+    // endregion
 }

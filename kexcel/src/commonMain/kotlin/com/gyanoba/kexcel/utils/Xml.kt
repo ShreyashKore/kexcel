@@ -2,7 +2,10 @@ package com.gyanoba.kexcel.utils
 
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Document
+import com.fleeksoft.ksoup.nodes.CDataNode
 import com.fleeksoft.ksoup.nodes.Element
+import com.fleeksoft.ksoup.nodes.Node
+import com.fleeksoft.ksoup.nodes.TextNode
 
 internal const val NS_SPREADSHEETML = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 internal const val NS_PACKAGE_RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -23,7 +26,10 @@ private val UNPREFIXED_NAMESPACES = setOf(NS_SPREADSHEETML, NS_PACKAGE_RELATIONS
  */
 internal fun parseXmlPart(text: String): Document {
     // A UTF-8 byte order mark decodes to U+FEFF, which is not part of the document.
-    val document = Ksoup.parseXml(text.removePrefix("﻿"))
+    // Line ends are normalised before parsing, as XML requires (§2.11): a literal CRLF or
+    // CR is a line feed. ksoup does not do this, and doing it here rather than on the
+    // parsed text keeps a carriage return that was written as `&#13;`, which is data.
+    val document = Ksoup.parseXml(text.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n'))
     moveRootNamespaceToDefault(document)
     return document
 }
@@ -103,4 +109,60 @@ internal fun Element.setAttribute(name: String, value: String): Element {
 internal fun Element.dropAttribute(name: String): Element {
     attributes().remove(name)
     return this
+}
+
+/**
+ * Writes [document] as XML, character for character what the tree holds.
+ *
+ * ksoup's own serializer leaves tabs, line feeds and carriage returns in attribute values
+ * and carriage returns in text as they are. A reader then applies XML's normalisation
+ * rules (§2.11, §3.3.3) and sees spaces and line feeds instead: a two-line data validation
+ * message or hyperlink tooltip came back as one line, and a carriage return in a cell as a
+ * line feed — in parts Kexcel never meant to touch. Those characters are written as
+ * character references here, which is the only form that survives.
+ */
+internal fun serializeXml(document: Document): String {
+    val out = StringBuilder()
+    document.childNodes().forEach { writeNode(it, out) }
+    return out.toString()
+}
+
+private fun writeNode(node: Node, out: StringBuilder) {
+    when (node) {
+        is CDataNode -> out.append("<![CDATA[").append(node.getWholeText()).append("]]>")
+        is TextNode -> escapeInto(node.getWholeText(), out, inAttribute = false)
+        is Element -> {
+            out.append('<').append(node.tagName())
+            node.attributes().forEach { attribute ->
+                out.append(' ').append(attribute.key).append("=\"")
+                escapeInto(attribute.value, out, inAttribute = true)
+                out.append('"')
+            }
+            val children = node.childNodes()
+            if (children.isEmpty()) {
+                out.append("/>")
+            } else {
+                out.append('>')
+                children.forEach { writeNode(it, out) }
+                out.append("</").append(node.tagName()).append('>')
+            }
+        }
+        // The XML declaration, comments and anything else ksoup models as a leaf.
+        else -> out.append(node.outerHtml())
+    }
+}
+
+private fun escapeInto(text: String, out: StringBuilder, inAttribute: Boolean) {
+    for (c in text) {
+        when (c) {
+            '&' -> out.append("&amp;")
+            '<' -> out.append("&lt;")
+            '>' -> out.append("&gt;")
+            '\r' -> out.append("&#13;")
+            '"' -> if (inAttribute) out.append("&quot;") else out.append(c)
+            '\n' -> if (inAttribute) out.append("&#10;") else out.append(c)
+            '\t' -> if (inAttribute) out.append("&#9;") else out.append(c)
+            else -> out.append(c)
+        }
+    }
 }

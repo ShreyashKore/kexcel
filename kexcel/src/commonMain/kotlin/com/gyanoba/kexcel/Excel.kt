@@ -20,6 +20,7 @@ import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.readZipArchive
 import com.gyanoba.kexcel.utils.resolveWorkbookRelTarget
+import com.gyanoba.kexcel.utils.serializeXml
 import no.synth.kmpzip.io.ByteArrayInputStream
 import no.synth.kmpzip.io.InputStream
 import kotlin.io.encoding.Base64
@@ -228,7 +229,7 @@ public class Excel internal constructor(internal var archive: Archive) {
             archive = cloneArchive(
                 archive,
                 xmlFiles.map { (k, v) ->
-                    val encoded = v.toString().encodeToByteArray()
+                    val encoded = serializeXml(v).encodeToByteArray()
                     k to ArchiveFile(k, encoded.size, encoded)
                 }.toMap(),
                 excludedFile = xmlSheetId[sheet]

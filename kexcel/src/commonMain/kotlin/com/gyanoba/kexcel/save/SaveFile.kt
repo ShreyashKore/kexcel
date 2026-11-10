@@ -39,6 +39,7 @@ import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.getCellId
 import com.gyanoba.kexcel.utils.WORKBOOK_CHILD_ORDER
 import com.gyanoba.kexcel.utils.insertInSequence
+import com.gyanoba.kexcel.utils.serializeXml
 import com.gyanoba.kexcel.utils.setAttribute
 import com.gyanoba.kexcel.utils.dropAttribute
 import com.gyanoba.kexcel.utils.resolveWorkbookRelTarget
@@ -451,7 +452,7 @@ public class Save internal constructor(private val excel: Excel, private val par
         if (excel.rtlChanges) setRTL()
 
         for (xmlFile in excel.xmlFiles.keys) {
-            val xml = excel.xmlFiles[xmlFile].toString()
+            val xml = serializeXml(excel.xmlFiles[xmlFile]!!)
             val content = xml.encodeToByteArray()
             archiveFiles[xmlFile] = ArchiveFile(xmlFile, content.size, content)
         }

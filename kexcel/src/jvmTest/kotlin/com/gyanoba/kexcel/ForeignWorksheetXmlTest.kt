@@ -627,4 +627,71 @@ class ForeignWorksheetXmlTest {
     }
 
     // endregion
+
+
+    // region --- _xHHHH_ escapes ---
+
+    @Test
+    fun escapedCharactersInStringsAreDecoded() {
+        // ST_Xstring (§22.9.2.19): a carriage return is stored as `_x000D_`, because XML
+        // would read a raw one as a line feed; `_x005F_` protects a literal underscore.
+        // POI decodes these in XSSFRichTextString.utfDecode (corpus file 60289.xlsx).
+        val sheet = sheetFromRawXml(
+            """<row r="1"><c r="A1" t="inlineStr"><is><t>line1_x000D__x000A_line2</t></is></c>""" +
+                """<c r="B1" t="inlineStr"><is><t>tab_x0009_bed</t></is></c>""" +
+                """<c r="C1" t="inlineStr"><is><t>literal _x005F_x000D_ kept</t></is></c>""" +
+                """<c r="D1" t="inlineStr"><is><r><t>run_x000D_</t></r><r><t>two</t></r></is></c>""" +
+                """<c r="E1" t="str"><v>a_x000D_b</v></c></row>"""
+        )
+        fun text(ref: String) = sheet.cell(CellIndex.indexByString(ref)).value.toString()
+
+        assertEquals("line1\r\nline2", text("A1"))
+        assertEquals("tab\tbed", text("B1"))
+        assertEquals("literal _x000D_ kept", text("C1"))
+        assertEquals("run\rtwo", text("D1"))
+        assertEquals("a\rb", text("E1"))
+    }
+
+    // endregion
+
+    // region --- Characters that only survive as character references ---
+
+    @Test
+    fun lineBreaksInAttributeValuesSurviveANoEditSave() {
+        // A data validation message is an attribute. A line break in an attribute value is
+        // only preserved as `&#10;`; written raw, attribute-value normalisation (XML §3.3.3)
+        // hands the next reader a space. ksoup writes it raw, so the worksheet part is
+        // serialised by Kexcel itself.
+        val validation = """<dataValidations count="1"><dataValidation type="list" sqref="B1:B5" showInputMessage="1" """ +
+            """promptTitle="Pick" prompt="first line&#10;second line&#9;tabbed &quot;quoted&quot; &amp; &lt;done&gt;"><formula1>"a,b"</formula1></dataValidation></dataValidations>"""
+        val source = workbookFromRawXml("""<row r="1"><c r="A1"><v>1</v></c></row>""", afterSheetData = validation)
+
+        val sheetXml = readZipEntry(roundTrip(source), "xl/worksheets/sheet1.xml").decodeToString()
+
+        assertTrue(
+            """prompt="first line&#10;second line&#9;tabbed &quot;quoted&quot; &amp; &lt;done&gt;"""" in sheetXml,
+            sheetXml.substringAfter("<dataValidation ").take(200),
+        )
+        assertTrue("""<formula1>"a,b"</formula1>""" in sheetXml)
+    }
+
+    @Test
+    fun aCarriageReturnWrittenAsACharacterReferenceIsDataButALiteralOneIsALineEnd() {
+        // XML §2.11: a literal CR or CRLF in the file is a line end and reads as LF. `&#13;`
+        // is a carriage return the author meant.
+        val source = workbookFromRawXml(
+            "<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>kept&#13;here</t></is></c>" +
+                "<c r=\"B1\" t=\"inlineStr\"><is><t>folded\r\nhere</t></is></c></row>"
+        )
+        val sheet = Excel.decodeBytes(source)["Sheet1"]
+
+        assertEquals("kept\rhere", sheet.cell(CellIndex.indexByString("A1")).value.toString())
+        assertEquals("folded\nhere", sheet.cell(CellIndex.indexByString("B1")).value.toString())
+        PoiOracle.read(roundTrip(source)) { wb ->
+            assertEquals("kept\rhere", wb.getSheetAt(0).getRow(0).getCell(0).stringCellValue)
+            assertEquals("folded\nhere", wb.getSheetAt(0).getRow(0).getCell(1).stringCellValue)
+        }
+    }
+
+    // endregion
 }

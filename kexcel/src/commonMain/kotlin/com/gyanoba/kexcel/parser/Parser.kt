@@ -43,7 +43,6 @@ import com.gyanoba.kexcel.utils.findRows
 import com.gyanoba.kexcel.utils.*
 import com.gyanoba.kexcel.utils.getCellNumber
 import com.gyanoba.kexcel.utils.getRowNumber
-import com.gyanoba.kexcel.utils.normalizeNewLine
 import com.gyanoba.kexcel.utils.toExcelColor
 
 public class Parser internal constructor(private val excel: Excel) {
@@ -730,7 +729,7 @@ public class Parser internal constructor(private val excel: Excel) {
                 .also { it.source = CellSource(type, rawValue, hasFormula = false, cellAttributes = cellAttributes) }
             // A formula's string result without its <f>: all that is left is the text. As a
             // formula it would be written back as <f>text</f>, which Excel shows as #NAME?.
-            "str" -> TextCellValue(rawValue ?: "")
+            "str" -> TextCellValue(decodeXmlString(rawValue ?: ""))
                 .also { it.source = CellSource(type, rawValue, cellAttributes = cellAttributes) }
             // inline string. <is> shares the CT_Rst content model with a shared string's
             // <si>, so it is read with the same code — otherwise everything after the
@@ -1083,7 +1082,7 @@ public class Parser internal constructor(private val excel: Excel) {
             // (ignoring descendant elements), preserving whitespace. Ksoup's
             // wholeOwnText() is the exact equivalent; children() would exclude
             // text nodes entirely and yield "".
-            return normalizeNewLine(node.wholeOwnText())
+            return node.wholeOwnText()
         }
     }
 }
