@@ -101,4 +101,23 @@ class PoiCorpusRoundTripTest {
         assertLossless("60825.xlsx")
         assertLossless("52348.xlsx")
     }
+
+    // D-06: a workbook in the 1904 date system; every date must match POI's reading.
+    @Test
+    fun a1904WorkbookIsReadLikePoiAndSurvives() {
+        assertReadsLikePoi(fixture("poi/DateFormatTests.xlsx"), "DateFormatTests.xlsx")
+        assertLossless("DateFormatTests.xlsx")
+    }
+
+    // F-03: a date format declared under an id below 164.
+    @Test
+    fun aCustomFormatBelow164Survives() = assertLossless("bug66675.xlsx")
+
+    // D-02: the expanded followers of shared formulas read exactly as POI reads them.
+    @Test
+    fun sharedFormulasAreReadLikePoi() {
+        for (name in listOf("shared_formulas.xlsx", "50096.xlsx", "VLookupFullColumn.xlsx", "TestShiftRowSharedFormula.xlsx")) {
+            assertReadsLikePoi(fixture("poi/$name"), name)
+        }
+    }
 }

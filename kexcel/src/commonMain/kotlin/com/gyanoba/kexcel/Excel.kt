@@ -40,6 +40,12 @@ public class Excel internal constructor(internal var archive: Archive) {
      */
     internal var valuesEdited: Boolean = false
 
+    /**
+     * Whether the workbook counts dates from 1 January 1904 (`<workbookPr date1904="1">`,
+     * §18.2.28) instead of 1900. Workbooks that began on a Mac often do.
+     */
+    internal var date1904: Boolean = false
+
     internal val sheets: MutableMap<String, Element> = mutableMapOf()
     internal val xmlFiles: MutableMap<String, Document> = mutableMapOf()
     internal val xmlSheetId: MutableMap<String, String> = mutableMapOf()

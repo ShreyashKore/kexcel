@@ -5,7 +5,10 @@ import com.fleeksoft.ksoup.nodes.Element
 import com.gyanoba.kexcel.archive.ArchiveFile
 import com.gyanoba.kexcel.Excel
 import com.gyanoba.kexcel.number_format.CustomNumFormat
+import com.gyanoba.kexcel.number_format.DateTimeNumFormat
 import com.gyanoba.kexcel.number_format.NumFormat
+import com.gyanoba.kexcel.number_format.TimeNumFormat
+import com.gyanoba.kexcel.number_format.serialFrom1904
 import com.gyanoba.kexcel.shared_strings.SharedString
 import com.gyanoba.kexcel.shared_strings.itemKey
 import com.gyanoba.kexcel.sheet.BoolCellValue
@@ -192,6 +195,8 @@ public class Parser internal constructor(private val excel: Excel) {
         workbook.decompress()
         val document = parseXmlPart(workbook.content.decodeToString())
         excel.xmlFiles["xl/workbook.xml"] = document
+        excel.date1904 = document.getElementsByTag("workbookPr").firstOrNull()?.attr("date1904")
+            ?.trim()?.lowercase().let { it == "1" || it == "true" || it == "on" }
 
         val sheetNodes = document.getElementsByTag("sheet")
         // A workbook always has at least one sheet (§18.2.20). Finding none means the part
@@ -388,9 +393,8 @@ public class Parser internal constructor(private val excel: Excel) {
             node1.getElementsByTag("numFmt").forEach { node ->
                 val numFmtId = node.attr("numFmtId")!!.toInt()
                 val formatCode = node.attr("formatCode")!!
-                if (numFmtId >= 164) {
-                    excel.numFormats.add(numFmtId, NumFormat.custom(formatCode) as CustomNumFormat)
-                }
+                // What the file declares is what its cells mean, also for an id below 164.
+                excel.numFormats.declare(numFmtId, NumFormat.custom(formatCode))
             }
         }
 
@@ -744,8 +748,9 @@ public class Parser internal constructor(private val excel: Excel) {
                     } else NumFormat.defaultNumeric
                     // Pretty-printed XML puts whitespace around the number.
                     val number = rawValue.trim()
+                    val isDateFormat = numFormat is DateTimeNumFormat || numFormat is TimeNumFormat
                     val read = try {
-                        numFormat.read(number)
+                        numFormat.read(if (excel.date1904 && isDateFormat) serialFrom1904(number) else number)
                     } catch (e: NumberFormatException) {
                         damagedExcel("Cell ${node.attr("r")} holds `$number`, which is not a number")
                     }

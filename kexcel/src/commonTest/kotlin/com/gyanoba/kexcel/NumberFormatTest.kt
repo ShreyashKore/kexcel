@@ -195,7 +195,10 @@ class NumberFormatTest {
         assertEquals(TimeCellValue(hour = 12), fmt.read("0.5"))
         assertEquals(TimeCellValue(hour = 2, minute = 20, second = 10), fmt.read("0.09733796296296296"))
         // Serials of 1 and above are dates, matching how Excel overflows a time column.
-        assertEquals(DateCellValue(year = 1899, month = 12, day = 31), fmt.read("1"))
+        // Serial 1 is 1 January 1900. This asserted 31 December 1899, which is what a plain
+        // offset from 30 December 1899 gives; Excel and POI (DateUtil.getJavaDate) count a
+        // 29 February 1900 that never existed, so every serial below 61 is a day later.
+        assertEquals(DateCellValue(year = 1900, month = 1, day = 1), fmt.read("1"))
     }
 
     @Test
@@ -224,7 +227,8 @@ class NumberFormatTest {
         assertEquals(NumFormat.standard_14, maintainer.getByNumFmtId(14))
         assertEquals(NumFormat.standard_49, maintainer.getByNumFmtId(49))
         // Ids that OOXML leaves unassigned (and unregistered custom ids) are unknown.
-        assertNull(maintainer.getByNumFmtId(5))
+        // (This used 5 as its example; 5-8 and 41-44 are assigned, ECMA-376 §18.8.30.)
+        assertNull(maintainer.getByNumFmtId(23))
         assertNull(maintainer.getByNumFmtId(164))
     }
 
@@ -370,6 +374,98 @@ class NumberFormatTest {
             NumFormat.standard_0.toString(),
             s.rows[0][4]!!.cellStyle?.numberFormat.toString(),
         )
+    }
+
+    // endregion
+
+
+    // region --- Date detection, the 1900 calendar and built-in formats ---
+
+    @Test
+    fun aFormatIsADateFormatOnlyIfItsFirstSectionHasDateCodes() {
+        // Expected values are what POI's DateUtil.isADateFormat returns for the same code,
+        // except where noted. The old scan stopped at the first y/m/d/h/s outside quotes:
+        // the `d` of `[Red]` made a number format a date format, and upper-case codes were missed.
+        val dates = listOf(
+            "yyyy-mm-dd", "DD/MM/YYYY", "YYYY-MM-DD HH:MM", "D-MMM-YY", "mmm", "[h]:mm", "hh:mm:ss.000",
+            "[\$-409]d-mmm-yy;@", "[\$-F800]dddd, mmmm dd, yyyy", "[\$-409]h:mm AM/PM;@", "m/d/yyyy;@", "mm:ss.0",
+            "yyyy\"年\"m\"月\"d\"日\"",
+        )
+        val numbers = listOf(
+            "[Red]0.00", "[White]0", "[Cyan]0.0", "[Blue]0", "[\$Rs.-4009] #,##0.00", "[Red][<0]0.00;0.00",
+            "#,##0_);[Red](#,##0)", "0.00E+00", "# ?/?", "General", "General;[Red]-General", "@",
+            "0 \"days\"", "\"Total: \"0", "0\"s\"", "#\"h\"", "0.0 \\m", "#,##0.00 [\$USD]", "[>100][Green]0;0",
+            "0.0,,\"M\"", "[DBNum1][\$-804]General", "0 h", "_(* #,##0.00_);_(* (#,##0.00);_(* \"-\"??_);_(@_)",
+        )
+        dates.forEach { assertTrue(NumFormat.custom(it) is DateTimeNumFormat, "$it should be a date format") }
+        numbers.forEach { assertTrue(NumFormat.custom(it) is CustomNumericNumFormat, "$it should be a number format") }
+
+        // Where POI goes against §18.8.31. A character after a backslash is a literal:
+        assertTrue(NumFormat.custom("\\d0") is CustomNumericNumFormat)
+        // quoted text may hold any letters:
+        assertTrue(NumFormat.custom("h\"时\"mm\"分\"ss\"秒\";@") is DateTimeNumFormat)
+        assertTrue(NumFormat.custom("dd \"de\" mmmm") is DateTimeNumFormat)
+        // and [ss] is elapsed seconds, not a colour:
+        assertTrue(NumFormat.custom("[ss].00") is DateTimeNumFormat)
+    }
+
+    @Test
+    fun serialsBeforeMarch1900AreOneDayLaterThanAPlainOffsetGives() {
+        // Excel's 1900 calendar has a 29 February 1900 (serial 60). POI corrects for it in
+        // DateUtil.getJavaDate (`wholeDays < 61`), and so must a reader that agrees with Excel.
+        val fmt = NumFormat.defaultDate
+        assertEquals(DateCellValue(1900, 1, 1), fmt.read("1"))
+        assertEquals(DateCellValue(1900, 1, 2), fmt.read("2"))
+        assertEquals(DateCellValue(1900, 2, 28), fmt.read("59"))
+        assertEquals(DateCellValue(1900, 3, 1), fmt.read("60")) // the day that never was; POI reads 1 March too
+        assertEquals(DateCellValue(1900, 3, 1), fmt.read("61"))
+        assertEquals(DateCellValue(1900, 3, 2), fmt.read("62"))
+
+        val writer = NumFormat.defaultDate as DateTimeNumFormat
+        assertEquals("1.0", writer.writeDate(DateCellValue(1900, 1, 1)))
+        assertEquals("59.0", writer.writeDate(DateCellValue(1900, 2, 28)))
+        assertEquals("61.0", writer.writeDate(DateCellValue(1900, 3, 1)))
+        assertEquals("45036.0", writer.writeDate(DateCellValue(2023, 4, 20)))
+    }
+
+    @Test
+    fun everyWholeSecondOfTheDayIsReadExactly() {
+        // 11 seconds is stored as 1.273148148148148E-4 of a day, which is 10999.99… ms.
+        // Truncating instead of rounding read 11,593 of these 86,399 values a millisecond short.
+        val formats = listOf(NumFormat.custom("hh:mm:ss"), NumFormat.defaultDate, NumFormat.defaultTime)
+        for (format in formats) {
+            for (second in 1 until 86_400) {
+                val value = format.read((second / 86_400.0).toString()) as TimeCellValue
+                assertEquals(
+                    second * 1000,
+                    ((value.hour * 60 + value.minute) * 60 + value.second) * 1000 + value.millisecond,
+                    "$format read second $second as $value.${value.millisecond}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun aNumberOutsideTheDateRangeIsReadAsANumber() {
+        // Excel shows `####` for these; there is no date in them.
+        assertEquals(IntCellValue(-5), NumFormat.defaultDate.read("-5"))
+        assertEquals(DoubleCellValue(-0.25), NumFormat.defaultTime.read("-0.25"))
+        assertEquals(DoubleCellValue(1.0E12), NumFormat.defaultDate.read("1.0E12"))
+    }
+
+    @Test
+    fun theBuiltInFormatCodesAreTheOnesTheSpecificationLists() {
+        // ECMA-376 §18.8.30. 21, 40 and 48 were mistyped (`h:mm:dd`, `[Red](#,#)`, `##0.0`).
+        assertEquals("h:mm:ss", NumFormat.standard_21.formatCode)
+        assertEquals("#,##0.00;[Red](#,##0.00)", NumFormat.standard_40.formatCode)
+        assertEquals("##0.0E+0", NumFormat.standard_48.formatCode)
+
+        val maintainer = NumFormatMaintainer()
+        assertEquals("\"\$\"#,##0_);(\"\$\"#,##0)", maintainer.getByNumFmtId(5)?.formatCode)
+        assertEquals("_(\"\$\"* #,##0.00_);_(\"\$\"* (#,##0.00);_(\"\$\"* \"-\"??_);_(@_)", maintainer.getByNumFmtId(44)?.formatCode)
+        for (id in listOf(5, 6, 7, 8, 41, 42, 43, 44)) {
+            assertEquals(id, (maintainer.getByNumFmtId(id) as StandardNumFormat).numFmtId)
+        }
     }
 
     // endregion

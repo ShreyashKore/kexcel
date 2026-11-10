@@ -73,7 +73,7 @@ internal object PoiOracle {
      * author's spacing and the `$` anchors of whole-column and whole-row references
      * (`$D:$E` prints as `D:E`). Neither changes what the formula means.
      */
-    private fun normalised(formula: String?): String? = formula
+    fun normalised(formula: String?): String? = formula
         ?.filterNot(Char::isWhitespace)
         ?.replace(wholeColumns, "$1:$2")
         ?.replace(wholeRows, "$1:$2")
@@ -210,6 +210,54 @@ internal object PoiOracle {
         }
         return found
     }
+}
+
+/**
+ * Asserts that Kexcel reads the same value as POI from every cell of [bytes]: text,
+ * numbers, booleans, formulas, and — for the cells POI considers date-formatted — the
+ * same calendar date and time. This is the reader's counterpart of [assertOnlyDiffers].
+ *
+ * Cells POI sees but the model does not hold are skipped: those under a merged region,
+ * blank ones, and error literals, which the model surfaces as formulas.
+ */
+internal fun assertReadsLikePoi(bytes: ByteArray, what: String = "workbook") {
+    val excel = Excel.decodeBytes(bytes)
+    val problems = mutableListOf<String>()
+    PoiOracle.read(bytes) { wb ->
+        for (i in 0 until wb.numberOfSheets) {
+            val poiSheet = wb.getSheetAt(i)
+            val sheet = excel.tables[poiSheet.sheetName] ?: continue
+            for (row in poiSheet) for (cell in row) {
+                if (poiSheet.mergedRegions.any { it.isInRange(cell) && !(it.firstRow == cell.rowIndex && it.firstColumn == cell.columnIndex) }) continue
+                val value = sheet.sheetData[cell.rowIndex]?.get(cell.columnIndex)?.value
+                val at = "${poiSheet.sheetName}!${cell.address}"
+                fun differs(expected: Any?) { problems += "$at POI=$expected Kexcel=${value?.let { it::class.simpleName + "(" + it + ")" }}" }
+                when (cell.cellType) {
+                    CellType.STRING -> if (value?.toString() != cell.stringCellValue) differs(cell.stringCellValue)
+                    CellType.BOOLEAN -> if ((value as? com.gyanoba.kexcel.sheet.BoolCellValue)?.value != cell.booleanCellValue) differs(cell.booleanCellValue)
+                    CellType.FORMULA -> if (PoiOracle.normalised((value as? com.gyanoba.kexcel.sheet.FormulaCellValue)?.formula) != PoiOracle.normalised(cell.cellFormula)) differs(cell.cellFormula)
+                    CellType.NUMERIC -> {
+                        val number = cell.numericCellValue
+                        val expected = if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell) && org.apache.poi.ss.usermodel.DateUtil.isValidExcelDate(number)) cell.localDateTimeCellValue else null
+                        val matches = when (value) {
+                            is com.gyanoba.kexcel.sheet.IntCellValue -> expected == null && value.value.toDouble() == number
+                            is com.gyanoba.kexcel.sheet.DoubleCellValue -> expected == null && value.value == number
+                            is com.gyanoba.kexcel.sheet.DateCellValue -> expected == java.time.LocalDateTime.of(value.year, value.month, value.day, 0, 0)
+                            is com.gyanoba.kexcel.sheet.DateTimeCellValue -> expected != null && java.time.Duration.between(
+                                java.time.LocalDateTime.of(value.year, value.month, value.day, value.hour, value.minute, value.second, value.millisecond * 1_000_000), expected,
+                            ).abs().toMillis() <= 1
+                            is com.gyanoba.kexcel.sheet.TimeCellValue -> expected != null && number < 1.0 &&
+                                kotlin.math.abs(expected.toLocalTime().toNanoOfDay() / 1_000_000 - (((value.hour * 60L + value.minute) * 60 + value.second) * 1000 + value.millisecond)) <= 1
+                            else -> false
+                        }
+                        if (!matches) differs(expected ?: number)
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+    if (problems.isNotEmpty()) fail("Kexcel reads $what differently from POI in ${problems.size} cells:\n  " + problems.take(12).joinToString("\n  "))
 }
 
 /** Shorthand for the common Kexcel-side step: read, optionally edit, save. */

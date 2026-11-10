@@ -7,6 +7,7 @@ import com.fleeksoft.ksoup.nodes.TextNode
 import com.gyanoba.kexcel.archive.ArchiveFile
 import com.gyanoba.kexcel.Excel
 import com.gyanoba.kexcel.number_format.CustomNumFormat
+import com.gyanoba.kexcel.number_format.DATE_1904_OFFSET_DAYS
 import com.gyanoba.kexcel.number_format.DateTimeNumFormat
 import com.gyanoba.kexcel.number_format.NumFormat
 import com.gyanoba.kexcel.number_format.NumericNumFormat
@@ -153,8 +154,8 @@ public class Save internal constructor(private val excel: Excel, private val par
             // and a date as a number (§18.17.4).
             is IntCellValue -> listOf(v(source?.rawValue ?: value.value.toString()))
             is DoubleCellValue -> listOf(v(source?.rawValue ?: value.value.toString()))
-            is DateTimeCellValue -> listOf(v(source?.rawValue ?: NumFormat.defaultDateTime.let { (it as DateTimeNumFormat).writeDateTime(value) }))
-            is DateCellValue -> listOf(v(source?.rawValue ?: NumFormat.defaultDate.let { (it as DateTimeNumFormat).writeDate(value) }))
+            is DateTimeCellValue -> listOf(v(source?.rawValue ?: dateSerial((NumFormat.defaultDateTime as DateTimeNumFormat).writeDateTime(value))))
+            is DateCellValue -> listOf(v(source?.rawValue ?: dateSerial((NumFormat.defaultDate as DateTimeNumFormat).writeDate(value))))
             is TimeCellValue -> listOf(v(source?.rawValue ?: NumFormat.defaultTime.let { (it as TimeNumFormat).writeTime(value) }))
 
             is TextCellValue -> listOf(v(formulaString ?: excel.sharedStrings.indexOf(sharedString!!).toString()))
@@ -164,6 +165,10 @@ public class Save internal constructor(private val excel: Excel, private val par
 
         return Element("c", attributes, children)
     }
+
+    /** [serial1900] as this workbook stores dates: unchanged, or moved to the 1904 system. */
+    private fun dateSerial(serial1900: String): String =
+        if (excel.date1904) (serial1900.toDouble() - DATE_1904_OFFSET_DAYS).toString() else serial1900
 
     /** A style that needs an `<xf>` of its own: what it says, and the `<xf>` it was derived from. */
     private data class StyleKey(val style: CellStyle, val baseXf: Int)

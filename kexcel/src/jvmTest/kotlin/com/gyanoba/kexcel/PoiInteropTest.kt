@@ -1045,4 +1045,71 @@ class PoiInteropTest {
     }
 
     // endregion
+
+
+    // region --- Dates ---
+
+    @Test
+    fun the1904DateSystemIsHonouredInBothDirections() {
+        // §18.2.28: with date1904 set, serial 0 is 1 January 1904. Reading such a workbook
+        // against the 1900 epoch put every date 1,462 days early.
+        val source = poiWorkbook { wb ->
+            (wb as XSSFWorkbook).ctWorkbook.workbookPr.date1904 = true
+            val sheet = wb.createSheet("S")
+            val date = wb.createCellStyle().apply { dataFormat = 14 }
+            sheet.createRow(0).createCell(0).apply { setCellValue(LocalDate.of(2024, 3, 15)); cellStyle = date }
+            sheet.createRow(1).createCell(0).apply { setCellValue(LocalDateTime.of(2024, 3, 15, 13, 45, 30)); cellStyle = wb.createCellStyle().apply { dataFormat = 22 } }
+        }
+        val sheet = Excel.decodeBytes(source)["S"]
+        assertEquals(DateCellValue(2024, 3, 15), sheet.cell(CellIndex.indexByString("A1")).value)
+        assertEquals(DateTimeCellValue(2024, 3, 15, 13, 45, 30), sheet.cell(CellIndex.indexByString("A2")).value)
+        assertReadsLikePoi(source)
+
+        val saved = roundTrip(source) { it["S"].updateCell(CellIndex.indexByString("A3"), DateCellValue(2025, 12, 31)) }
+
+        readWithPoi(saved) { wb ->
+            assertTrue((wb as XSSFWorkbook).isDate1904)
+            assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), wb.getSheetAt(0).getRow(2).getCell(0).localDateTimeCellValue)
+            assertEquals(LocalDateTime.of(2024, 3, 15, 0, 0), wb.getSheetAt(0).getRow(0).getCell(0).localDateTimeCellValue)
+        }
+    }
+
+    @Test
+    fun datesInTheFirstWeeksOf1900AgreeWithPoi() {
+        val source = poiWorkbook { wb ->
+            val date = wb.createCellStyle().apply { dataFormat = 14 }
+            val sheet = wb.createSheet("S")
+            listOf(1.0, 2.0, 59.0, 61.0, 62.0, 45036.0).forEachIndexed { i, serial -> sheet.createRow(i).createCell(0).apply { setCellValue(serial); cellStyle = date } }
+        }
+        assertReadsLikePoi(source)
+
+        val written = Excel.createExcel().apply {
+            this["Sheet1"].updateCell(CellIndex.indexByString("A1"), DateCellValue(1900, 1, 1))
+            this["Sheet1"].updateCell(CellIndex.indexByString("A2"), DateCellValue(1900, 2, 28))
+            this["Sheet1"].updateCell(CellIndex.indexByString("A3"), DateCellValue(1900, 3, 1))
+        }.encode()!!
+        readWithPoi(written) { wb ->
+            assertEquals(
+                listOf(LocalDateTime.of(1900, 1, 1, 0, 0), LocalDateTime.of(1900, 2, 28, 0, 0), LocalDateTime.of(1900, 3, 1, 0, 0)),
+                (0..2).map { wb.getSheetAt(0).getRow(it).getCell(0).localDateTimeCellValue },
+            )
+        }
+    }
+
+    @Test
+    fun dateDetectionAgreesWithPoiOnRealFormats() {
+        // Upper-case codes, colours and currency tags, and a custom format declared under
+        // an id below 164 (POI corpus bug66675.xlsx declares 82 as a date format).
+        val formats = listOf("DD/MM/YYYY", "YYYY-MM-DD HH:MM", "[Red]0.00", "[White]0", "[\$Rs.-4009] #,##0.00", "#,##0.00", "dd-mmm-yyyy", "[h]:mm:ss")
+        val source = poiWorkbook { wb ->
+            val sheet = wb.createSheet("S")
+            formats.forEachIndexed { i, format ->
+                sheet.createRow(i).createCell(0).apply { setCellValue(45036.5); cellStyle = wb.createCellStyle().apply { dataFormat = wb.createDataFormat().getFormat(format) } }
+            }
+        }
+        assertReadsLikePoi(source)
+        assertReadsLikePoi(fixture("poi/bug66675.xlsx"), "bug66675.xlsx")
+    }
+
+    // endregion
 }

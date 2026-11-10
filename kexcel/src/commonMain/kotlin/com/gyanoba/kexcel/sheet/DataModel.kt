@@ -6,6 +6,7 @@ import com.gyanoba.kexcel.utils.twoDigits
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.number
+import kotlin.math.roundToLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.microseconds
@@ -258,7 +259,9 @@ public class TimeCellValue(
          * [fractionOfDay] = 1.0 is 24 hours, 0.5 is 12 hours, etc.
          */
         public fun fromFractionOfDay(fractionOfDay: Double): TimeCellValue {
-            val totalMs = (fractionOfDay * 24 * 3600 * 1000).toLong()
+            // Rounded, not truncated: 11 seconds is stored as 1.273148148148148E-4, which
+            // is 10999.99… ms. Truncating read 13% of all whole-second times a millisecond short.
+            val totalMs = (fractionOfDay * 24 * 3600 * 1000).roundToLong()
             return fromDuration(totalMs.milliseconds)
         }
 
