@@ -412,4 +412,90 @@ class SheetStructureTest {
     }
 
     // endregion
+
+
+    // region --- What is keyed by position follows the rows and columns ---
+
+    private fun threeByThree(): Pair<Excel, com.gyanoba.kexcel.sheet.Sheet> {
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+        for (r in 0 until 3) for (c in 0 until 3) sheet.updateCell(CellIndex.indexByColumnRow(c, r), TextCellValue("r${r}c$c"))
+        return excel to sheet
+    }
+
+    @Test
+    fun aCellKnowsWhereItIsAfterRowsAndColumnsMove() {
+        // Only insertRow used to update the index a Data object carries. After the other
+        // three operations a cell reported the place it used to be in, and `data.value = …`
+        // — which addresses the sheet by that index — changed a different cell.
+        val (_, sheet) = threeByThree()
+
+        sheet.removeRow(0)
+        val movedUp = sheet.rows[0][0]!!
+        assertEquals(TextCellValue("r1c0"), movedUp.value)
+        assertEquals(CellIndex.indexByString("A1"), movedUp.cellIndex)
+
+        sheet.insertColumn(0)
+        val movedRight = sheet.rows[0][1]!!
+        assertEquals(TextCellValue("r1c0"), movedRight.value)
+        assertEquals(CellIndex.indexByString("B1"), movedRight.cellIndex)
+
+        sheet.removeColumn(0)
+        val movedLeft = sheet.rows[1][1]!!
+        assertEquals(TextCellValue("r2c1"), movedLeft.value)
+        assertEquals(CellIndex.indexByString("B2"), movedLeft.cellIndex)
+
+        movedLeft.value = TextCellValue("edited")
+        assertEquals(TextCellValue("edited"), sheet.cell(CellIndex.indexByString("B2")).value)
+        assertEquals(TextCellValue("r1c1"), sheet.cell(CellIndex.indexByString("B1")).value)
+    }
+
+    @Test
+    fun rowHeightsAndColumnWidthsMoveWithTheirRowsAndColumns() {
+        val (_, sheet) = threeByThree()
+        sheet.setRowHeight(2, 40.0)
+        sheet.setColumnWidth(2, 30.0)
+
+        sheet.removeRow(0)
+        assertEquals(mapOf(1 to 40.0), sheet.getRowHeights)
+        sheet.insertRow(0)
+        assertEquals(mapOf(2 to 40.0), sheet.getRowHeights)
+
+        sheet.insertColumn(0)
+        assertEquals(mapOf(3 to 30.0), sheet.getColumnWidths)
+        sheet.removeColumn(0)
+        assertEquals(mapOf(2 to 30.0), sheet.getColumnWidths)
+        sheet.removeColumn(2)
+        assertEquals(emptyMap(), sheet.getColumnWidths)
+    }
+
+    @Test
+    fun aRangeCanBeMergedAgainAfterItsMergeMovedAway() {
+        // removeRow left the merge's old reference behind, and merge() ignores a range it
+        // believes is already merged.
+        val (_, sheet) = threeByThree()
+        sheet.merge(CellIndex.indexByString("A3"), CellIndex.indexByString("B3"))
+        sheet.removeRow(0)
+        assertEquals(listOf("A2:B2"), sheet.spannedItems)
+
+        sheet.updateCell(CellIndex.indexByString("A3"), TextCellValue("x"))
+        sheet.merge(CellIndex.indexByString("A3"), CellIndex.indexByString("B3"))
+
+        assertEquals(listOf("A2:B2", "A3:B3"), sheet.spannedItems)
+    }
+
+    @Test
+    fun aRowOfValuesMayEndExactlyAtTheLastColumn() {
+        val excel = Excel.createExcel()
+        val sheet = excel["Sheet1"]
+
+        sheet.insertRowIterables(listOf(IntCellValue(1), IntCellValue(2)), rowIndex = 0, startingColumn = 16382)
+
+        assertEquals(IntCellValue(2), sheet.cell(CellIndex.indexByString("XFD1")).value)
+        assertFailsWith<IllegalArgumentException> {
+            sheet.insertRowIterables(listOf(IntCellValue(1), IntCellValue(2)), rowIndex = 1, startingColumn = 16383)
+        }
+    }
+
+    // endregion
 }

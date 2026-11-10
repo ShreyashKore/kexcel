@@ -11,7 +11,7 @@ import kotlin.math.max
 
 public class Sheet internal constructor(
     internal val excel: Excel,
-    private val _sheet: String,
+    private var _sheet: String,
     sh: Map<Int, Map<Int, Data>>? = null,
     spanList: List<Span?>? = null,
     spannedItems: MutableList<String>? = null,
@@ -323,6 +323,9 @@ public class Sheet internal constructor(
         }
         excel.valuesEdited = true
         mergedCells.clear()
+        // The references are rebuilt below. Left in place, the old position of a moved
+        // merge stayed in the list and a later merge() of that range was silently ignored.
+        _spannedItems = mutableListOf()
 
         var updateSpanCell = false
 
@@ -382,6 +385,7 @@ public class Sheet internal constructor(
                         }
                         if (columnIndex < columnKey) {
                             columnMap[columnKey - 1] = sheetData[rowKey]!![columnKey]!!
+                                .also { it._columnIndex = columnKey - 1 }
                             sheetData[rowKey]!!.remove(columnKey)
                         }
                     }
@@ -395,6 +399,7 @@ public class Sheet internal constructor(
         if (_maxColumns > 0) {
             _maxColumns -= 1
         }
+        shiftColumnProperties(columnIndex, removed = true)
     }
 
     public fun insertColumn(columnIndex: Int) {
@@ -462,6 +467,7 @@ public class Sheet internal constructor(
                             }
                             if (columnIndex <= columnKey) {
                                 columnMap[columnKey + 1] = sheetData[rowKey]!![columnKey]!!
+                                    .also { it._columnIndex = columnKey + 1 }
                             }
                         }
                     }
@@ -485,6 +491,46 @@ public class Sheet internal constructor(
         } else {
             _maxColumns = columnIndex + 1
         }
+        shiftColumnProperties(columnIndex, removed = false)
+    }
+
+    /**
+     * Moves what is keyed by column — widths, auto-fit flags and the `<col>` definitions —
+     * along with the cells when a column is inserted at or removed from [columnIndex].
+     * These used to stay where they were, so the width of column C became the width of
+     * whatever ended up in column C.
+     */
+    private fun shiftColumnProperties(columnIndex: Int, removed: Boolean) {
+        _columnWidths = shiftedKeys(_columnWidths, columnIndex, removed)
+        _columnAutoFit = shiftedKeys(_columnAutoFit, columnIndex, removed)
+        columnSpecs = columnSpecs.mapNotNull { spec ->
+            if (removed) when {
+                spec.max < columnIndex -> spec
+                spec.min > columnIndex -> ColumnSpec(spec.min - 1, spec.max - 1, spec.attributes)
+                spec.min == spec.max -> null
+                else -> ColumnSpec(spec.min, spec.max - 1, spec.attributes)
+            } else when {
+                spec.max < columnIndex -> spec
+                spec.min >= columnIndex -> ColumnSpec(spec.min + 1, minOf(spec.max + 1, 16383), spec.attributes)
+                // The new column lands inside the range and takes its formatting, as in Excel.
+                else -> ColumnSpec(spec.min, minOf(spec.max + 1, 16383), spec.attributes)
+            }
+        }.toMutableList()
+        columnsDirty = true
+    }
+
+    /** [map] after an insertion at, or the removal of, key [index]. */
+    private fun <V> shiftedKeys(map: Map<Int, V>, index: Int, removed: Boolean): MutableMap<Int, V> {
+        val shifted = mutableMapOf<Int, V>()
+        map.forEach { (key, value) ->
+            when {
+                key < index -> shifted[key] = value
+                removed && key == index -> Unit
+                removed -> shifted[key - 1] = value
+                else -> shifted[key + 1] = value
+            }
+        }
+        return shifted
     }
 
     public fun removeRow(rowIndex: Int) {
@@ -494,6 +540,7 @@ public class Sheet internal constructor(
         checkMaxRow(rowIndex)
         excel.valuesEdited = true
         mergedCells.clear()
+        _spannedItems = mutableListOf()
 
         var updateSpanCell = false
 
@@ -545,7 +592,10 @@ public class Sheet internal constructor(
                         data[rowKey] = sheetData[rowKey]!!.toMutableMap()
                     }
                     if (rowIndex < rowKey && sheetData[rowKey] != null) {
+                        // The cell objects move up with their row. Left with the old index,
+                        // `data.value = …` on one of them wrote into the row below.
                         data[rowKey - 1] = sheetData[rowKey]!!.toMutableMap()
+                            .onEach { it.value._rowIndex = rowKey - 1 }
                     }
                 }
                 sheetData = data
@@ -559,6 +609,8 @@ public class Sheet internal constructor(
         if (_maxRows > 0) {
             _maxRows -= 1
         }
+        _rowHeights = shiftedKeys(_rowHeights, rowIndex, removed = true)
+        rowAttributes = shiftedKeys(rowAttributes, rowIndex, removed = true)
     }
 
     public fun insertRow(rowIndex: Int) {
@@ -640,6 +692,8 @@ public class Sheet internal constructor(
         } else {
             _maxRows += 1
         }
+        _rowHeights = shiftedKeys(_rowHeights, rowIndex, removed = false)
+        rowAttributes = shiftedKeys(rowAttributes, rowIndex, removed = false)
     }
 
     public fun updateCell(cellIndex: CellIndex, value: CellValue?, cellStyle: CellStyle? = null) {
@@ -933,7 +987,8 @@ public class Sheet internal constructor(
         if (startingColumn > 0) {
             columnIndex = startingColumn
         }
-        checkMaxColumn(columnIndex + row.size)
+        // The last cell written, not one past it: a row that ends exactly at XFD is fine.
+        checkMaxColumn(columnIndex + row.size - 1)
         val rowsLength = _maxRows
         val maxIterationIndex = row.size - 1
         var currentRowPosition = 0
@@ -1199,6 +1254,10 @@ public class Sheet internal constructor(
 
     public val sheetName: String
         get() = _sheet
+
+    internal fun renameTo(name: String) {
+        _sheet = name
+    }
 
     public fun row(rowIndex: Int): List<Data?> {
         if (rowIndex < 0) {
