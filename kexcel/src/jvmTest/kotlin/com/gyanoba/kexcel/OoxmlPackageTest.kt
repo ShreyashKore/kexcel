@@ -478,4 +478,52 @@ class OoxmlPackageTest {
     }
 
     // endregion
+
+
+    // region --- Element order on sheets that are not the built-in template ---
+
+    private fun assertInOrderAfter(source: ByteArray, sheet: String, part: String = "xl/worksheets/sheet1.xml", edit: (com.gyanoba.kexcel.sheet.Sheet) -> Unit) {
+        assertWorksheetChildrenAreInSchemaOrder(source, part)
+        assertWorksheetChildrenAreInSchemaOrder(roundTrip(source) { edit(it[sheet]) }, part)
+    }
+
+    @Test
+    fun aNewMergeGoesAfterProtectionAndAutoFilter() {
+        // CT_Worksheet puts sheetProtection, autoFilter and sortState between sheetData and
+        // mergeCells. A new <mergeCells> used to be placed right after <sheetData>.
+        val source = PoiOracle.workbook { wb ->
+            val sheet = wb.createSheet("S")
+            for (r in 0 until 3) sheet.createRow(r).apply { createCell(0).setCellValue("h$r"); createCell(1).setCellValue(r.toDouble()) }
+            sheet.setAutoFilter(org.apache.poi.ss.util.CellRangeAddress.valueOf("A1:B3"))
+            sheet.protectSheet("x")
+        }
+        assertInOrderAfter(source, "S") { it.merge(CellIndex.indexByString("A5"), CellIndex.indexByString("B5"), TextCellValue("m")) }
+    }
+
+    @Test
+    fun aSheetViewAddedForRightToLeftGoesBeforeTheSheetData() {
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c></row>""",
+            afterSheetData = """<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>""",
+        )
+        assertInOrderAfter(source, "Sheet1") { it.isRTL = true }
+    }
+
+    @Test
+    fun aSheetFormatElementAddedForDefaultSizesGoesAfterTheSheetViews() {
+        val source = workbookFromRawXml(
+            """<row r="1"><c r="A1"><v>1</v></c></row>""",
+            beforeSheetData = """<sheetPr/><dimension ref="A1"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>""",
+        )
+        assertInOrderAfter(source, "Sheet1") { it.setDefaultColumnWidth(12.0) }
+
+        // and on a sheet Kexcel creates itself
+        val excel = Excel.createExcel()
+        excel["Second"].updateCell(CellIndex.indexByString("A1"), IntCellValue(1))
+        excel["Second"].setDefaultRowHeight(20.0)
+        excel["Second"].setColumnWidth(0, 30.0)
+        assertWorksheetChildrenAreInSchemaOrder(excel.encode()!!, "xl/worksheets/sheet2.xml")
+    }
+
+    // endregion
 }

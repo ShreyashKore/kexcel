@@ -84,6 +84,18 @@ internal val WORKBOOK_CHILD_ORDER = listOf(
     "fileRecoveryPr", "webPublishObjects", "extLst",
 )
 
+/** The order CT_Worksheet requires of the children of `<worksheet>` (§18.3.1.99). */
+internal val WORKSHEET_CHILD_ORDER = listOf(
+    "sheetPr", "dimension", "sheetViews", "sheetFormatPr", "cols", "sheetData",
+    "sheetCalcPr", "sheetProtection", "protectedRanges", "scenarios", "autoFilter",
+    "sortState", "dataConsolidate", "customSheetViews", "mergeCells", "phoneticPr",
+    "conditionalFormatting", "dataValidations", "hyperlinks", "printOptions",
+    "pageMargins", "pageSetup", "headerFooter", "rowBreaks", "colBreaks",
+    "customProperties", "cellWatches", "ignoredErrors", "smartTags", "drawing",
+    "legacyDrawing", "legacyDrawingHF", "drawingHF", "picture", "oleObjects", "controls",
+    "webPublishItems", "tableParts", "extLst",
+)
+
 /**
  * Adds [child] to [parent] at the position [order] gives its tag. The content models of
  * `<workbook>` and `<worksheet>` are sequences: the same children in another order are a

@@ -38,6 +38,7 @@ import com.gyanoba.kexcel.utils.cloneArchive
 import com.gyanoba.kexcel.utils.damagedExcel
 import com.gyanoba.kexcel.utils.getCellId
 import com.gyanoba.kexcel.utils.WORKBOOK_CHILD_ORDER
+import com.gyanoba.kexcel.utils.WORKSHEET_CHILD_ORDER
 import com.gyanoba.kexcel.utils.insertInSequence
 import com.gyanoba.kexcel.utils.serializeXml
 import com.gyanoba.kexcel.utils.setAttribute
@@ -557,9 +558,9 @@ public class Save internal constructor(private val excel: Excel, private val par
         }
 
         if (columnElements.isEmpty()) {
-            val sheetData = xmlFile.getElementsByTag("sheetData").first()
-                ?: damagedExcel("Missing <sheetData> element in sheet XML")
-            sheetData.before(Element("cols"))
+            val worksheet = xmlFile.getElementsByTag("worksheet").first()
+                ?: damagedExcel("Missing <worksheet> element in sheet XML")
+            insertInSequence(worksheet, Element("cols"), WORKSHEET_CHILD_ORDER)
         }
 
         val columns = xmlFile.getElementsByTag("cols").first()
@@ -717,7 +718,9 @@ public class Save internal constructor(private val excel: Excel, private val par
                 val index = worksheetEl.children().indexOf(sheetDataEl)
                 if (index == -1) damagedExcel()
                 val newMerge = Element("mergeCells", listOf(Attribute("count", "0")))
-                sheetDataEl.after(newMerge)
+                // After <sheetData>, but also after sheetProtection, autoFilter and the
+                // other elements the sequence puts between the two.
+                insertInSequence(worksheetEl, newMerge, WORKSHEET_CHILD_ORDER)
                 newMerge
             }
 
@@ -771,8 +774,10 @@ public class Save internal constructor(private val excel: Excel, private val par
             } else {
                 val worksheetEl = xmlDoc.getElementsByTag("worksheet").first()
                     ?: damagedExcel("Missing <worksheet> element in sheet XML")
-                worksheetEl.appendChild(
-                    Element("sheetViews", emptyList(), mutableListOf(sheetViewEl))
+                insertInSequence(
+                    worksheetEl,
+                    Element("sheetViews", emptyList(), mutableListOf(sheetViewEl)),
+                    WORKSHEET_CHILD_ORDER,
                 )
             }
         }
@@ -820,9 +825,9 @@ public class Save internal constructor(private val excel: Excel, private val par
             var sheetFormatPrEl = worksheetEl?.children()
                 ?.firstOrNull { it.nodeName() == "sheetFormatPr" }
 
-            if (sheetFormatPrEl == null && (defaultRowHeight != null || defaultColumnWidth != null)) {
+            if (sheetFormatPrEl == null && worksheetEl != null && (defaultRowHeight != null || defaultColumnWidth != null)) {
                 sheetFormatPrEl = Element("sheetFormatPr")
-                worksheetEl?.prependChildren(listOf(sheetFormatPrEl))
+                insertInSequence(worksheetEl, sheetFormatPrEl, WORKSHEET_CHILD_ORDER)
             }
 
             // Only the two attributes the model owns are rewritten here. Everything else the
