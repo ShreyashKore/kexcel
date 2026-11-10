@@ -700,7 +700,7 @@ public class Parser internal constructor(private val excel: Excel) {
             }
         }
 
-        sheetObject.putParsed(rowIndex, columnIndex, value, style)
+        sheetObject.putParsed(rowIndex, columnIndex, value, style, styleIsImplicit = s1 == null)
         return columnIndex
     }
 

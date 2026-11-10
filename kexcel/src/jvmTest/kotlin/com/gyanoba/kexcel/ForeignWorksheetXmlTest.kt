@@ -530,4 +530,21 @@ class ForeignWorksheetXmlTest {
     }
 
     // endregion
+
+    @Test
+    fun aCellWithoutAStyleIndexIsWrittenBackWithoutOne() {
+        // §18.3.1.4: `s` is optional. A cell that has none takes its look from its row or
+        // column; writing `s="0"` on it overrode those (POI corpus 45544.xlsx: a centred
+        // column lost its alignment on such cells).
+        val source = workbookFromRawXml("""<row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"/></row>""")
+        assertNotNull(Excel.decodeBytes(source)["Sheet1"].cell(CellIndex.indexByString("A1")).cellStyle)
+
+        val saved = roundTrip(source) { excel ->
+            excel["Sheet1"].cell(CellIndex.indexByString("B1")).cellStyle = com.gyanoba.kexcel.sheet.CellStyle(bold = true)
+        }
+
+        assertFalse(rawCell(saved, "A1").hasAttr("s"))
+        assertFalse(rawCell(saved, "C1").hasAttr("s"))
+        assertTrue(rawCell(saved, "B1").hasAttr("s"), "a style given in code is written")
+    }
 }

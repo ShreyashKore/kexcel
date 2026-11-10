@@ -24,6 +24,14 @@ public class Data private constructor(
 ) {
     private var _sheetName: String = sheet.sheetName
 
+    /**
+     * Set when the cell was read without an `s` attribute: the style object it was given
+     * for the API's sake. Such a cell takes its look from its row or column (§18.3.1.4),
+     * so while it still holds this very object, unchanged, it is written without `s` again
+     * — an explicit `s="0"` would override the row and column styles.
+     */
+    internal var implicitStyle: CellStyle? = null
+
     public companion object {
         /**
          * Returns a new Data object — called from Sheet class.
@@ -41,7 +49,7 @@ public class Data private constructor(
                 _columnIndex = dataObject.columnIndex,
                 _value = dataObject.value,
                 _cellStyle = dataObject.cellStyle,
-            )
+            ).also { it.implicitStyle = dataObject.implicitStyle }
     }
 
     /** Returns the row index. */

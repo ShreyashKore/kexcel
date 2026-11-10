@@ -138,13 +138,20 @@ public class Sheet internal constructor(
      * duration in `[h]:mm:ss`), and changing it while loading altered workbooks that were
      * never edited.
      */
-    internal fun putParsed(rowIndex: Int, columnIndex: Int, value: CellValue?, style: CellStyle?) {
+    internal fun putParsed(
+        rowIndex: Int,
+        columnIndex: Int,
+        value: CellValue?,
+        style: CellStyle?,
+        styleIsImplicit: Boolean = false,
+    ) {
         checkMaxColumn(columnIndex)
         checkMaxRow(rowIndex)
         val row = sheetData.getOrPut(rowIndex) { mutableMapOf() }
         val cell = row.getOrPut(columnIndex) { Data.newData(this, rowIndex, columnIndex) }
         cell._value = value
         cell._cellStyle = style
+        cell.implicitStyle = style.takeIf { styleIsImplicit }
         if (style != null) excel.styleChanges = true
         if (_maxColumns < columnIndex + 1) _maxColumns = columnIndex + 1
         if (_maxRows < rowIndex + 1) _maxRows = rowIndex + 1

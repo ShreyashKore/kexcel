@@ -116,10 +116,14 @@ public class Save internal constructor(private val excel: Excel, private val par
             value != null && source?.rawValue != null -> source.type?.let { attributes.add(Attribute("t", it)) }
         }
 
-        val cellStyle = excel.sheetMap[sheet]?.sheetData?.get(rowIndex)?.get(columnIndex)?.cellStyle
+        val data = excel.sheetMap[sheet]?.sheetData?.get(rowIndex)?.get(columnIndex)
+        val cellStyle = data?.cellStyle
 
         if (excel.styleChanges && cellStyle != null) {
-            attributes.add(1, Attribute("s", "${styleIndexOf(cellStyle)}"))
+            val index = styleIndexOf(cellStyle)
+            // A cell read without `s` stays without one unless its style was replaced or changed.
+            val wasNeverStyled = index == 0 && data.implicitStyle === cellStyle
+            if (!wasNeverStyled) attributes.add(1, Attribute("s", "$index"))
         } else if (excel.cellStyleReferenced.containsKey(sheet) &&
             excel.cellStyleReferenced[sheet]!!.containsKey(rC)
         ) {
